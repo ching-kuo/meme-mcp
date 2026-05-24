@@ -6,28 +6,31 @@ import hashlib
 import re
 import secrets
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 from urllib.parse import urlencode
 
 import httpx
 from fastapi import FastAPI, Header, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from PIL import Image
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import Response
 
 from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.depends import Friend, require_pat
 from meme_mcp.auth.pat import SQLitePatStore
 from meme_mcp.config import Settings, validate_at_startup
 from meme_mcp.db.receipts import ReceiptStore
-from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate
+from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate, TemplateRow
 from meme_mcp.db.uploads import PendingUploadStore
 from meme_mcp.envelope import Envelope, make_error, make_success
 from meme_mcp.errors import ErrorCode, MemeMCPError, status_for_error
 from meme_mcp.limits import WindowedRateLimiter
 from meme_mcp.mcp.server import create_mcp_server, tool_schemas
 from meme_mcp.rendering.image_store import FilesystemImageStore
-from meme_mcp.rendering.pipeline import TemplateSpec, render_meme
+from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_meme
 from meme_mcp.upload.dedupe import DuplicateIndex, check_duplicates
 from meme_mcp.upload.strip import strip_and_reencode
 from meme_mcp.upload.validation import compute_hashes, validate_upload
@@ -89,6 +92,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         validate_at_startup(settings)
     Image.MAX_IMAGE_PIXELS = 40 * 1024 * 1024
     app = FastAPI(title="meme-mcp")
+    web_dir = Path(__file__).parent / "web"
+    templates = Jinja2Templates(directory=web_dir / "templates")
+    app.mount("/static", StaticFiles(directory=web_dir / "static"), name="static")
     if settings is not None:
         app.add_middleware(
             SessionMiddleware,
@@ -149,10 +155,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/browse")
     async def browse(
         request: Request,
+        q: str = "",
         authorization: str | None = Header(default=None),
-    ) -> JSONResponse:
-        _friend_from_request_or_header(app, request, authorization)
-        return JSONResponse(make_success({"templates": []}))
+    ) -> Response:
+        friend = _friend_from_request_or_header(app, request, authorization)
+        app.state.find_limiter.hit(friend.github_login)
+        query = q.strip()
+        template_rows = _template_rows(app, query)
+        return templates.TemplateResponse(
+            request,
+            "browse.html",
+            {"query": query, "templates": template_rows},
+        )
 
     @app.get("/auth/login")
     async def auth_login(request: Request) -> RedirectResponse:
@@ -203,6 +217,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def mcp_tools(authorization: str | None = Header(default=None)) -> JSONResponse:
         _friend_from_header(app, authorization)
         return JSONResponse(make_success({"tools": sorted(tool_schemas())}))
+
+    @app.get("/api/templates")
+    async def list_templates(
+        request: Request,
+        q: str = "",
+        authorization: str | None = Header(default=None),
+    ) -> JSONResponse:
+        friend = _friend_from_request_or_header(app, request, authorization)
+        app.state.find_limiter.hit(friend.github_login)
+        rows = _template_rows(app, q.strip())
+        return JSONResponse(make_success({"templates": [_template_payload(row) for row in rows]}))
+
+    @app.post("/api/templates/{template_id}/preview")
+    async def preview_template(
+        request: Request,
+        template_id: str,
+        payload: dict[str, object],
+        authorization: str | None = Header(default=None),
+    ) -> JSONResponse:
+        _friend_from_request_or_header(app, request, authorization)
+        slot_fills_raw = payload.get("slot_fills", [])
+        if not isinstance(slot_fills_raw, list):
+            raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "slot_fills", "reason": "list"}])
+        slot_fills = [str(fill) for fill in slot_fills_raw]
+        try:
+            template = app.state.templates.get(template_id)
+        except KeyError as exc:
+            raise MemeMCPError(
+                ErrorCode.NOT_FOUND,
+                [{"field": "template_id", "reason": "missing"}],
+            ) from exc
+        spec = TemplateSpec(
+            template_id=template_id,
+            image_bytes=app.state.image_store.get(template.image_path),
+            slots=template.slot_definitions,
+        )
+        rendered = preview_transient(spec, slot_fills)
+        data_url = "data:image/png;base64," + base64.b64encode(rendered).decode()
+        return JSONResponse(make_success({"template_id": template_id, "data_url": data_url}))
 
     @app.post("/api/mcp/find")
     async def mcp_find(
@@ -477,6 +530,26 @@ def _duplicate_index(app: FastAPI) -> DuplicateIndex:
     for template in app.state.templates.list_rows():
         index.add(template.template_id, template.exact_hash, template.perceptual_hash)
     return index
+
+
+def _template_rows(app: FastAPI, query: str) -> list[TemplateRow]:
+    if not query:
+        return cast(list[TemplateRow], app.state.templates.list_rows())
+    ids = [candidate.template_id for candidate in app.state.templates.search(query)]
+    all_rows = cast(list[TemplateRow], app.state.templates.list_rows())
+    rows = {row.template_id: row for row in all_rows}
+    return [rows[template_id] for template_id in ids if template_id in rows]
+
+
+def _template_payload(row: TemplateRow) -> dict[str, object]:
+    return {
+        "template_id": row.template_id,
+        "slug": row.slug,
+        "name": row.name,
+        "source": row.source,
+        "metadata": row.metadata,
+        "slot_definitions": row.slot_definitions,
+    }
 
 
 def _extension_for_mime(mime: str) -> str:

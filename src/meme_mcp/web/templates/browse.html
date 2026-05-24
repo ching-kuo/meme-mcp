@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block body %}
+  <main>
+    <h1>meme-mcp</h1>
+    <form method="get" action="/browse">
+      <label>
+        Search templates
+        <input name="q" value="{{ query }}" placeholder="deploy, ci, reaction">
+      </label>
+      <button type="submit">Search</button>
+    </form>
+    <section class="template-grid">
+      {% for template in templates %}
+        <article class="template-card">
+          <h2>{{ template.name }}</h2>
+          <p>{{ template.metadata.get("description", "") }}</p>
+          <code>{{ template.template_id }}</code>
+        </article>
+      {% else %}
+        <p>No templates yet.</p>
+      {% endfor %}
+    </section>
+  </main>
+{% endblock %}
