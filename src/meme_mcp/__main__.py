@@ -7,6 +7,7 @@ from pathlib import Path
 from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.pat import SQLitePatStore, issue_pat
 from meme_mcp.cli.reindex_embeddings import make_embedder, reindex_embeddings
+from meme_mcp.cli.seed import run as run_seed
 from meme_mcp.config import Settings, validate_at_startup
 from meme_mcp.db.templates import SQLiteTemplateRepository
 from meme_mcp.db.vectors import SQLiteVecStore
@@ -30,6 +31,8 @@ def run(argv: Sequence[str] | None = None, settings: Settings | None = None) -> 
         return _run_pat(args, app_settings)
     if args.command == "reindex-embeddings":
         return _run_reindex_embeddings(app_settings)
+    if args.command == "seed-memegen":
+        return run_seed(app_settings)
     parser.error(f"unknown command: {args.command}")
     return 2
 
@@ -52,6 +55,7 @@ def _parser() -> argparse.ArgumentParser:
     pat_issue = pat_commands.add_parser("issue")
     pat_issue.add_argument("github_login")
     subcommands.add_parser("reindex-embeddings")
+    subcommands.add_parser("seed-memegen")
     return parser
 
 

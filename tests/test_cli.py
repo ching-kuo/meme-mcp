@@ -80,3 +80,13 @@ def test_reindex_embeddings_rebuilds_vector_store_from_templates(tmp_path) -> No
 
     assert count == 1
     assert vectors.search([1.0, 0.0, 0.0], 1) == [("deploy", 1.0)]
+
+
+def test_seed_memegen_cli_persists_default_templates(tmp_path, capsys) -> None:
+    app_settings = settings(tmp_path)
+
+    assert run(["seed-memegen"], app_settings) == 0
+
+    assert "seeded" in capsys.readouterr().out
+    repo = SQLiteTemplateRepository(tmp_path / "meme.db")
+    assert repo.get("memegen-drake").name == "Drake Hotline Bling"
