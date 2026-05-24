@@ -10,6 +10,7 @@ from meme_mcp.auth.depends import Friend, require_pat
 from meme_mcp.auth.pat import SQLitePatStore
 from meme_mcp.config import Settings, validate_at_startup
 from meme_mcp.db.receipts import ReceiptStore
+from meme_mcp.db.templates import SQLiteTemplateRepository
 from meme_mcp.envelope import make_error, make_success
 from meme_mcp.errors import ErrorCode, MemeMCPError, status_for_error
 from meme_mcp.mcp.server import tool_schemas
@@ -31,6 +32,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db_path = _sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
         app.state.pat_store = SQLitePatStore(db_path)
         app.state.receipts = ReceiptStore(db_path)
+        app.state.templates = SQLiteTemplateRepository(db_path)
         app.state.image_store = FilesystemImageStore(settings.image_store_fs_path)
         app.state.allowlist = RuntimeAllowlist()
         app.state.pat_hash_pepper_value = settings.pat_hash_pepper.get_secret_value()
@@ -73,7 +75,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         query = str(payload.get("query", "")).strip()
         if not query:
             raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "query", "reason": "required"}])
-        return JSONResponse(make_success({"candidates": []}))
+        filters_raw = payload.get("filters", {})
+        filters = filters_raw if isinstance(filters_raw, dict) else {}
+        candidates = [
+            candidate.__dict__
+            for candidate in app.state.templates.search(query, filters)
+        ]
+        return JSONResponse(make_success({"candidates": candidates}))
 
     @app.post("/mcp/generate")
     async def mcp_generate(
@@ -93,10 +101,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse(
                 make_success({"template_id": template_id, "rendered_url": None, "hash": None})
             )
+        try:
+            template = app.state.templates.get(template_id)
+        except KeyError as exc:
+            raise MemeMCPError(
+                ErrorCode.NOT_FOUND,
+                [{"field": "template_id", "reason": "missing"}],
+            ) from exc
         spec = TemplateSpec(
             template_id=template_id,
-            image_bytes=_blank_template_png(),
-            slots=[{"position": "top"} for _ in slot_fills],
+            image_bytes=app.state.image_store.get(template.image_path),
+            slots=template.slot_definitions,
         )
         result = render_meme(spec, slot_fills, app.state.image_store)
         app.state.receipts.record(result.hash, template_id, friend.github_login)
