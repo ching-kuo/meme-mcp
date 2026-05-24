@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "meme-mcp"
+version = "0.1.0"
+description = "Hosted MCP and web app for private meme retrieval and rendering."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+  "fastapi>=0.115",
+  "jinja2>=3.1",
+  "pillow>=12,<13",
+  "pydantic>=2.10",
+  "pydantic-settings>=2.7",
+  "python-multipart>=0.0.20",
+  "uvicorn[standard]>=0.34",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.25", "ruff>=0.8", "mypy>=1.14", "httpx>=0.28"]
+postgres = ["asyncpg>=0.30", "pgvector>=0.3", "psycopg[binary]>=3.2"]
+s3 = ["boto3>=1.35"]
+all = ["meme-mcp[postgres,s3]"]
+
+[project.scripts]
+meme-mcp = "meme_mcp.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/meme_mcp"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+

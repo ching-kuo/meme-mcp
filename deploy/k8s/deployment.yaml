@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meme-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: meme-mcp
+  template:
+    metadata:
+      labels:
+        app: meme-mcp
+    spec:
+      containers:
+        - name: meme-mcp
+          image: meme-mcp:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: meme-mcp
+            - secretRef:
+                name: meme-mcp
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8000
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+          volumeMounts:
+            - name: storage
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 10001
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: meme-mcp-storage

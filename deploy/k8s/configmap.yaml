@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: meme-mcp
+data:
+  MCP_HOST: "0.0.0.0"
+  MCP_PORT: "8000"
+  IMAGE_STORE_BACKEND: "filesystem"
+  IMAGE_STORE_FS_PATH: "/data/images"
+  STORAGE_DIR: "/data"
+

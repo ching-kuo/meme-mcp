@@ -1,0 +1,2 @@
+Memegen MIT license placeholder. Replace with the exact upstream license text when seeding assets.
+

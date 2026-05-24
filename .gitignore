@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.omx/
+.code-review-graph/
+storage/
+deploy/k8s/secret.yaml
+
