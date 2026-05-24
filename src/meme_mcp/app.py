@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import re
+import secrets
 from pathlib import Path
+from typing import Protocol
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Header, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from PIL import Image
+from starlette.middleware.sessions import SessionMiddleware
 
+from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.depends import Friend, require_pat
 from meme_mcp.auth.pat import SQLitePatStore
 from meme_mcp.config import Settings, validate_at_startup
@@ -30,12 +36,28 @@ class RuntimeAllowlist(set[str]):
     pass
 
 
+class GitHubOAuthClient(Protocol):
+    async def fetch_user(self, code: str) -> dict[str, str]: ...
+
+
+class GitHubOAuthUnavailable:
+    async def fetch_user(self, code: str) -> dict[str, str]:
+        del code
+        raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "oauth", "reason": "unavailable"}])
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is not None:
         validate_at_startup(settings)
     Image.MAX_IMAGE_PIXELS = 40 * 1024 * 1024
     app = FastAPI(title="meme-mcp")
     if settings is not None:
+        app.add_middleware(
+            SessionMiddleware,
+            secret_key=settings.session_secret.get_secret_value(),
+            same_site="lax",
+            https_only=not settings.github_redirect_uri.startswith("http://localhost"),
+        )
         app.state.settings = settings
         db_path = _sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
         app.state.pat_store = SQLitePatStore(db_path)
@@ -43,6 +65,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.templates = SQLiteTemplateRepository(db_path)
         app.state.pending_uploads = PendingUploadStore(db_path)
         app.state.image_store = FilesystemImageStore(settings.image_store_fs_path)
+        app.state.web_allowlist = FileAllowlist(settings.github_allowlist_path)
+        app.state.github_oauth = GitHubOAuthUnavailable()
         app.state.vlm_client = VLMClient(
             settings.vlm_model,
             api_key=settings.vlm_api_key.get_secret_value(),
@@ -78,9 +102,53 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True}
 
     @app.get("/browse")
-    async def browse(authorization: str | None = Header(default=None)) -> JSONResponse:
-        _friend_from_header(app, authorization)
+    async def browse(
+        request: Request,
+        authorization: str | None = Header(default=None),
+    ) -> JSONResponse:
+        _friend_from_request_or_header(app, request, authorization)
         return JSONResponse(make_success({"templates": []}))
+
+    @app.get("/auth/login")
+    async def auth_login(request: Request) -> RedirectResponse:
+        if not hasattr(app.state, "settings"):
+            raise MemeMCPError(ErrorCode.UNAUTHORIZED, [])
+        state = secrets.token_urlsafe(24)
+        verifier = secrets.token_urlsafe(48)
+        request.session["oauth_state"] = state
+        request.session["oauth_code_verifier"] = verifier
+        challenge = _pkce_challenge(verifier)
+        query = urlencode(
+            {
+                "client_id": app.state.settings.github_client_id,
+                "redirect_uri": app.state.settings.github_redirect_uri,
+                "scope": "read:user",
+                "state": state,
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+            }
+        )
+        return RedirectResponse(f"https://github.com/login/oauth/authorize?{query}")
+
+    @app.get("/auth/callback")
+    async def auth_callback(request: Request, code: str, state: str) -> JSONResponse:
+        if not secrets.compare_digest(str(request.session.get("oauth_state", "")), state):
+            raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "state", "reason": "mismatch"}])
+        user = await app.state.github_oauth.fetch_user(code)
+        login = str(user.get("login", "")).strip()
+        if not login or not app.state.web_allowlist.is_allowlisted(login):
+            raise MemeMCPError(
+                ErrorCode.FORBIDDEN_NOT_ALLOWLISTED,
+                [{"field": "github_login", "reason": "not_allowlisted"}],
+            )
+        request.session.clear()
+        request.session["github_login"] = login
+        return JSONResponse(make_success({"github_login": login}))
+
+    @app.post("/auth/logout")
+    async def auth_logout(request: Request) -> JSONResponse:
+        request.session.clear()
+        return JSONResponse(make_success({"logged_out": True}))
 
     @app.get("/api/mcp/tools")
     async def mcp_tools(authorization: str | None = Header(default=None)) -> JSONResponse:
@@ -324,6 +392,19 @@ def _friend_from_header(app: FastAPI, authorization: str | None) -> Friend:
     )
 
 
+def _friend_from_request_or_header(
+    app: FastAPI,
+    request: Request,
+    authorization: str | None,
+) -> Friend:
+    if authorization:
+        return _friend_from_header(app, authorization)
+    login = request.session.get("github_login")
+    if isinstance(login, str) and app.state.web_allowlist.is_allowlisted(login):
+        return Friend(login)
+    raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "session", "reason": "missing"}])
+
+
 def _sqlite_path(database_url: str, fallback: Path) -> Path:
     if database_url.startswith("sqlite:///"):
         return Path(database_url.removeprefix("sqlite:///"))
@@ -362,3 +443,8 @@ def _slot_definitions(metadata: dict[str, object]) -> list[dict[str, object]]:
 def _template_id(name: str, exact_hash: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "uploaded-meme"
     return f"{slug}-{exact_hash[:8]}"
+
+
+def _pkce_challenge(verifier: str) -> str:
+    digest = hashlib.sha256(verifier.encode()).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
