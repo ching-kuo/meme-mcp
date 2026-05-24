@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Container
 from typing import Any, Protocol
 
 from mcp.server.auth.provider import AccessToken, TokenVerifier
@@ -56,7 +57,12 @@ def tool_schemas() -> dict[str, dict[str, Any]]:
 
 
 class PatTokenVerifier(TokenVerifier):
-    def __init__(self, pat_store: SQLitePatStore, allowlist: set[str], pepper: str) -> None:
+    def __init__(
+        self,
+        pat_store: SQLitePatStore,
+        allowlist: Container[str],
+        pepper: str,
+    ) -> None:
         self.pat_store = pat_store
         self.allowlist = allowlist
         self.pepper = pepper
@@ -70,7 +76,7 @@ class PatTokenVerifier(TokenVerifier):
 
 def create_mcp_server(
     pat_store: SQLitePatStore,
-    allowlist: set[str],
+    allowlist: Container[str],
     pepper: str,
     backend: MCPBackend | None = None,
 ) -> FastMCP:

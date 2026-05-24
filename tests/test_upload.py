@@ -50,3 +50,10 @@ def test_compute_hashes_returns_sha256_and_dhash_for_sanitized_bytes() -> None:
     exact, perceptual = compute_hashes(content)
     assert len(exact) == 64
     assert len(perceptual) == 16
+
+
+def test_decompression_bomb_warning_is_rejected(monkeypatch) -> None:
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 1)
+    with pytest.raises(MemeMCPError) as caught:
+        validate_upload(png_bytes(), "image/png", "x.png")
+    assert caught.value.errors[0]["reason"] == "decompression_bomb"

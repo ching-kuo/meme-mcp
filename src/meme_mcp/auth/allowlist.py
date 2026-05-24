@@ -10,6 +10,9 @@ class FileAllowlist:
     def is_allowlisted(self, github_login: str) -> bool:
         return github_login.lower() in self.entries()
 
+    def __contains__(self, github_login: object) -> bool:
+        return isinstance(github_login, str) and self.is_allowlisted(github_login)
+
     def entries(self) -> list[str]:
         if not self.path.exists():
             return []

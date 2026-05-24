@@ -9,7 +9,8 @@ class FakeGitHubOAuth:
     def __init__(self, login: str) -> None:
         self.login = login
 
-    async def fetch_user(self, code: str) -> dict[str, str]:
+    async def fetch_user(self, code: str, code_verifier: str | None = None) -> dict[str, str]:
+        assert code_verifier
         assert code == "ok-code"
         return {"login": self.login}
 

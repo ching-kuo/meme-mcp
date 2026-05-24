@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import warnings
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from io import BytesIO
 
@@ -50,7 +53,7 @@ def validate_upload(content: bytes, declared_mime: str, declared_filename: str) 
             ErrorCode.UPLOAD_REJECTED, [{"field": "file", "reason": "mime_mismatch"}]
         )
     try:
-        with Image.open(BytesIO(content)) as image:
+        with reject_decompression_bombs(), Image.open(BytesIO(content)) as image:
             image.verify()
     except Image.DecompressionBombWarning as exc:
         raise MemeMCPError(
@@ -69,6 +72,18 @@ def validate_upload(content: bytes, declared_mime: str, declared_filename: str) 
 
 def compute_hashes(content: bytes) -> tuple[str, str]:
     exact_hash = hashlib.sha256(content).hexdigest()
-    with Image.open(BytesIO(content)) as image:
-        perceptual_hash = str(imagehash.dhash(image))
+    try:
+        with reject_decompression_bombs(), Image.open(BytesIO(content)) as image:
+            perceptual_hash = str(imagehash.dhash(image))
+    except Image.DecompressionBombWarning as exc:
+        raise MemeMCPError(
+            ErrorCode.UPLOAD_REJECTED, [{"field": "file", "reason": "decompression_bomb"}]
+        ) from exc
     return exact_hash, perceptual_hash
+
+
+@contextmanager
+def reject_decompression_bombs() -> Iterator[None]:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+        yield

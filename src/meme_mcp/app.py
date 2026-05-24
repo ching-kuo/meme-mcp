@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlencode
 
+import httpx
 from fastapi import FastAPI, Header, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from PIL import Image
@@ -23,6 +24,7 @@ from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate
 from meme_mcp.db.uploads import PendingUploadStore
 from meme_mcp.envelope import Envelope, make_error, make_success
 from meme_mcp.errors import ErrorCode, MemeMCPError, status_for_error
+from meme_mcp.limits import WindowedRateLimiter
 from meme_mcp.mcp.server import create_mcp_server, tool_schemas
 from meme_mcp.rendering.image_store import FilesystemImageStore
 from meme_mcp.rendering.pipeline import TemplateSpec, render_meme
@@ -30,20 +32,56 @@ from meme_mcp.upload.dedupe import DuplicateIndex, check_duplicates
 from meme_mcp.upload.strip import strip_and_reencode
 from meme_mcp.upload.validation import compute_hashes, validate_upload
 from meme_mcp.vlm.client import VLMClient
-
-
-class RuntimeAllowlist(set[str]):
-    pass
+from meme_mcp.vlm.sanitize import flag_anomalies, hard_sanitize_metadata
 
 
 class GitHubOAuthClient(Protocol):
-    async def fetch_user(self, code: str) -> dict[str, str]: ...
+    async def fetch_user(self, code: str, code_verifier: str | None = None) -> dict[str, str]: ...
 
 
 class GitHubOAuthUnavailable:
-    async def fetch_user(self, code: str) -> dict[str, str]:
-        del code
+    async def fetch_user(self, code: str, code_verifier: str | None = None) -> dict[str, str]:
+        del code, code_verifier
         raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "oauth", "reason": "unavailable"}])
+
+
+class GitHubOAuthHTTPClient:
+    def __init__(
+        self,
+        *,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.redirect_uri = redirect_uri
+        self.http_client = http_client or httpx.AsyncClient(base_url="https://github.com")
+
+    async def fetch_user(self, code: str, code_verifier: str | None = None) -> dict[str, str]:
+        token_response = await self.http_client.post(
+            "/login/oauth/access_token",
+            headers={"Accept": "application/json"},
+            data={
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "code": code,
+                "redirect_uri": self.redirect_uri,
+                "code_verifier": code_verifier or "",
+            },
+        )
+        token_response.raise_for_status()
+        access_token = token_response.json().get("access_token")
+        if not isinstance(access_token, str) or not access_token:
+            raise ValueError("GitHub OAuth response missing access_token")
+        user_response = await self.http_client.get(
+            "/user",
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+        )
+        user_response.raise_for_status()
+        user = user_response.json()
+        return {"login": str(user.get("login", ""))}
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -66,13 +104,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.pending_uploads = PendingUploadStore(db_path)
         app.state.image_store = FilesystemImageStore(settings.image_store_fs_path)
         app.state.web_allowlist = FileAllowlist(settings.github_allowlist_path)
-        app.state.github_oauth = GitHubOAuthUnavailable()
+        app.state.allowlist = app.state.web_allowlist
+        app.state.find_limiter = WindowedRateLimiter(settings.rate_find_per_min, 60)
+        app.state.generate_limiter = WindowedRateLimiter(settings.rate_generate_per_min, 60)
+        app.state.upload_limiter = WindowedRateLimiter(settings.rate_upload_per_hour, 60 * 60)
+        app.state.github_oauth = GitHubOAuthHTTPClient(
+            client_id=settings.github_client_id,
+            client_secret=settings.github_client_secret.get_secret_value(),
+            redirect_uri=settings.github_redirect_uri,
+        )
         app.state.vlm_client = VLMClient(
             settings.vlm_model,
             api_key=settings.vlm_api_key.get_secret_value(),
             base_url=settings.vlm_base_url,
         )
-        app.state.allowlist = RuntimeAllowlist()
         app.state.pat_hash_pepper_value = settings.pat_hash_pepper.get_secret_value()
         app.state.mcp_server = create_mcp_server(
             app.state.pat_store,
@@ -134,7 +179,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def auth_callback(request: Request, code: str, state: str) -> JSONResponse:
         if not secrets.compare_digest(str(request.session.get("oauth_state", "")), state):
             raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "state", "reason": "mismatch"}])
-        user = await app.state.github_oauth.fetch_user(code)
+        code_verifier = request.session.get("oauth_code_verifier")
+        user = await app.state.github_oauth.fetch_user(
+            code,
+            str(code_verifier) if code_verifier is not None else None,
+        )
         login = str(user.get("login", "")).strip()
         if not login or not app.state.web_allowlist.is_allowlisted(login):
             raise MemeMCPError(
@@ -160,7 +209,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: dict[str, object],
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
-        _friend_from_header(app, authorization)
+        friend = _friend_from_header(app, authorization)
+        app.state.find_limiter.hit(friend.github_login)
         query = str(payload.get("query", "")).strip()
         if not query:
             raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "query", "reason": "required"}])
@@ -178,6 +228,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
         friend = _friend_from_header(app, authorization)
+        app.state.generate_limiter.hit(friend.github_login)
         template_id = str(payload.get("template_id", "")).strip()
         slot_fills_raw = payload.get("slot_fills", [])
         if not template_id or not isinstance(slot_fills_raw, list):
@@ -186,10 +237,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 [{"field": "template_id", "reason": "required"}],
             )
         slot_fills = [str(fill) for fill in slot_fills_raw]
-        if bool(payload.get("dry_run", False)):
-            return JSONResponse(
-                make_success({"template_id": template_id, "rendered_url": None, "hash": None})
-            )
         try:
             template = app.state.templates.get(template_id)
         except KeyError as exc:
@@ -202,15 +249,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             image_bytes=app.state.image_store.get(template.image_path),
             slots=template.slot_definitions,
         )
+        if bool(payload.get("dry_run", False)):
+            _validate_slot_fills(spec, slot_fills)
+            return JSONResponse(make_success(_receipt(template_id, slot_fills, None, None)))
         result = render_meme(spec, slot_fills, app.state.image_store)
         app.state.receipts.record(result.hash, template_id, friend.github_login)
         return JSONResponse(
             make_success(
-                {
-                    "template_id": template_id,
-                    "rendered_url": result.rendered_url,
-                    "hash": result.hash,
-                }
+                _receipt(template_id, slot_fills, result.rendered_url, result.hash, result.alt_text)
             )
         )
 
@@ -220,6 +266,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
         friend = _friend_from_header(app, authorization)
+        app.state.upload_limiter.hit(friend.github_login)
         filename = str(payload.get("filename", "upload"))
         mime = str(payload.get("mime", ""))
         try:
@@ -247,14 +294,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             sanitized,
             _optional_string(payload.get("title_hint")),
         )
-        if enrichment.status == "timeout":
-            raise MemeMCPError(ErrorCode.VLM_UNAVAILABLE, [{"field": "vlm", "reason": "timeout"}])
-        if enrichment.status != "success" or enrichment.metadata is None:
-            raise MemeMCPError(
-                ErrorCode.VLM_OUTPUT_SUSPECT,
-                [{"field": "vlm", "reason": enrichment.status}],
-            )
-        metadata = enrichment.metadata
+        if enrichment.status == "success" and enrichment.metadata is not None:
+            metadata = enrichment.metadata
+            suspect_flags = enrichment.suspect_flags
+        else:
+            metadata = _blank_upload_metadata(_optional_string(payload.get("title_hint")))
+            suspect_flags = [f"vlm_{enrichment.status}"]
         slot_definitions = _slot_definitions(metadata)
         image_path = app.state.image_store.put(sanitized, _extension_for_mime(validated.mime))
         pending = app.state.pending_uploads.create(
@@ -266,7 +311,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             perceptual_hash=perceptual_hash,
             duplicate_action=duplicate.action,
             duplicate_template_id=duplicate.template_id,
-            suspect_flags=enrichment.suspect_flags,
+            suspect_flags=suspect_flags,
         )
         return JSONResponse(
             make_success(
@@ -294,15 +339,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             pending = app.state.pending_uploads.get(upload_id, friend.github_login)
         except KeyError as exc:
             raise MemeMCPError(ErrorCode.NOT_FOUND, []) from exc
-        metadata = payload.get("metadata")
-        if not isinstance(metadata, dict):
-            metadata = pending.metadata
+        metadata_raw = payload.get("metadata")
+        metadata = metadata_raw if isinstance(metadata_raw, dict) else pending.metadata
+        metadata = _validated_metadata(
+            metadata,
+            pending.suspect_flags,
+            bool(payload.get("ack_suspect", False)),
+        )
         slot_definitions_raw = payload.get("slot_definitions")
         if isinstance(slot_definitions_raw, list):
             slot_definitions = slot_definitions_raw
         else:
             slot_definitions = pending.slot_definitions
-        name = str(metadata.get("name") or pending.metadata.get("name") or "Uploaded Meme")
+        name = str(metadata["name"])
         template_id = _template_id(name, pending.exact_hash)
         app.state.templates.upsert(
             TemplateCreate(
@@ -322,11 +371,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/renders/{prefix}/{filename}")
     async def render_file(
+        request: Request,
         prefix: str,
         filename: str,
         authorization: str | None = Header(default=None),
     ) -> FileResponse:
-        friend = _friend_from_header(app, authorization)
+        friend = _friend_from_request_or_header(app, request, authorization)
         rendered_hash = f"{prefix}{Path(filename).stem}"
         if not app.state.receipts.exists_for_friend(rendered_hash, friend.github_login):
             raise MemeMCPError(ErrorCode.NOT_FOUND, [])
@@ -357,7 +407,20 @@ class AppMCPBackend:
         actor: str | None = None,
     ) -> Envelope:
         if dry_run:
-            return make_success({"template_id": template_id, "rendered_url": None, "hash": None})
+            try:
+                template = self.app.state.templates.get(template_id)
+            except KeyError as exc:
+                raise MemeMCPError(
+                    ErrorCode.NOT_FOUND,
+                    [{"field": "template_id", "reason": "missing"}],
+                ) from exc
+            spec = TemplateSpec(
+                template_id=template_id,
+                image_bytes=self.app.state.image_store.get(template.image_path),
+                slots=template.slot_definitions,
+            )
+            _validate_slot_fills(spec, slot_fills)
+            return make_success(_receipt(template_id, slot_fills, None, None))
         try:
             template = self.app.state.templates.get(template_id)
         except KeyError as exc:
@@ -373,11 +436,7 @@ class AppMCPBackend:
         result = render_meme(spec, slot_fills, self.app.state.image_store)
         self.app.state.receipts.record(result.hash, template_id, actor or "mcp")
         return make_success(
-            {
-                "template_id": template_id,
-                "rendered_url": result.rendered_url,
-                "hash": result.hash,
-            }
+            _receipt(template_id, slot_fills, result.rendered_url, result.hash, result.alt_text)
         )
 
 
@@ -387,7 +446,7 @@ def _friend_from_header(app: FastAPI, authorization: str | None) -> Friend:
     return require_pat(
         authorization,
         app.state.pat_store,
-        set(app.state.allowlist),
+        app.state.allowlist,
         app.state.pat_hash_pepper_value,
     )
 
@@ -438,6 +497,71 @@ def _slot_definitions(metadata: dict[str, object]) -> list[dict[str, object]]:
         if typed_slots:
             return typed_slots
     return [{"name": "top", "position": "top"}, {"name": "bottom", "position": "bottom"}]
+
+
+def _blank_upload_metadata(title_hint: str | None) -> dict[str, object]:
+    return {
+        "name": title_hint or "Uploaded Meme",
+        "description": "",
+        "emotion": "",
+        "usage_context": "",
+        "tags": [],
+        "format": "static",
+        "slot_definitions": [{"name": "top", "position": "top"}],
+    }
+
+
+def _validated_metadata(
+    metadata: dict[str, object],
+    suspect_flags: list[str],
+    ack_suspect: bool,
+) -> dict[str, object]:
+    cleaned = hard_sanitize_metadata(metadata)
+    flags = sorted(set(suspect_flags) | set(flag_anomalies(cleaned)))
+    if flags and not ack_suspect:
+        raise MemeMCPError(
+            ErrorCode.VLM_OUTPUT_SUSPECT,
+            [{"field": "metadata", "reason": ",".join(flags)}],
+        )
+    required = ["name", "description", "emotion", "usage_context", "tags", "format"]
+    missing = [key for key in required if key not in cleaned]
+    if missing:
+        raise MemeMCPError(
+            ErrorCode.INVALID_INPUT,
+            [{"field": "metadata", "reason": f"missing:{','.join(missing)}"}],
+        )
+    if cleaned.get("format") != "static":
+        raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "format", "reason": "static"}])
+    if not isinstance(cleaned.get("tags"), list):
+        raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "tags", "reason": "list"}])
+    cleaned["slot_definitions"] = _slot_definitions(cleaned)
+    return cleaned
+
+
+def _validate_slot_fills(spec: TemplateSpec, slot_fills: list[str]) -> None:
+    if len(slot_fills) != len(spec.slots):
+        raise MemeMCPError(
+            ErrorCode.SLOT_MISMATCH,
+            [{"field": "slot_fills", "reason": "must match template slot count"}],
+        )
+
+
+def _receipt(
+    template_id: str,
+    slot_fills: list[str],
+    rendered_url: str | None,
+    rendered_hash: str | None,
+    alt_text: str | None = None,
+) -> dict[str, object]:
+    final_alt = alt_text or f"Meme {template_id}: " + " / ".join(slot_fills)
+    return {
+        "template_id": template_id,
+        "slot_fills": slot_fills,
+        "rendered_url": rendered_url,
+        "hash": rendered_hash,
+        "alt_text": final_alt,
+        "markdown_snippet": f"![{final_alt}]({rendered_url})" if rendered_url else None,
+    }
 
 
 def _template_id(name: str, exact_hash: str) -> str:

@@ -13,29 +13,32 @@ from meme_mcp.app import create_app
 from meme_mcp.auth.depends import require_pat
 from meme_mcp.auth.pat import SQLitePatStore, issue_pat, verify_pat
 from meme_mcp.config import Settings
+from meme_mcp.db.templates import TemplateCreate
 from meme_mcp.errors import MemeMCPError
 from meme_mcp.limits import WindowedRateLimiter
 from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_meme
 
 
-def settings(tmp_path) -> Settings:
-    return Settings(
-        storage_dir=str(tmp_path),
-        database_url=f"sqlite:///{tmp_path / 'meme.db'}",
-        image_store_backend="filesystem",
-        image_store_fs_path=str(tmp_path / "images"),
-        github_client_id="cid",
-        github_client_secret=SecretStr("secret-32-chars-value-for-tests"),
-        github_redirect_uri="http://localhost:8000/auth/callback",
-        github_allowlist_path=str(tmp_path / "allowlist.txt"),
-        operator_github_login="operator",
-        session_secret=SecretStr("session-secret-32-chars-value-tests"),
-        pat_hash_pepper=SecretStr("pepper-secret-32-chars-value-tests"),
-        vlm_base_url="https://example.test/v1",
-        vlm_api_key=SecretStr("vlm-key"),
-        vlm_model="vlm-model",
-        embedding_api_key=SecretStr("embedding-key"),
-    )
+def settings(tmp_path, **overrides: object) -> Settings:
+    data = {
+        "storage_dir": str(tmp_path),
+        "database_url": f"sqlite:///{tmp_path / 'meme.db'}",
+        "image_store_backend": "filesystem",
+        "image_store_fs_path": str(tmp_path / "images"),
+        "github_client_id": "cid",
+        "github_client_secret": SecretStr("secret-32-chars-value-for-tests"),
+        "github_redirect_uri": "http://localhost:8000/auth/callback",
+        "github_allowlist_path": str(tmp_path / "allowlist.txt"),
+        "operator_github_login": "operator",
+        "session_secret": SecretStr("session-secret-32-chars-value-tests"),
+        "pat_hash_pepper": SecretStr("pepper-secret-32-chars-value-tests"),
+        "vlm_base_url": "https://example.test/v1",
+        "vlm_api_key": SecretStr("vlm-key"),
+        "vlm_model": "vlm-model",
+        "embedding_api_key": SecretStr("embedding-key"),
+    }
+    data.update(overrides)
+    return Settings(**data)
 
 
 def image_bytes() -> bytes:
@@ -49,6 +52,27 @@ def test_app_wires_web_mcp_ready_and_authenticated_renders(tmp_path) -> None:
     app = create_app(settings(tmp_path))
     token = issue_pat(app.state.pat_store, "alice", app.state.pat_hash_pepper_value)
     app.state.allowlist.add("alice")
+    image_path = app.state.image_store.put(image_bytes(), "png")
+    app.state.templates.upsert(
+        TemplateCreate(
+            template_id="drake",
+            slug="drake",
+            name="Drake",
+            source="friend",
+            metadata={
+                "name": "Drake",
+                "description": "reaction meme",
+                "emotion": "dismissive",
+                "usage_context": "comparison",
+                "tags": ["reaction"],
+                "format": "static",
+            },
+            slot_definitions=[{"position": "top"}],
+            image_path=image_path,
+            perceptual_hash="0" * 16,
+            exact_hash="a" * 64,
+        )
+    )
 
     spec = TemplateSpec("drake", image_bytes(), [{"position": "top"}])
     result = render_meme(spec, ["hello"], app.state.image_store)
@@ -74,6 +98,65 @@ def test_app_wires_web_mcp_ready_and_authenticated_renders(tmp_path) -> None:
     assert dry_run.json()["data"]["rendered_url"] is None
     assert client.get(result.rendered_url, headers=authed).status_code == 200
     assert client.get(result.rendered_url).status_code == 401
+
+
+def test_pat_auth_uses_file_allowlist_written_by_operator_cli(tmp_path) -> None:
+    app = create_app(settings(tmp_path))
+    token = issue_pat(app.state.pat_store, "alice", app.state.pat_hash_pepper_value)
+    (tmp_path / "allowlist.txt").write_text("alice\n", encoding="utf-8")
+
+    response = TestClient(app).get("/api/mcp/tools", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+
+
+def test_route_rate_limits_apply_before_find_work(tmp_path) -> None:
+    app = create_app(settings(tmp_path, rate_find_per_min=1))
+    token = issue_pat(app.state.pat_store, "alice", app.state.pat_hash_pepper_value)
+    app.state.allowlist.add("alice")
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    assert client.post("/api/mcp/find", headers=headers, json={"query": "x"}).status_code == 200
+    limited = client.post("/api/mcp/find", headers=headers, json={"query": "x"})
+
+    assert limited.status_code == 429
+
+
+def test_dry_run_validates_template_and_slot_count(tmp_path) -> None:
+    app = create_app(settings(tmp_path))
+    token = issue_pat(app.state.pat_store, "alice", app.state.pat_hash_pepper_value)
+    app.state.allowlist.add("alice")
+    image_path = app.state.image_store.put(image_bytes(), "png")
+    app.state.templates.upsert(
+        TemplateCreate(
+            template_id="two-slot",
+            slug="two-slot",
+            name="Two Slot",
+            source="friend",
+            metadata={"name": "Two Slot", "tags": [], "format": "static"},
+            slot_definitions=[{"position": "top"}, {"position": "bottom"}],
+            image_path=image_path,
+            perceptual_hash="1" * 16,
+            exact_hash="b" * 64,
+        )
+    )
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    missing = client.post(
+        "/api/mcp/generate",
+        headers=headers,
+        json={"template_id": "missing", "slot_fills": ["x"], "dry_run": True},
+    )
+    mismatch = client.post(
+        "/api/mcp/generate",
+        headers=headers,
+        json={"template_id": "two-slot", "slot_fills": ["x"], "dry_run": True},
+    )
+
+    assert missing.status_code == 404
+    assert mismatch.status_code == 400
 
 
 def test_pat_store_persists_and_enforces_allowlist(tmp_path) -> None:
