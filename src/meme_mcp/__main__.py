@@ -6,7 +6,10 @@ from pathlib import Path
 
 from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.pat import SQLitePatStore, issue_pat
+from meme_mcp.cli.reindex_embeddings import make_embedder, reindex_embeddings
 from meme_mcp.config import Settings, validate_at_startup
+from meme_mcp.db.templates import SQLiteTemplateRepository
+from meme_mcp.db.vectors import SQLiteVecStore
 
 
 def main() -> None:
@@ -25,6 +28,8 @@ def run(argv: Sequence[str] | None = None, settings: Settings | None = None) -> 
         return _run_allowlist(args, app_settings)
     if args.command == "pat":
         return _run_pat(args, app_settings)
+    if args.command == "reindex-embeddings":
+        return _run_reindex_embeddings(app_settings)
     parser.error(f"unknown command: {args.command}")
     return 2
 
@@ -46,6 +51,7 @@ def _parser() -> argparse.ArgumentParser:
     pat_commands = pat.add_subparsers(dest="pat_command", required=True)
     pat_issue = pat_commands.add_parser("issue")
     pat_issue.add_argument("github_login")
+    subcommands.add_parser("reindex-embeddings")
     return parser
 
 
@@ -71,6 +77,20 @@ def _run_pat(args: argparse.Namespace, settings: Settings) -> int:
     store = SQLitePatStore(db_path)
     token = issue_pat(store, args.github_login, settings.pat_hash_pepper.get_secret_value())
     print(token)
+    return 0
+
+
+def _run_reindex_embeddings(settings: Settings) -> int:
+    db_path = _sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
+    templates = SQLiteTemplateRepository(db_path)
+    vectors = SQLiteVecStore(db_path)
+    embedder = make_embedder(
+        settings.embedding_model,
+        settings.embedding_api_key.get_secret_value(),
+        settings.embedding_base_url,
+    )
+    count = reindex_embeddings(templates, vectors, embedder)
+    print(f"reindexed {count} templates")
     return 0
 
 

@@ -4,7 +4,10 @@ from pydantic import SecretStr
 
 from meme_mcp.__main__ import run
 from meme_mcp.auth.pat import SQLitePatStore, verify_pat
+from meme_mcp.cli.reindex_embeddings import reindex_embeddings
 from meme_mcp.config import Settings
+from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate
+from meme_mcp.db.vectors import SQLiteVecStore
 
 
 def settings(tmp_path) -> Settings:
@@ -48,3 +51,32 @@ def test_pat_cli_issue_prints_verifiable_token(tmp_path, capsys) -> None:
 
     store = SQLitePatStore(tmp_path / "meme.db")
     assert verify_pat(store, token, app_settings.pat_hash_pepper.get_secret_value()) == "friend"
+
+
+class FakeEmbeddingClient:
+    def embed_template(self, metadata: dict[str, object]) -> list[float]:
+        assert metadata["description"] == "ship green"
+        return [1.0, 0.0, 0.0]
+
+
+def test_reindex_embeddings_rebuilds_vector_store_from_templates(tmp_path) -> None:
+    repo = SQLiteTemplateRepository(tmp_path / "meme.db")
+    repo.upsert(
+        TemplateCreate(
+            template_id="deploy",
+            slug="deploy",
+            name="Deploy",
+            source="friend",
+            metadata={"description": "ship green", "tags": ["ci"]},
+            slot_definitions=[{"position": "top"}],
+            image_path="aa/deploy.png",
+            perceptual_hash="0" * 16,
+            exact_hash="a" * 64,
+        )
+    )
+    vectors = SQLiteVecStore(tmp_path / "vectors.db", dimensions=3)
+
+    count = reindex_embeddings(repo, vectors, FakeEmbeddingClient())
+
+    assert count == 1
+    assert vectors.search([1.0, 0.0, 0.0], 1) == [("deploy", 1.0)]
