@@ -441,6 +441,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
+def create_configured_app() -> FastAPI:
+    return create_app(Settings())  # type: ignore[call-arg]
+
+
 class AppMCPBackend:
     def __init__(self, app: FastAPI) -> None:
         self.app = app

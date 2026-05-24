@@ -1,9 +1,113 @@
 # meme-mcp
 
-Private meme retrieval and rendering service with a hosted MCP surface and a small web app.
+Private meme retrieval and rendering service with:
 
-This repository is initialized from `docs/plans/2026-05-24-001-feat-meme-mcp-v1-plan.md`.
-The current implementation is test-first and covers the v1 foundations: envelope errors, config
-validation, PAT hashing, upload validation, duplicate checks, content-addressed rendering storage,
-retrieval ranking, and a FastAPI health/error surface.
+- hosted MCP Streamable HTTP at `/mcp`
+- compatibility JSON routes under `/api/mcp/*`
+- GitHub OAuth browser sessions for friends
+- bearer PAT auth for MCP clients
+- friend upload analysis/review/approval
+- SQLite + filesystem storage by default
 
+## Local setup
+
+```bash
+uv sync --extra dev
+cp .env.example .env
+```
+
+Set the required GitHub OAuth, VLM, embedding, session, and PAT pepper values in `.env`.
+
+## Operator workflow
+
+```bash
+# Seed a deterministic local starter corpus.
+uv run meme-mcp seed-memegen
+
+# Add a GitHub login to the allowlist used by both web sessions and PAT auth.
+uv run meme-mcp allowlist add <github-login>
+
+# Issue a PAT. The token is printed once; only its hash is stored.
+uv run meme-mcp pat issue <github-login>
+
+# Rebuild template vectors from persisted template metadata.
+uv run meme-mcp reindex-embeddings
+```
+
+## Run locally
+
+```bash
+uv run uvicorn meme_mcp.app:create_configured_app --factory --host 127.0.0.1 --port 8000
+```
+
+Useful routes:
+
+- `GET /healthz`
+- `GET /readyz`
+- `GET /browse`
+- `GET /api/templates?q=deploy`
+- `POST /api/templates/{template_id}/preview`
+- `GET /api/mcp/tools`
+- `POST /api/mcp/find`
+- `POST /api/mcp/generate`
+- `GET /renders/{prefix}/{filename}`
+
+## MCP client snippets
+
+Codex CLI:
+
+```toml
+[mcp_servers.meme_mcp]
+url = "https://your-host.example/mcp"
+bearer_token_env_var = "MEME_MCP_PAT"
+```
+
+Claude Desktop through `mcp-remote`:
+
+```json
+{
+  "mcpServers": {
+    "meme-mcp": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://your-host.example/mcp",
+        "--header",
+        "Authorization: Bearer ${MEME_MCP_PAT}"
+      ]
+    }
+  }
+}
+```
+
+## Development verification
+
+```bash
+.venv/bin/ruff check
+.venv/bin/mypy src
+.venv/bin/python -m pytest
+```
+
+Current local verification target: all three commands pass.
+
+## Current v1 status
+
+Implemented:
+
+- MCP tool registration via official FastMCP
+- PAT hashing and file-backed allowlist enforcement
+- GitHub OAuth session flow with PKCE state
+- persisted templates, receipts, pending uploads, and vectors
+- upload validation, EXIF-stripping re-encode, duplicate detection, VLM review fallback
+- content-addressed rendering and authenticated receipt fetch
+- web browse/search/preview routes
+- operator CLI for allowlist, PAT issue, seed, and reindex
+- Docker and Kubernetes deployment examples
+
+Known remaining external validation:
+
+- live GitHub OAuth app callback
+- live VLM provider call
+- live embedding provider call
+- live MCP client smoke against `/mcp`
+- real upstream memegen asset import and visual parity review
