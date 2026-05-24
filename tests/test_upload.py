@@ -6,7 +6,7 @@ from PIL import Image
 from meme_mcp.errors import ErrorCode, MemeMCPError
 from meme_mcp.upload.dedupe import DuplicateIndex, check_duplicates
 from meme_mcp.upload.strip import strip_and_reencode
-from meme_mcp.upload.validation import validate_upload
+from meme_mcp.upload.validation import compute_hashes, validate_upload
 
 
 def png_bytes(color: str = "white") -> bytes:
@@ -44,3 +44,9 @@ def test_duplicate_index_blocks_exact_and_warns_near_duplicate() -> None:
     assert check_duplicates(index, "def", "0000000000000001").action == "warn"
     assert check_duplicates(index, "ghi", "ffffffffffffffff").action == "accept"
 
+
+def test_compute_hashes_returns_sha256_and_dhash_for_sanitized_bytes() -> None:
+    content = strip_and_reencode(png_bytes(), "image/png")
+    exact, perceptual = compute_hashes(content)
+    assert len(exact) == 64
+    assert len(perceptual) == 16

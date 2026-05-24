@@ -58,12 +58,16 @@ def test_app_wires_web_mcp_ready_and_authenticated_renders(tmp_path) -> None:
     assert client.get("/readyz").json() == {"ok": True}
     assert PIL.Image.MAX_IMAGE_PIXELS == 40 * 1024 * 1024
     assert client.get("/browse").status_code == 401
-    assert client.get("/mcp/tools").status_code == 401
+    assert client.get("/api/mcp/tools").status_code == 401
     authed = {"Authorization": f"Bearer {token}"}
-    assert client.get("/mcp/tools", headers=authed).json()["data"]["tools"] == ["find", "generate"]
-    assert client.post("/mcp/find", headers=authed, json={"query": "drake"}).status_code == 200
+    assert client.get("/api/mcp/tools", headers=authed).json()["data"]["tools"] == [
+        "find",
+        "generate",
+    ]
+    assert any(getattr(route, "path", None) == "/mcp" for route in app.routes)
+    assert client.post("/api/mcp/find", headers=authed, json={"query": "drake"}).status_code == 200
     dry_run = client.post(
-        "/mcp/generate",
+        "/api/mcp/generate",
         headers=authed,
         json={"template_id": "drake", "slot_fills": ["x"], "dry_run": True},
     )

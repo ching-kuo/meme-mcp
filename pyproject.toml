@@ -10,17 +10,30 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
+  "aiosqlite>=0.20",
+  "alembic>=1.14",
+  "authlib>=1.4",
+  "concurrent-log-handler>=0.9",
   "fastapi>=0.115",
+  "httpx>=0.28",
+  "imagehash>=4.3",
   "jinja2>=3.1",
+  "mcp>=1.27,<2",
+  "openai>=1.0",
   "pillow>=12,<13",
+  "portalocker>=3.0",
   "pydantic>=2.10",
   "pydantic-settings>=2.7",
+  "python-magic>=0.4",
   "python-multipart>=0.0.20",
+  "slowapi>=0.1",
+  "sqlalchemy[asyncio]>=2.0",
+  "sqlite-vec>=0.1.6",
   "uvicorn[standard]>=0.34",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3", "pytest-asyncio>=0.25", "ruff>=0.8", "mypy>=1.14", "httpx>=0.28"]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.25", "ruff>=0.8", "mypy>=1.14"]
 postgres = ["asyncpg>=0.30", "pgvector>=0.3", "psycopg[binary]>=3.2"]
 s3 = ["boto3>=1.35"]
 all = ["meme-mcp[postgres,s3]"]
@@ -40,4 +53,3 @@ asyncio_mode = "auto"
 python_version = "3.12"
 strict = true
 files = ["src"]
-

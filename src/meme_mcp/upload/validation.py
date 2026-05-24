@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from io import BytesIO
 
+import imagehash
 from PIL import Image, UnidentifiedImageError
 
 from meme_mcp.errors import ErrorCode, MemeMCPError
@@ -18,6 +20,14 @@ class ValidationResult:
 
 
 def detect_mime(content: bytes) -> str | None:
+    try:
+        import magic
+
+        detected = magic.from_buffer(content, mime=True)
+        if detected in {"image/png", "image/jpeg", "image/webp"}:
+            return str(detected)
+    except (ImportError, OSError, AttributeError):
+        pass
     for mime, prefix in ALLOWED_MIMES.items():
         if content.startswith(prefix):
             return mime
@@ -56,3 +66,9 @@ def validate_upload(content: bytes, declared_mime: str, declared_filename: str) 
         ) from exc
     return ValidationResult(mime=detected, size_bytes=len(content))
 
+
+def compute_hashes(content: bytes) -> tuple[str, str]:
+    exact_hash = hashlib.sha256(content).hexdigest()
+    with Image.open(BytesIO(content)) as image:
+        perceptual_hash = str(imagehash.dhash(image))
+    return exact_hash, perceptual_hash

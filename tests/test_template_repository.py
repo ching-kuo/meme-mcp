@@ -80,7 +80,7 @@ def test_app_mcp_find_and_generate_use_persisted_templates(tmp_path) -> None:
     client = TestClient(app)
     headers = {"Authorization": f"Bearer {token}"}
     found = client.post(
-        "/mcp/find",
+        "/api/mcp/find",
         headers=headers,
         json={"query": "clean rust ci", "filters": {"engineering_context.language": "rust"}},
     )
@@ -88,11 +88,10 @@ def test_app_mcp_find_and_generate_use_persisted_templates(tmp_path) -> None:
     assert found.json()["data"]["candidates"][0]["template_id"] == "ci-party"
 
     rendered = client.post(
-        "/mcp/generate",
+        "/api/mcp/generate",
         headers=headers,
         json={"template_id": "ci-party", "slot_fills": ["ship it"]},
     )
     assert rendered.status_code == 200
     rendered_url = rendered.json()["data"]["rendered_url"]
     assert client.get(rendered_url, headers=headers).status_code == 200
-

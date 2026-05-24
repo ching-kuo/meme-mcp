@@ -1,3 +1,6 @@
+import json
+
+from meme_mcp.vlm.client import VLMClient
 from meme_mcp.vlm.sanitize import flag_anomalies, hard_sanitize_metadata
 
 
@@ -12,3 +15,54 @@ def test_hard_sanitize_removes_markup_and_truncates() -> None:
     assert "<" not in clean["description"]
     assert len(clean["description"]) == 512
 
+
+class FakeCompletions:
+    def create(self, **kwargs):
+        self.kwargs = kwargs
+
+        class Function:
+            arguments = json.dumps(
+                {
+                    "name": "CI Party",
+                    "description": "celebrate clean CI",
+                    "emotion": "joy",
+                    "usage_context": "after tests pass",
+                    "tags": ["ci"],
+                    "format": "static",
+                    "slot_definitions": [{"name": "top", "position": "top"}],
+                }
+            )
+
+        class ToolCall:
+            function = Function()
+
+        class Message:
+            tool_calls = [ToolCall()]
+
+        class Choice:
+            message = Message()
+
+        class Response:
+            choices = [Choice()]
+
+        return Response()
+
+
+class FakeChat:
+    def __init__(self) -> None:
+        self.completions = FakeCompletions()
+
+
+class FakeVLMProvider:
+    def __init__(self) -> None:
+        self.chat = FakeChat()
+
+
+def test_vlm_client_parses_forced_tool_call() -> None:
+    fake = FakeVLMProvider()
+    result = VLMClient(model="vlm-model", provider=fake).enrich_template(b"png-bytes", "hint")
+    assert result.status == "success"
+    assert result.metadata is not None
+    assert result.metadata["name"] == "CI Party"
+    tool_choice = fake.chat.completions.kwargs["tool_choice"]
+    assert tool_choice["function"]["name"] == "record_template_metadata"

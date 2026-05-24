@@ -11,9 +11,9 @@ from meme_mcp.auth.pat import SQLitePatStore
 from meme_mcp.config import Settings, validate_at_startup
 from meme_mcp.db.receipts import ReceiptStore
 from meme_mcp.db.templates import SQLiteTemplateRepository
-from meme_mcp.envelope import make_error, make_success
+from meme_mcp.envelope import Envelope, make_error, make_success
 from meme_mcp.errors import ErrorCode, MemeMCPError, status_for_error
-from meme_mcp.mcp.server import tool_schemas
+from meme_mcp.mcp.server import create_mcp_server, tool_schemas
 from meme_mcp.rendering.image_store import FilesystemImageStore
 from meme_mcp.rendering.pipeline import TemplateSpec, render_meme
 
@@ -36,6 +36,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.image_store = FilesystemImageStore(settings.image_store_fs_path)
         app.state.allowlist = RuntimeAllowlist()
         app.state.pat_hash_pepper_value = settings.pat_hash_pepper.get_secret_value()
+        app.state.mcp_server = create_mcp_server(
+            app.state.pat_store,
+            app.state.allowlist,
+            app.state.pat_hash_pepper_value,
+            AppMCPBackend(app),
+        )
+        app.mount("/mcp", app.state.mcp_server.streamable_http_app())
 
     @app.exception_handler(MemeMCPError)
     async def meme_error_handler(_request: Request, exc: MemeMCPError) -> JSONResponse:
@@ -61,12 +68,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _friend_from_header(app, authorization)
         return JSONResponse(make_success({"templates": []}))
 
-    @app.get("/mcp/tools")
+    @app.get("/api/mcp/tools")
     async def mcp_tools(authorization: str | None = Header(default=None)) -> JSONResponse:
         _friend_from_header(app, authorization)
         return JSONResponse(make_success({"tools": sorted(tool_schemas())}))
 
-    @app.post("/mcp/find")
+    @app.post("/api/mcp/find")
     async def mcp_find(
         payload: dict[str, object],
         authorization: str | None = Header(default=None),
@@ -83,7 +90,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ]
         return JSONResponse(make_success({"candidates": candidates}))
 
-    @app.post("/mcp/generate")
+    @app.post("/api/mcp/generate")
     async def mcp_generate(
         payload: dict[str, object],
         authorization: str | None = Header(default=None),
@@ -143,6 +150,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
+class AppMCPBackend:
+    def __init__(self, app: FastAPI) -> None:
+        self.app = app
+
+    def find(self, query: str, filters: dict[str, object] | None = None) -> Envelope:
+        candidates = [
+            candidate.__dict__
+            for candidate in self.app.state.templates.search(query, filters or {})
+        ]
+        return make_success({"candidates": candidates})
+
+    def generate(
+        self,
+        template_id: str,
+        slot_fills: list[str],
+        dry_run: bool = False,
+        actor: str | None = None,
+    ) -> Envelope:
+        if dry_run:
+            return make_success({"template_id": template_id, "rendered_url": None, "hash": None})
+        try:
+            template = self.app.state.templates.get(template_id)
+        except KeyError as exc:
+            raise MemeMCPError(
+                ErrorCode.NOT_FOUND,
+                [{"field": "template_id", "reason": "missing"}],
+            ) from exc
+        spec = TemplateSpec(
+            template_id=template_id,
+            image_bytes=self.app.state.image_store.get(template.image_path),
+            slots=template.slot_definitions,
+        )
+        result = render_meme(spec, slot_fills, self.app.state.image_store)
+        self.app.state.receipts.record(result.hash, template_id, actor or "mcp")
+        return make_success(
+            {
+                "template_id": template_id,
+                "rendered_url": result.rendered_url,
+                "hash": result.hash,
+            }
+        )
+
+
 def _friend_from_header(app: FastAPI, authorization: str | None) -> Friend:
     if not hasattr(app.state, "settings"):
         raise MemeMCPError(ErrorCode.UNAUTHORIZED, [])
@@ -160,12 +210,3 @@ def _sqlite_path(database_url: str, fallback: Path) -> Path:
     if database_url.startswith("sqlite+aiosqlite:///"):
         return Path(database_url.removeprefix("sqlite+aiosqlite:///"))
     return fallback
-
-
-def _blank_template_png() -> bytes:
-    from io import BytesIO
-
-    image = Image.new("RGB", (320, 180), "navy")
-    output = BytesIO()
-    image.save(output, format="PNG")
-    return output.getvalue()
