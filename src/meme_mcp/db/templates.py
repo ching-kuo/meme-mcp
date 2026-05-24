@@ -119,6 +119,9 @@ class SQLiteTemplateRepository:
         return _row_from_sql(row)
 
     def list_records(self) -> list[TemplateRecord]:
+        return [row.as_record() for row in self.list_rows()]
+
+    def list_rows(self) -> list[TemplateRow]:
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -128,7 +131,7 @@ class SQLiteTemplateRepository:
                 ORDER BY name
                 """
             ).fetchall()
-        return [_row_from_sql(row).as_record() for row in rows]
+        return [_row_from_sql(row) for row in rows]
 
     def search(
         self,
@@ -160,4 +163,3 @@ def _row_from_sql(row: tuple[Any, ...]) -> TemplateRow:
         perceptual_hash=str(row[7]),
         exact_hash=str(row[8]),
     )
-
