@@ -41,12 +41,14 @@ def _drake_bottom_text() -> dict[str, float | str]:
 def test_full_width_top_text_projects_to_top() -> None:
     slot = project_slot_position(_drake_top_text())
     assert slot.position == "top"
+    assert dict(slot.box) == _drake_top_text()
     assert slot.position_override is None
 
 
 def test_full_width_bottom_text_projects_to_bottom() -> None:
     slot = project_slot_position(_drake_bottom_text())
     assert slot.position == "bottom"
+    assert dict(slot.box) == _drake_bottom_text()
     assert slot.position_override is None
 
 
@@ -55,6 +57,7 @@ def test_full_width_middle_text_projects_to_center() -> None:
         {"anchor_x": 0.0, "anchor_y": 0.4, "scale_x": 1.0, "scale_y": 0.2, "align": "center"}
     )
     assert slot.position == "center"
+    assert slot.box["anchor_y"] == 0.4
     assert slot.position_override is None
 
 
@@ -63,6 +66,7 @@ def test_narrow_positional_text_emits_position_override() -> None:
         {"anchor_x": 0.12, "anchor_y": 0.7, "scale_x": 0.325, "scale_y": 0.1, "align": "center"}
     )
     assert slot.position == "bottom-left"
+    assert slot.box["scale_x"] == 0.325
     assert slot.position_override is not None
     assert slot.position_override["anchor_x"] == 0.12
 
@@ -121,7 +125,7 @@ def test_load_upstream_template_skips_when_no_config(tmp_path: Path) -> None:
     assert load_upstream_template(template_dir) is None
 
 
-def test_slot_definitions_omits_override_for_standard_layout() -> None:
+def test_slot_definitions_includes_box_for_standard_layout() -> None:
     upstream = load_upstream_template_from_yaml(
         slug="test-drake",
         yaml_body="""
@@ -137,7 +141,20 @@ text:
 """,
     )
     defs = slot_definitions(upstream)
-    assert defs == [{"name": "slot_1", "position": "top"}]
+    assert defs == [
+        {
+            "name": "slot_1",
+            "position": "top",
+            "box": {
+                "anchor_x": 0.0,
+                "anchor_y": 0.0,
+                "scale_x": 1.0,
+                "scale_y": 0.2,
+                "align": "center",
+                "angle": 0.0,
+            },
+        }
+    ]
 
 
 def load_upstream_template_from_yaml(slug: str, yaml_body: str, tmp_path: Path | None = None):

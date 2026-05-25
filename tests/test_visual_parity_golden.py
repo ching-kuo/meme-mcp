@@ -20,25 +20,13 @@ UPSTREAM_TEMPLATES = Path("/tmp/memegen-upstream/templates")
 HAMMING_THRESHOLD = 8
 
 GOLDEN_CASES: list[dict[str, Any]] = [
-    {
-        "slug": "drake",
-        "fills": ["YAML configs", "TOML configs"],
-        "xfail": "vertically split panels need per-half anchor tuning",
-    },
+    {"slug": "drake", "fills": ["YAML configs", "TOML configs"]},
     {"slug": "db", "fills": ["company culture", "crypto bro", "burnout"]},
     {"slug": "spongebob", "fills": ["why yes i did", ""]},
     {"slug": "rollsafe", "fills": ["cant have bugs", "if you dont deploy"]},
     {"slug": "doge", "fills": ["such meme", "very render"]},
-    {
-        "slug": "fry",
-        "fills": ["not sure if bug", "or feature"],
-        "xfail": "two-line wrap differs from memegen layout",
-    },
-    {
-        "slug": "success",
-        "fills": ["fixed bug", "on first try"],
-        "xfail": "small image; stroke proportions diverge under resize",
-    },
+    {"slug": "fry", "fills": ["not sure if bug", "or feature"]},
+    {"slug": "success", "fills": ["fixed bug", "on first try"]},
     {"slug": "grumpycat", "fills": ["no", ""]},
     {"slug": "philosoraptor", "fills": ["if logs are smart", "why cant they find bugs"]},
     {"slug": "aag", "fills": ["aliens", "did it"]},
@@ -60,7 +48,11 @@ def _load_template_spec(slug: str) -> TemplateSpec:
         pytest.skip(f"upstream config missing for {slug}")
     cfg = yaml.safe_load(config.read_text()) or {}
     slots = [
-        {"name": f"slot_{i + 1}", "position": project_slot_position(t).position}
+        {
+            "name": f"slot_{i + 1}",
+            "position": (slot := project_slot_position(t)).position,
+            "box": dict(slot.box),
+        }
         for i, t in enumerate(cfg.get("text") or [])
     ]
     return TemplateSpec(

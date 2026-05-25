@@ -118,4 +118,3 @@ Known remaining external validation:
 - live VLM provider call
 - live embedding provider call
 - live MCP client smoke against `/mcp`
-- real upstream memegen asset import and visual parity review

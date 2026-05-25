@@ -32,6 +32,7 @@ CANONICAL_POSITIONS = frozenset(
 @dataclass(frozen=True)
 class UpstreamSlot:
     position: str
+    box: Mapping[str, Any]
     position_override: Mapping[str, Any] | None
 
 
@@ -49,8 +50,9 @@ def project_slot_position(text_entry: dict[str, Any]) -> UpstreamSlot:
     """Project a memegen text[] entry into a canonical 9-band position.
 
     The 9-band enum matches the slot_definitions.position used by the renderer.
-    For narrow boxes or non-axis-aligned text, the raw anchors survive as
-    position_override so the renderer can reproduce the upstream layout exactly.
+    The raw box geometry is always preserved so the renderer can reproduce the
+    upstream layout. Narrow boxes or non-axis-aligned text also retain the
+    legacy position_override field for external callers that already inspect it.
     """
     anchor_x = float(text_entry.get("anchor_x", 0.0))
     anchor_y = float(text_entry.get("anchor_y", 0.0))
@@ -76,22 +78,22 @@ def project_slot_position(text_entry: dict[str, Any]) -> UpstreamSlot:
         horizontal = "left" if center_x < 0.5 else "right"
         position = f"{vertical}-{horizontal}"
 
-    is_standard = full_width and angle == 0.0 and align == "center"
-    position_override: Mapping[str, Any] | None = (
-        None
-        if is_standard
-        else MappingProxyType(
-            {
-                "anchor_x": anchor_x,
-                "anchor_y": anchor_y,
-                "scale_x": scale_x,
-                "scale_y": scale_y,
-                "align": align,
-                "angle": angle,
-            }
-        )
+    box = MappingProxyType(
+        {
+            "anchor_x": anchor_x,
+            "anchor_y": anchor_y,
+            "scale_x": scale_x,
+            "scale_y": scale_y,
+            "align": align,
+            "angle": angle,
+        }
     )
-    return UpstreamSlot(position=position, position_override=position_override)
+    is_standard = full_width and angle == 0.0 and align == "center"
+    return UpstreamSlot(
+        position=position,
+        box=box,
+        position_override=None if is_standard else box,
+    )
 
 
 def load_upstream_template(template_dir: Path) -> UpstreamTemplate | None:
@@ -130,7 +132,11 @@ def _resolve_default_image(template_dir: Path) -> Path | None:
 def slot_definitions(template: UpstreamTemplate) -> list[dict[str, Any]]:
     definitions: list[dict[str, Any]] = []
     for i, slot in enumerate(template.slots):
-        entry: dict[str, Any] = {"name": f"slot_{i + 1}", "position": slot.position}
+        entry: dict[str, Any] = {
+            "name": f"slot_{i + 1}",
+            "position": slot.position,
+            "box": dict(slot.box),
+        }
         if slot.position_override is not None:
             entry["position_override"] = dict(slot.position_override)
         definitions.append(entry)

@@ -18,11 +18,19 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
   factory share this helper.
 - `corpus/upstream.py` imports the full `jacebrowning/memegen` template library from a local
   clone. `project_slot_position` maps each upstream text box (anchor_x/y, scale_x/y, align, angle)
-  to a canonical 9-band position string (`top|bottom|center|top-left|...|middle-right`); narrow,
-  off-axis, or rotated boxes also carry a `position_override` mapping that preserves the raw
-  anchors for the renderer to reproduce exactly. `import_upstream_corpus` persists templates and
+  to a canonical 9-band position string (`top|bottom|center|top-left|...|middle-right`) and
+  always carries the raw `box` dict so the renderer can reproduce memegen's layout decisions.
+  Narrow, off-axis, or rotated boxes additionally retain a `position_override` mapping for
+  external callers that already inspect it. `import_upstream_corpus` persists templates and
   returns a manifest of `slug -> SHA-256(image bytes)` pinned to the upstream commit, which
   `cli/seed.py` writes to `assets/memegen-seed-manifest.json` for reproducible seeding.
+- `rendering/` reads each slot's `box` to derive pixel anchor, alignment, and box dimensions
+  (see `_slot_anchor` in `rendering/pipeline.py`). `text_layout.select_wrap` picks the 1/2/3-line
+  layout that fills ≥60% of box width while maximizing font size, and `fit_font` runs a
+  shrink-loop to find the largest Anton size that fits the box with memegen-matching margins.
+  Slots persisted without a `box` (legacy 3-band callers) fall back to synthetic top/center/bottom
+  geometry via `_legacy_box_from_position`. Slot rotation (`box.angle`) is persisted but not
+  applied at render time; reproducing rotated layouts is deferred past v1.
 
 ## Request authentication
 
@@ -51,6 +59,6 @@ until their bodies and parity tests exist. See `docs/MIGRATION.md` for the plann
 `tests/test_visual_parity_golden.py` compares the renderer's output against pre-rendered golden
 images from `memegen.link` using `imagehash.dhash` Hamming distance (threshold 8 on 256x256). The
 suite skips when `/tmp/memegen-upstream/templates` is absent and records distances to
-`assets/golden/parity-distances.json`. Three templates (drake, fry, success) currently carry
-`xfail(strict=True)` markers and are tracked for full fix by
-`docs/plans/2026-05-25-001-feat-visual-parity-renderer-plan.md`.
+`assets/golden/parity-distances.json`. All 10 representative templates pass under the threshold
+after the visual-parity renderer landed
+(`docs/plans/2026-05-25-001-feat-visual-parity-renderer-plan.md`).
