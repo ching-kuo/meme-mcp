@@ -12,45 +12,46 @@ async def test_github_oauth_client_exchanges_code_and_fetches_user() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
-        if request.url.path == "/login/oauth/access_token":
+        if request.url.host == "github.com" and request.url.path == "/login/oauth/access_token":
             return httpx.Response(200, json={"access_token": "gh-token"})
-        if request.url.path == "/user":
+        if request.url.host == "api.github.com" and request.url.path == "/user":
             assert request.headers["authorization"] == "Bearer gh-token"
             return httpx.Response(200, json={"login": "friend"})
-        raise AssertionError(request.url)
+        raise AssertionError(f"unexpected request: {request.url}")
 
-    client = httpx.AsyncClient(
-        transport=httpx.MockTransport(handler),
-        base_url="https://github.com",
-    )
+    transport = httpx.MockTransport(handler)
     oauth = GitHubOAuthHTTPClient(
         client_id="cid",
         client_secret="secret-32-chars-value-for-tests",
         redirect_uri="http://localhost:8000/auth/callback",
-        http_client=client,
+        http_client=httpx.AsyncClient(transport=transport),
     )
 
     user = await oauth.fetch_user("ok-code", "verifier")
 
     assert user["login"] == "friend"
-    token_request = requests[0]
+    assert {str(req.url) for req in requests} == {
+        "https://github.com/login/oauth/access_token",
+        "https://api.github.com/user",
+    }
+    token_request = next(
+        req for req in requests if req.url.path == "/login/oauth/access_token"
+    )
     assert token_request.headers["accept"] == "application/json"
-    assert token_request.read().decode().find("code_verifier=verifier") != -1
+    assert "code_verifier=verifier" in token_request.read().decode()
 
 
 @pytest.mark.asyncio
 async def test_github_oauth_client_rejects_missing_token() -> None:
-    client = httpx.AsyncClient(
-        transport=httpx.MockTransport(
-            lambda _request: httpx.Response(200, json={"error": "bad_verification_code"})
-        ),
-        base_url="https://github.com",
-    )
     oauth = GitHubOAuthHTTPClient(
         client_id="cid",
         client_secret="secret-32-chars-value-for-tests",
         redirect_uri="http://localhost:8000/auth/callback",
-        http_client=client,
+        http_client=httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(200, json={"error": "bad_verification_code"})
+            ),
+        ),
     )
 
     with pytest.raises(ValueError, match="access_token"):

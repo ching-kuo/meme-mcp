@@ -3,26 +3,32 @@ from __future__ import annotations
 from collections.abc import Container
 from typing import Any, Protocol
 
+from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.server import Context
 
 from meme_mcp.auth.pat import SQLitePatStore, verify_pat
 from meme_mcp.envelope import Envelope
+from meme_mcp.errors import ErrorCode, MemeMCPError
 
 EXPECTED_TOOLS = {"find", "generate"}
 
 
 class MCPBackend(Protocol):
-    def find(self, query: str, filters: dict[str, Any] | None = None) -> Envelope: ...
+    def find(
+        self,
+        query: str,
+        filters: dict[str, Any] | None,
+        actor: str,
+    ) -> Envelope: ...
 
     def generate(
         self,
         template_id: str,
         slot_fills: list[str],
-        dry_run: bool = False,
-        actor: str | None = None,
+        dry_run: bool,
+        actor: str,
     ) -> Envelope: ...
 
 
@@ -101,14 +107,11 @@ def create_mcp_server(
         """Find 3-5 ranked meme templates for a query."""
         if backend is None:
             return {"ok": True, "data": {"query": query, "candidates": []}}
-        return backend.find(query, filters)
+        return backend.find(query, filters, _authenticated_actor())
 
     @mcp.tool()
     def generate(
-        template_id: str,
-        slot_fills: list[str],
-        dry_run: bool = False,
-        ctx: Context[Any, Any, Any] | None = None,
+        template_id: str, slot_fills: list[str], dry_run: bool = False
     ) -> dict[str, Any] | Envelope:
         """Render a selected meme template and return a receipt."""
         if backend is None:
@@ -120,7 +123,13 @@ def create_mcp_server(
                     "rendered_url": None if dry_run else "",
                 },
             }
-        actor = ctx.client_id if ctx is not None else None
-        return backend.generate(template_id, slot_fills, dry_run, actor)
+        return backend.generate(template_id, slot_fills, dry_run, _authenticated_actor())
 
     return mcp
+
+
+def _authenticated_actor() -> str:
+    access = get_access_token()
+    if access is None or not access.client_id:
+        raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "auth", "reason": "missing"}])
+    return access.client_id

@@ -170,6 +170,22 @@ def test_pat_store_persists_and_enforces_allowlist(tmp_path) -> None:
         require_pat(f"Bearer {token}", reopened, set(), "pepper")
 
 
+def test_render_route_rejects_path_traversal(tmp_path) -> None:
+    app = create_app(settings(tmp_path))
+    token = issue_pat(app.state.pat_store, "alice", app.state.pat_hash_pepper_value)
+    app.state.allowlist.add("alice")
+    secret = tmp_path / "secret.png"
+    secret.write_bytes(image_bytes())
+    fake_hash = "..secret"
+    app.state.receipts.record(fake_hash, "any", "alice")
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.get("/renders/../secret.png", headers=headers)
+
+    assert response.status_code in (404, 400)
+
+
 def test_preview_transient_does_not_write_files(tmp_path) -> None:
     spec = TemplateSpec("sample", image_bytes(), [{"position": "top"}])
     before = set(tmp_path.rglob("*"))

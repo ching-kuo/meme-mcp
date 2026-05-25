@@ -3,11 +3,13 @@ from __future__ import annotations
 from typing import Protocol
 
 from meme_mcp.db.templates import SQLiteTemplateRepository
-from meme_mcp.db.vectors import VectorStore
+from meme_mcp.db.vectors import EmbeddingMetaStore, VectorStore
 from meme_mcp.embeddings.client import EmbeddingClient, embedding_text_hash
 
 
 class TemplateEmbedder(Protocol):
+    model: str
+
     def embed_template(self, metadata: dict[str, object]) -> list[float]: ...
 
 
@@ -19,10 +21,19 @@ def reindex_embeddings(
     templates: SQLiteTemplateRepository,
     vectors: VectorStore,
     embedder: TemplateEmbedder,
+    meta: EmbeddingMetaStore | None = None,
 ) -> int:
     count = 0
     for row in templates.list_rows():
-        vectors.upsert(row.template_id, embedder.embed_template(row.metadata))
+        vector = embedder.embed_template(row.metadata)
+        vectors.upsert(row.template_id, vector)
+        if meta is not None:
+            meta.record(
+                row.template_id,
+                model=embedder.model,
+                text_hash=embedding_text_hash(row.metadata),
+                dimensions=len(vector),
+            )
         count += 1
     return count
 

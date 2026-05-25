@@ -27,6 +27,7 @@ dependencies = [
   "pydantic-settings>=2.7",
   "python-magic>=0.4",
   "python-multipart>=0.0.20",
+  "pyyaml>=6.0",
   "slowapi>=0.1",
   "sqlalchemy[asyncio]>=2.0",
   "sqlite-vec>=0.1.6",

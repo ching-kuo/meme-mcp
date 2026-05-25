@@ -95,6 +95,82 @@ class PgVectorStore:
         raise NotImplementedError("PgVectorStore is v1.5 - see docs/MIGRATION.md")
 
 
+class EmbeddingMetaStore:
+    """Tracks which embedding model produced each stored vector.
+
+    Used by the startup guard to refuse mixing dimensions/models in one corpus.
+    """
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS template_embeddings_meta (
+                    template_id TEXT PRIMARY KEY,
+                    embedding_model TEXT NOT NULL,
+                    embedded_text_hash TEXT NOT NULL,
+                    dimensions INTEGER NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+
+    def _connect(self) -> sqlite3.Connection:
+        return sqlite3.connect(self.path)
+
+    def record(
+        self,
+        template_id: str,
+        *,
+        model: str,
+        text_hash: str,
+        dimensions: int,
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO template_embeddings_meta
+                    (template_id, embedding_model, embedded_text_hash, dimensions)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(template_id) DO UPDATE SET
+                    embedding_model = excluded.embedding_model,
+                    embedded_text_hash = excluded.embedded_text_hash,
+                    dimensions = excluded.dimensions
+                """,
+                (template_id, model, text_hash, dimensions),
+            )
+
+    def models_in_use(self) -> set[str]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT embedding_model FROM template_embeddings_meta"
+            ).fetchall()
+        return {str(row[0]) for row in rows}
+
+    def orphan_vector_count(self) -> int:
+        """Vectors stored without corresponding meta — pre-guard installs.
+
+        Returns 0 if the vector table does not yet exist.
+        """
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='template_vectors'"
+            ).fetchone()
+            if existing is None:
+                return 0
+            row = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM template_vectors v
+                LEFT JOIN template_embeddings_meta m ON m.template_id = v.template_id
+                WHERE m.template_id IS NULL
+                """
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+
 def make_vector_store(database_url: str) -> VectorStore:
     if database_url.startswith("postgresql+"):
         raise ConfigError("Postgres vector backend is v1.5 - only SQLite/in-memory is v1")

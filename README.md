@@ -24,6 +24,10 @@ Set the required GitHub OAuth, VLM, embedding, session, and PAT pepper values in
 # Seed a deterministic local starter corpus.
 uv run meme-mcp seed-memegen
 
+# Or import the full upstream memegen template library from a local clone.
+# Pins the upstream commit and per-template SHA-256 in assets/memegen-seed-manifest.json.
+uv run meme-mcp seed-memegen --upstream-path /path/to/memegen-clone
+
 # Add a GitHub login to the allowlist used by both web sessions and PAT auth.
 uv run meme-mcp allowlist add <github-login>
 
@@ -31,6 +35,7 @@ uv run meme-mcp allowlist add <github-login>
 uv run meme-mcp pat issue <github-login>
 
 # Rebuild template vectors from persisted template metadata.
+# Required after switching EMBEDDING_MODEL or EMBEDDING_DIMENSIONS.
 uv run meme-mcp reindex-embeddings
 ```
 
@@ -96,10 +101,13 @@ Implemented:
 
 - MCP tool registration via official FastMCP
 - PAT hashing and file-backed allowlist enforcement
-- GitHub OAuth session flow with PKCE state
-- persisted templates, receipts, pending uploads, and vectors
+- GitHub OAuth session flow with PKCE state (token exchange against `github.com`, user fetch against `api.github.com`)
+- persisted templates, receipts, pending uploads (with 24h TTL), and vectors
 - upload validation, EXIF-stripping re-encode, duplicate detection, VLM review fallback
-- content-addressed rendering and authenticated receipt fetch
+- content-addressed rendering, authenticated receipt fetch, path-traversal guard on `/renders/`
+- per-friend rate limiting on `find`/`generate` across both HTTP and MCP transports
+- embedding model-drift startup guard (refuses to boot if persisted vectors disagree with `EMBEDDING_MODEL`)
+- global `DecompressionBombWarning` escalation
 - web browse/search/preview routes
 - operator CLI for allowlist, PAT issue, seed, and reindex
 - Docker and Kubernetes deployment examples

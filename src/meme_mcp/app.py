@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import hashlib
 import re
 import secrets
+import warnings
 from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import urlencode
@@ -22,9 +24,12 @@ from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.depends import Friend, require_pat
 from meme_mcp.auth.pat import SQLitePatStore
 from meme_mcp.config import Settings, validate_at_startup
+from meme_mcp.db.engine import sqlite_path
 from meme_mcp.db.receipts import ReceiptStore
 from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate, TemplateRow
 from meme_mcp.db.uploads import PendingUploadStore
+from meme_mcp.db.vectors import EmbeddingMetaStore
+from meme_mcp.embeddings.client import validate_embedding_model
 from meme_mcp.envelope import Envelope, make_error, make_success
 from meme_mcp.errors import ErrorCode, MemeMCPError, status_for_error
 from meme_mcp.limits import WindowedRateLimiter
@@ -60,11 +65,11 @@ class GitHubOAuthHTTPClient:
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
-        self.http_client = http_client or httpx.AsyncClient(base_url="https://github.com")
+        self.http_client = http_client or httpx.AsyncClient()
 
     async def fetch_user(self, code: str, code_verifier: str | None = None) -> dict[str, str]:
         token_response = await self.http_client.post(
-            "/login/oauth/access_token",
+            "https://github.com/login/oauth/access_token",
             headers={"Accept": "application/json"},
             data={
                 "client_id": self.client_id,
@@ -79,7 +84,7 @@ class GitHubOAuthHTTPClient:
         if not isinstance(access_token, str) or not access_token:
             raise ValueError("GitHub OAuth response missing access_token")
         user_response = await self.http_client.get(
-            "/user",
+            "https://api.github.com/user",
             headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
         )
         user_response.raise_for_status()
@@ -91,6 +96,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is not None:
         validate_at_startup(settings)
     Image.MAX_IMAGE_PIXELS = 40 * 1024 * 1024
+    warnings.simplefilter("error", Image.DecompressionBombWarning)
     app = FastAPI(title="meme-mcp")
     web_dir = Path(__file__).parent / "web"
     templates = Jinja2Templates(directory=web_dir / "templates")
@@ -103,11 +109,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             https_only=not settings.github_redirect_uri.startswith("http://localhost"),
         )
         app.state.settings = settings
-        db_path = _sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
+        db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
         app.state.pat_store = SQLitePatStore(db_path)
         app.state.receipts = ReceiptStore(db_path)
         app.state.templates = SQLiteTemplateRepository(db_path)
         app.state.pending_uploads = PendingUploadStore(db_path)
+        app.state.embedding_meta = EmbeddingMetaStore(db_path)
+        validate_embedding_model(app.state.embedding_meta, settings.embedding_model)
         app.state.image_store = FilesystemImageStore(settings.image_store_fs_path)
         app.state.web_allowlist = FileAllowlist(settings.github_allowlist_path)
         app.state.allowlist = app.state.web_allowlist
@@ -241,18 +249,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not isinstance(slot_fills_raw, list):
             raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "slot_fills", "reason": "list"}])
         slot_fills = [str(fill) for fill in slot_fills_raw]
-        try:
-            template = app.state.templates.get(template_id)
-        except KeyError as exc:
-            raise MemeMCPError(
-                ErrorCode.NOT_FOUND,
-                [{"field": "template_id", "reason": "missing"}],
-            ) from exc
-        spec = TemplateSpec(
-            template_id=template_id,
-            image_bytes=app.state.image_store.get(template.image_path),
-            slots=template.slot_definitions,
-        )
+        spec = _template_spec(app, template_id)
         rendered = preview_transient(spec, slot_fills)
         data_url = "data:image/png;base64," + base64.b64encode(rendered).decode()
         return JSONResponse(make_success({"template_id": template_id, "data_url": data_url}))
@@ -263,17 +260,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
         friend = _friend_from_header(app, authorization)
-        app.state.find_limiter.hit(friend.github_login)
         query = str(payload.get("query", "")).strip()
         if not query:
             raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "query", "reason": "required"}])
         filters_raw = payload.get("filters", {})
         filters = filters_raw if isinstance(filters_raw, dict) else {}
-        candidates = [
-            candidate.__dict__
-            for candidate in app.state.templates.search(query, filters)
-        ]
-        return JSONResponse(make_success({"candidates": candidates}))
+        return JSONResponse(AppMCPBackend(app).find(query, filters, friend.github_login))
 
     @app.post("/api/mcp/generate")
     async def mcp_generate(
@@ -281,7 +273,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
         friend = _friend_from_header(app, authorization)
-        app.state.generate_limiter.hit(friend.github_login)
         template_id = str(payload.get("template_id", "")).strip()
         slot_fills_raw = payload.get("slot_fills", [])
         if not template_id or not isinstance(slot_fills_raw, list):
@@ -290,27 +281,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 [{"field": "template_id", "reason": "required"}],
             )
         slot_fills = [str(fill) for fill in slot_fills_raw]
-        try:
-            template = app.state.templates.get(template_id)
-        except KeyError as exc:
-            raise MemeMCPError(
-                ErrorCode.NOT_FOUND,
-                [{"field": "template_id", "reason": "missing"}],
-            ) from exc
-        spec = TemplateSpec(
-            template_id=template_id,
-            image_bytes=app.state.image_store.get(template.image_path),
-            slots=template.slot_definitions,
-        )
-        if bool(payload.get("dry_run", False)):
-            _validate_slot_fills(spec, slot_fills)
-            return JSONResponse(make_success(_receipt(template_id, slot_fills, None, None)))
-        result = render_meme(spec, slot_fills, app.state.image_store)
-        app.state.receipts.record(result.hash, template_id, friend.github_login)
+        dry_run = bool(payload.get("dry_run", False))
         return JSONResponse(
-            make_success(
-                _receipt(template_id, slot_fills, result.rendered_url, result.hash, result.alt_text)
-            )
+            AppMCPBackend(app).generate(template_id, slot_fills, dry_run, friend.github_login)
         )
 
     @app.post("/api/uploads/analyze")
@@ -343,7 +316,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     }
                 ],
             )
-        enrichment = app.state.vlm_client.enrich_template(
+        enrichment = await asyncio.to_thread(
+            app.state.vlm_client.enrich_template,
             sanitized,
             _optional_string(payload.get("title_hint")),
         )
@@ -433,8 +407,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rendered_hash = f"{prefix}{Path(filename).stem}"
         if not app.state.receipts.exists_for_friend(rendered_hash, friend.github_login):
             raise MemeMCPError(ErrorCode.NOT_FOUND, [])
-        path = Path(app.state.settings.image_store_fs_path) / prefix / filename
-        if not path.exists():
+        root = Path(app.state.settings.image_store_fs_path).resolve()
+        path = (root / prefix / filename).resolve()
+        if not path.is_relative_to(root) or not path.exists():
             raise MemeMCPError(ErrorCode.NOT_FOUND, [])
         return FileResponse(path, media_type="image/png")
 
@@ -449,7 +424,13 @@ class AppMCPBackend:
     def __init__(self, app: FastAPI) -> None:
         self.app = app
 
-    def find(self, query: str, filters: dict[str, object] | None = None) -> Envelope:
+    def find(
+        self,
+        query: str,
+        filters: dict[str, object] | None,
+        actor: str,
+    ) -> Envelope:
+        self.app.state.find_limiter.hit(actor)
         candidates = [
             candidate.__dict__
             for candidate in self.app.state.templates.search(query, filters or {})
@@ -460,38 +441,16 @@ class AppMCPBackend:
         self,
         template_id: str,
         slot_fills: list[str],
-        dry_run: bool = False,
-        actor: str | None = None,
+        dry_run: bool,
+        actor: str,
     ) -> Envelope:
+        self.app.state.generate_limiter.hit(actor)
+        spec = _template_spec(self.app, template_id)
         if dry_run:
-            try:
-                template = self.app.state.templates.get(template_id)
-            except KeyError as exc:
-                raise MemeMCPError(
-                    ErrorCode.NOT_FOUND,
-                    [{"field": "template_id", "reason": "missing"}],
-                ) from exc
-            spec = TemplateSpec(
-                template_id=template_id,
-                image_bytes=self.app.state.image_store.get(template.image_path),
-                slots=template.slot_definitions,
-            )
             _validate_slot_fills(spec, slot_fills)
             return make_success(_receipt(template_id, slot_fills, None, None))
-        try:
-            template = self.app.state.templates.get(template_id)
-        except KeyError as exc:
-            raise MemeMCPError(
-                ErrorCode.NOT_FOUND,
-                [{"field": "template_id", "reason": "missing"}],
-            ) from exc
-        spec = TemplateSpec(
-            template_id=template_id,
-            image_bytes=self.app.state.image_store.get(template.image_path),
-            slots=template.slot_definitions,
-        )
         result = render_meme(spec, slot_fills, self.app.state.image_store)
-        self.app.state.receipts.record(result.hash, template_id, actor or "mcp")
+        self.app.state.receipts.record(result.hash, template_id, actor)
         return make_success(
             _receipt(template_id, slot_fills, result.rendered_url, result.hash, result.alt_text)
         )
@@ -521,12 +480,19 @@ def _friend_from_request_or_header(
     raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "session", "reason": "missing"}])
 
 
-def _sqlite_path(database_url: str, fallback: Path) -> Path:
-    if database_url.startswith("sqlite:///"):
-        return Path(database_url.removeprefix("sqlite:///"))
-    if database_url.startswith("sqlite+aiosqlite:///"):
-        return Path(database_url.removeprefix("sqlite+aiosqlite:///"))
-    return fallback
+def _template_spec(app: FastAPI, template_id: str) -> TemplateSpec:
+    try:
+        template = app.state.templates.get(template_id)
+    except KeyError as exc:
+        raise MemeMCPError(
+            ErrorCode.NOT_FOUND,
+            [{"field": "template_id", "reason": "missing"}],
+        ) from exc
+    return TemplateSpec(
+        template_id=template_id,
+        image_bytes=app.state.image_store.get(template.image_path),
+        slots=template.slot_definitions,
+    )
 
 
 def _duplicate_index(app: FastAPI) -> DuplicateIndex:
@@ -593,8 +559,9 @@ def _validated_metadata(
     suspect_flags: list[str],
     ack_suspect: bool,
 ) -> dict[str, object]:
+    raw_flags = flag_anomalies(metadata)
     cleaned = hard_sanitize_metadata(metadata)
-    flags = sorted(set(suspect_flags) | set(flag_anomalies(cleaned)))
+    flags = sorted(set(suspect_flags) | set(raw_flags) | set(flag_anomalies(cleaned)))
     if flags and not ack_suspect:
         raise MemeMCPError(
             ErrorCode.VLM_OUTPUT_SUSPECT,

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from openai import OpenAI
+
+from meme_mcp.errors import ErrorCode, MemeMCPError
+
+if TYPE_CHECKING:
+    from meme_mcp.db.vectors import EmbeddingMetaStore
 
 
 class EmbeddingProvider(Protocol):
@@ -49,3 +54,45 @@ class EmbeddingClient:
     def embed_query(self, query: str) -> list[float]:
         response = self.provider.embeddings.create(model=self.model, input=[query])
         return [float(value) for value in response.data[0].embedding]
+
+
+def validate_embedding_model(
+    meta_store: EmbeddingMetaStore,
+    configured_model: str,
+) -> None:
+    """Refuse startup if persisted vectors were produced by a different model.
+
+    Plan U8: mixing dimensions/models in one corpus produces silent retrieval garbage.
+    Catches both recorded drift AND orphan vectors that predate the meta-store guard.
+    Remediation is `meme-mcp reindex-embeddings --force`.
+    """
+    in_use = meta_store.models_in_use()
+    drift = in_use - {configured_model}
+    if drift:
+        raise MemeMCPError(
+            ErrorCode.INTERNAL_ERROR,
+            [
+                {
+                    "field": "embedding_model",
+                    "reason": (
+                        f"corpus has embeddings from {sorted(drift)!r}; "
+                        f"configured model is {configured_model!r} - "
+                        "run `meme-mcp reindex-embeddings --force`"
+                    ),
+                }
+            ],
+        )
+    orphan = meta_store.orphan_vector_count()
+    if orphan:
+        raise MemeMCPError(
+            ErrorCode.INTERNAL_ERROR,
+            [
+                {
+                    "field": "embedding_model",
+                    "reason": (
+                        f"{orphan} stored vectors have no recorded model - "
+                        "run `meme-mcp reindex-embeddings --force`"
+                    ),
+                }
+            ],
+        )

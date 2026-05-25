@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from openai import OpenAI
+from openai import APIError, APIStatusError, OpenAI
 
 from meme_mcp.vlm.sanitize import flag_anomalies
 
@@ -87,13 +87,17 @@ class VLMClient:
                     }
                 ],
                 tools=[METADATA_TOOL],
-                tool_choice={"type": "function", "function": {"name": "record_template_metadata"}},
+                tool_choice="required",
                 timeout=60,
             )
             raw_args = response.choices[0].message.tool_calls[0].function.arguments
             metadata = json.loads(str(raw_args))
         except TimeoutError:
             return EnrichmentResult("timeout", None, None, [])
+        except APIStatusError as exc:
+            return EnrichmentResult("error", None, str(exc), [f"vlm_{exc.status_code}"])
+        except APIError as exc:
+            return EnrichmentResult("error", None, str(exc), ["vlm_network"])
         except (AttributeError, IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
             return EnrichmentResult("schema_invalid", None, str(exc), [])
         return self.from_metadata(metadata)

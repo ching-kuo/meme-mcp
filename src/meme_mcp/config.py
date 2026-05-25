@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     embedding_base_url: str = "https://api.openai.com/v1"
     embedding_api_key: SecretStr
     embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
 
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 8000

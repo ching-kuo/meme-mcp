@@ -45,3 +45,8 @@ def test_s3_requires_s3_fields() -> None:
 def test_secret_repr_is_redacted() -> None:
     assert repr(good_settings().github_client_secret) == "SecretStr('**********')"
 
+
+def test_embedding_dimensions_accepts_override() -> None:
+    assert good_settings(embedding_dimensions=768).embedding_dimensions == 768
+    assert good_settings(embedding_dimensions=1536).embedding_dimensions == 1536
+
