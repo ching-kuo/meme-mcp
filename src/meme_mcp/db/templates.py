@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -138,6 +139,7 @@ class SQLiteTemplateRepository:
         query: str,
         filters: dict[str, Any] | None = None,
         top_k: int = 5,
+        outcome_lookup: Callable[[str], int] | None = None,
     ) -> list[TemplateRecord]:
         return [
             TemplateRecord(
@@ -147,7 +149,9 @@ class SQLiteTemplateRepository:
                 metadata=candidate.metadata,
                 slot_definitions=candidate.slot_definitions,
             )
-            for candidate in search(self.list_records(), query, filters, top_k)
+            for candidate in search(
+                self.list_records(), query, filters, top_k, outcome_lookup
+            )
         ]
 
 

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any
+
+OUTCOME_BOOST_PER_USE = 0.05
+OUTCOME_BOOST_CAP = 0.20
 
 
 @dataclass(frozen=True)
@@ -61,6 +65,7 @@ def search(
     query: str,
     filters: dict[str, Any] | None = None,
     top_k: int = 5,
+    outcome_lookup: Callable[[str], int] | None = None,
 ) -> list[Candidate]:
     filters = filters or {}
     query_terms = {term for term in query.lower().split() if term}
@@ -75,6 +80,12 @@ def search(
         if _name_match(query, record):
             score += 10.0
             matched_fields.append("name_match")
+        if outcome_lookup is not None:
+            recent = outcome_lookup(record.template_id)
+            if recent > 0:
+                boost = min(OUTCOME_BOOST_CAP, OUTCOME_BOOST_PER_USE * recent)
+                score += boost
+                matched_fields.append("outcome_boost")
         if score > 0 or not query_terms:
             candidates.append(
                 Candidate(

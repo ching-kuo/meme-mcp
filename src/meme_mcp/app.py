@@ -439,9 +439,14 @@ class AppMCPBackend:
         actor: str,
     ) -> Envelope:
         self.app.state.find_limiter.hit(actor)
+        outcomes = self.app.state.outcomes
         candidates = [
             candidate.__dict__
-            for candidate in self.app.state.templates.search(query, filters or {})
+            for candidate in self.app.state.templates.search(
+                query,
+                filters or {},
+                outcome_lookup=outcomes.recent_used_count,
+            )
         ]
         return make_success({"candidates": candidates})
 
