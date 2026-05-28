@@ -33,7 +33,7 @@ with `uv sync --extra s3`. Configure `IMAGE_STORE_BACKEND=s3` plus the `S3_*` se
 Content-addressed key layout matches the filesystem store exactly so blobs sync 1:1 via
 `rclone` without rewriting paths.
 
-Migration steps:
+Migration steps (handled by `meme-mcp migrate`; manual breakdown listed for reference):
 
 1. Use `pgloader` to move relational rows from SQLite to Postgres.
 2. Run `meme-mcp reindex-embeddings` so vectors are regenerated in pgvector (the embedding
@@ -41,6 +41,27 @@ Migration steps:
    disagrees with `EMBEDDING_MODEL`).
 3. Sync filesystem image bytes to S3-compatible storage with `rclone sync`.
 4. Swap `DATABASE_URL` and `IMAGE_STORE_BACKEND` in `.env`.
+
+### Single-command cutover
+
+```
+uv run meme-mcp migrate \
+  --target-db postgresql+psycopg://user:pass@host/db \
+  --target-s3-endpoint https://s3.example.com \
+  --target-s3-bucket meme-mcp \
+  --target-s3-access-key KEY \
+  --target-s3-secret-key SECRET \
+  --target-s3-region us-east-1 \
+  --dry-run
+```
+
+`--dry-run` validates `pgloader` and `rclone` on `$PATH`, Postgres connectivity + the
+`vector` extension, S3 connectivity + write/read/delete permission, and source readability.
+Without `--dry-run` the command also `chmod 0444`s `storage_dir` for the duration of the
+run (restored on success or error), runs the three steps in order, and writes a suggested
+`.env.next` for the operator to merge. Failure exit codes map to error strings:
+`PGLOADER_FAILED`, `RCLONE_FAILED`, `PGVECTOR_MISSING`, `S3_UNREACHABLE`,
+`EXTERNAL_CLI_MISSING`, `POSTGRES_UNREACHABLE`, `REINDEX_FAILED`, `SOURCE_UNREADABLE`.
 
 Postgres parity tests live in `tests/test_vectors_postgres.py`; configure
 `MEMEMCP_TEST_POSTGRES_URL` (and bring up `deploy/docker-compose.test.yml` for a local

@@ -15,6 +15,7 @@ from meme_mcp.auth.pat import (
     list_pats,
 )
 from meme_mcp.cli.gc_renders import run as run_gc_renders
+from meme_mcp.cli.migrate import run as run_migrate
 from meme_mcp.cli.reindex_embeddings import make_embedder, reindex_embeddings
 from meme_mcp.cli.seed import run as run_seed
 from meme_mcp.config import Settings, validate_at_startup
@@ -50,6 +51,17 @@ def run(argv: Sequence[str] | None = None, settings: Settings | None = None) -> 
             app_settings,
             ttl_days=args.ttl_days,
             max_bytes=args.max_bytes,
+            dry_run=args.dry_run,
+        )
+    if args.command == "migrate":
+        return run_migrate(
+            app_settings,
+            target_db=args.target_db,
+            target_s3_endpoint=args.target_s3_endpoint,
+            target_s3_bucket=args.target_s3_bucket,
+            target_s3_access_key=args.target_s3_access_key,
+            target_s3_secret_key=args.target_s3_secret_key,
+            target_s3_region=args.target_s3_region,
             dry_run=args.dry_run,
         )
     parser.error(f"unknown command: {args.command}")
@@ -94,6 +106,14 @@ def _parser() -> argparse.ArgumentParser:
     gc.add_argument("--ttl-days", type=int, default=None)
     gc.add_argument("--max-bytes", type=int, default=None)
     gc.add_argument("--dry-run", action="store_true")
+    migrate = subcommands.add_parser("migrate")
+    migrate.add_argument("--target-db", required=True)
+    migrate.add_argument("--target-s3-endpoint", required=True)
+    migrate.add_argument("--target-s3-bucket", required=True)
+    migrate.add_argument("--target-s3-access-key", required=True)
+    migrate.add_argument("--target-s3-secret-key", required=True)
+    migrate.add_argument("--target-s3-region", default="us-east-1")
+    migrate.add_argument("--dry-run", action="store_true")
     return parser
 
 
