@@ -108,38 +108,71 @@ def _slot_xy(width: int, height: int, position: str) -> tuple[int, int, str]:
     return x, y, anchor
 
 
+def _slot_angle(slot: dict[str, Any]) -> float:
+    raw_box = slot.get("box")
+    if isinstance(raw_box, dict):
+        return float(raw_box.get("angle", 0.0))
+    return 0.0
+
+
+def _draw_slot_text(
+    target: ImageDraw.ImageDraw,
+    fill: str,
+    x: int,
+    y: int,
+    anchor: str,
+    box_size: tuple[int, int],
+    font_path: str,
+) -> None:
+    max_size = max(12, int(box_size[1] / 1.4))
+    lines, font = select_wrap(fill.upper(), box_size, font_path, max_size)
+    font_size = int(getattr(font, "size", max_size))
+    stroke_width = max(1, font_size // 18)
+    if len(lines) > 1:
+        target.multiline_text(
+            (x, y),
+            "\n".join(lines),
+            font=font,
+            fill="white",
+            anchor=anchor,
+            align="center",
+            spacing=font_size // 6,
+            stroke_width=stroke_width,
+            stroke_fill="black",
+        )
+    else:
+        target.text(
+            (x, y),
+            lines[0],
+            font=font,
+            fill="white",
+            anchor=anchor,
+            stroke_width=stroke_width,
+            stroke_fill="black",
+        )
+
+
 def _draw_slots(image: Image.Image, slots: list[dict[str, Any]], slot_fills: list[str]) -> None:
-    draw = ImageDraw.Draw(image)
     width, height = image.size
     font_path = _font_path()
+    base_draw = ImageDraw.Draw(image)
     for fill, slot in zip(slot_fills, slots, strict=True):
         x, y, anchor, box_size = _slot_anchor(slot, (width, height))
-        max_size = max(12, int(box_size[1] / 1.4))
-        lines, font = select_wrap(fill.upper(), box_size, font_path, max_size)
-        font_size = int(getattr(font, "size", max_size))
-        stroke_width = max(1, font_size // 18)
-        if len(lines) > 1:
-            draw.multiline_text(
-                (x, y),
-                "\n".join(lines),
-                font=font,
-                fill="white",
-                anchor=anchor,
-                align="center",
-                spacing=font_size // 6,
-                stroke_width=stroke_width,
-                stroke_fill="black",
-            )
-        else:
-            draw.text(
-                (x, y),
-                lines[0],
-                font=font,
-                fill="white",
-                anchor=anchor,
-                stroke_width=stroke_width,
-                stroke_fill="black",
-            )
+        angle = _slot_angle(slot)
+        if angle == 0.0:
+            _draw_slot_text(base_draw, fill, x, y, anchor, box_size, font_path)
+            continue
+        # Each rotated slot draws into its own transparent layer so neighbours and the
+        # base image don't smear together when we rotate around the slot anchor.
+        layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        layer_draw = ImageDraw.Draw(layer)
+        _draw_slot_text(layer_draw, fill, x, y, anchor, box_size, font_path)
+        rotated = layer.rotate(angle, resample=Image.Resampling.BICUBIC, center=(x, y))
+        image.alpha_composite(rotated)
+
+
+def _has_rotation(slots: list[dict[str, Any]]) -> bool:
+    return any(_slot_angle(slot) != 0.0 for slot in slots)
 
 
 def _render_png_bytes(spec: TemplateSpec, slot_fills: list[str]) -> bytes:
@@ -148,8 +181,9 @@ def _render_png_bytes(spec: TemplateSpec, slot_fills: list[str]) -> bytes:
             ErrorCode.SLOT_MISMATCH,
             [{"field": "slot_fills", "reason": "must match template slot count"}],
         )
+    target_mode = "RGBA" if _has_rotation(spec.slots) else "RGB"
     with Image.open(BytesIO(spec.image_bytes)) as source:
-        image = source.convert("RGB")
+        image = source.convert(target_mode)
     _draw_slots(image, spec.slots, slot_fills)
     out = BytesIO()
     image.save(out, format="PNG")

@@ -37,8 +37,12 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
   layout that fills ≥60% of box width while maximizing font size, and `fit_font` runs a
   shrink-loop to find the largest Anton size that fits the box with memegen-matching margins.
   Slots persisted without a `box` (legacy 3-band callers) fall back to synthetic top/center/bottom
-  geometry via `_legacy_box_from_position`. Slot rotation (`box.angle`) is persisted but not
-  applied at render time; reproducing rotated layouts is deferred past v1.
+  geometry via `_legacy_box_from_position`. Slot rotation (`box.angle`) is applied by drawing
+  each rotated slot onto a per-slot transparent RGBA layer, rotating with `BICUBIC` around the
+  slot anchor, and compositing back via `Image.alpha_composite`. The hot path stays in `RGB`
+  when no slot has a non-zero angle so non-rotated templates pay no overhead. The visual-parity
+  suite runs the rotated subset (e.g., `cmm`) at a relaxed dhash threshold (12) because rotation
+  interpolates pixel rows; non-rotated cases keep the original threshold of 8.
 
 ## Request authentication
 

@@ -17,7 +17,10 @@ from meme_mcp.rendering.pipeline import TemplateSpec, render_meme
 GOLDEN_DIR = Path(__file__).parent.parent / "assets" / "golden" / "memegen-parity"
 UPSTREAM_TEMPLATES = Path("/tmp/memegen-upstream/templates")
 
-HAMMING_THRESHOLD = 8
+DEFAULT_HAMMING_THRESHOLD = 8
+# Rotated slots interpolate pixel rows during Image.rotate; the dhash drifts predictably
+# even on otherwise-identical inputs, so the rotated subset uses a relaxed threshold.
+ROTATED_HAMMING_THRESHOLD = 12
 
 GOLDEN_CASES: list[dict[str, Any]] = [
     {"slug": "drake", "fills": ["YAML configs", "TOML configs"]},
@@ -30,7 +33,12 @@ GOLDEN_CASES: list[dict[str, Any]] = [
     {"slug": "grumpycat", "fills": ["no", ""]},
     {"slug": "philosoraptor", "fills": ["if logs are smart", "why cant they find bugs"]},
     {"slug": "aag", "fills": ["aliens", "did it"]},
+    {"slug": "cmm", "fills": ["pineapples dont belong on pizza"], "rotated": True},
 ]
+
+
+def _threshold_for(case: dict[str, Any]) -> int:
+    return ROTATED_HAMMING_THRESHOLD if case.get("rotated") else DEFAULT_HAMMING_THRESHOLD
 
 
 def _load_template_spec(slug: str) -> TemplateSpec:
@@ -93,8 +101,9 @@ def test_visual_parity_against_memegen_reference(case: dict[str, Any], tmp_path:
     rendered = render_meme(spec, case["fills"], store)
     distance = _hamming_distance(rendered.bytes, reference_path.read_bytes())
     _record_distance(case["slug"], distance)
-    assert distance <= HAMMING_THRESHOLD, (
-        f"{case['slug']}: dhash distance {distance} > threshold {HAMMING_THRESHOLD}"
+    threshold = _threshold_for(case)
+    assert distance <= threshold, (
+        f"{case['slug']}: dhash distance {distance} > threshold {threshold}"
     )
 
 
