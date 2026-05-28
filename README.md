@@ -31,8 +31,13 @@ uv run meme-mcp seed-memegen --upstream-path /path/to/memegen-clone
 # Add a GitHub login to the allowlist used by both web sessions and PAT auth.
 uv run meme-mcp allowlist add <github-login>
 
-# Issue a PAT. The token is printed once; only its hash is stored.
-uv run meme-mcp pat issue <github-login>
+# Issue a PAT. The token is printed once; only its hash is stored. The PAT expires
+# after 90 days by default; pass --ttl-days 0 to opt out of expiry, and
+# --scope read for read-only access.
+uv run meme-mcp pat issue <github-login> [--ttl-days N] [--scope read|readwrite]
+
+# Inventory active and revoked PATs.
+uv run meme-mcp pat list
 
 # Rebuild template vectors from persisted template metadata.
 # Required after switching EMBEDDING_MODEL or EMBEDDING_DIMENSIONS.

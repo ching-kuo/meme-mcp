@@ -56,6 +56,79 @@ def test_pat_cli_issue_prints_verifiable_token(tmp_path, capsys) -> None:
     )
 
 
+def test_pat_cli_issue_respects_ttl_and_scope_flags(tmp_path, capsys) -> None:
+    from meme_mcp.auth.pat import list_pats
+
+    app_settings = settings(tmp_path)
+
+    assert run(["pat", "issue", "friend", "--ttl-days", "30", "--scope", "read"], app_settings) == 0
+    token = capsys.readouterr().out.strip()
+    assert token
+
+    store = SQLitePatStore(tmp_path / "meme.db")
+    verified = verify_pat(store, token, app_settings.pat_hash_pepper.get_secret_value())
+    assert verified == ("friend", "read")
+    [record] = [r for r in list_pats(store) if r.revoked_at is None]
+    assert record.expires_at is not None
+    # ttl_days=30 with a small tolerance for the 1-2 second test latency.
+    from datetime import UTC, datetime, timedelta
+
+    delta = record.expires_at - datetime.now(UTC)
+    assert timedelta(days=29, hours=23) <= delta <= timedelta(days=30, minutes=1)
+
+
+def test_pat_cli_issue_ttl_zero_means_never_expires(tmp_path, capsys) -> None:
+    from meme_mcp.auth.pat import list_pats
+
+    app_settings = settings(tmp_path)
+    assert run(["pat", "issue", "friend", "--ttl-days", "0"], app_settings) == 0
+    capsys.readouterr()
+
+    store = SQLitePatStore(tmp_path / "meme.db")
+    [record] = [r for r in list_pats(store) if r.revoked_at is None]
+    assert record.expires_at is None
+
+
+def test_pat_cli_list_shows_active_and_revoked(tmp_path, capsys) -> None:
+    app_settings = settings(tmp_path)
+    # Empty case prints the no-PATs notice.
+    assert run(["pat", "list"], app_settings) == 0
+    assert "no PATs issued" in capsys.readouterr().out
+
+    assert run(["pat", "issue", "alice"], app_settings) == 0
+    capsys.readouterr()  # discard issued token
+    assert run(["pat", "issue", "bob", "--scope", "read", "--ttl-days", "0"], app_settings) == 0
+    capsys.readouterr()
+    # Reissuing for alice revokes the prior PAT.
+    assert run(["pat", "issue", "alice"], app_settings) == 0
+    capsys.readouterr()
+
+    assert run(["pat", "list"], app_settings) == 0
+    out = capsys.readouterr().out
+    assert "alice" in out
+    assert "bob" in out
+    assert "active" in out
+    assert "revoked" in out
+    assert "never" in out  # bob has no expiry
+    assert "read" in out
+    assert "readwrite" in out
+
+
+def test_pat_cli_issue_rejects_invalid_scope(tmp_path) -> None:
+    import pytest
+
+    app_settings = settings(tmp_path)
+    with pytest.raises(SystemExit):
+        run(["pat", "issue", "friend", "--scope", "admin"], app_settings)
+
+
+def test_pat_cli_issue_rejects_negative_ttl_with_clean_message(tmp_path, capsys) -> None:
+    app_settings = settings(tmp_path)
+    assert run(["pat", "issue", "friend", "--ttl-days", "-5"], app_settings) == 2
+    out = capsys.readouterr().out
+    assert "--ttl-days must be >= 0" in out
+
+
 class FakeEmbeddingClient:
     def embed_template(self, metadata: dict[str, object]) -> list[float]:
         assert metadata["description"] == "ship green"

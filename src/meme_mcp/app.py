@@ -7,6 +7,7 @@ import hashlib
 import re
 import secrets
 import warnings
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import urlencode
@@ -22,7 +23,7 @@ from starlette.responses import Response
 
 from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.depends import Friend, require_pat
-from meme_mcp.auth.pat import SQLitePatStore
+from meme_mcp.auth.pat import SQLitePatStore, expires_at_for_login
 from meme_mcp.config import Settings, validate_at_startup
 from meme_mcp.db.engine import sqlite_path
 from meme_mcp.db.receipts import ReceiptStore
@@ -173,7 +174,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "browse.html",
-            {"query": query, "templates": template_rows},
+            {
+                "query": query,
+                "templates": template_rows,
+                "friend_login": friend.github_login,
+                "pat_expires_in_days": _pat_expires_in_days(app, friend.github_login),
+            },
         )
 
     @app.get("/auth/login")
@@ -454,6 +460,17 @@ class AppMCPBackend:
         return make_success(
             _receipt(template_id, slot_fills, result.rendered_url, result.hash, result.alt_text)
         )
+
+
+def _pat_expires_in_days(app: FastAPI, login: str) -> int | None:
+    pat_store = getattr(app.state, "pat_store", None)
+    if not isinstance(pat_store, SQLitePatStore):
+        return None
+    expires_at = expires_at_for_login(pat_store, login)
+    if expires_at is None:
+        return None
+    delta = expires_at - datetime.now(UTC)
+    return max(0, delta.days)
 
 
 def _friend_from_header(app: FastAPI, authorization: str | None) -> Friend:

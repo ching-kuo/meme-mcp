@@ -9,7 +9,9 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
   verifier's SQL query filters only on `pat_hash`; expiry, revocation, and capability
   are evaluated in Python after fetch and every failure branch runs a constant-time
   compare so the query plan and timing cost are uniform across unknown / revoked /
-  expired / corrupt records.
+  expired / corrupt records. The web `/browse` view renders a warning banner when the
+  authenticated friend's PAT will expire in fewer than 7 days, sourced from
+  `expires_at_for_login`; session/OAuth users never see the banner.
 - `upload/` validates bytes before any persistence and strips image metadata by re-encoding.
 - `rendering/` writes generated PNGs through a content-addressed `ImageStore`.
 - `retrieval/` ranks local template records using typed filters, term overlap, and name boosts.

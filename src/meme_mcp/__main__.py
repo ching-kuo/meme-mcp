@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 from meme_mcp.auth.allowlist import FileAllowlist
-from meme_mcp.auth.pat import SQLitePatStore, issue_pat
+from meme_mcp.auth.pat import (
+    DEFAULT_CAPABILITY,
+    DEFAULT_TTL_DAYS,
+    VALID_CAPABILITIES,
+    SQLitePatStore,
+    issue_pat,
+    list_pats,
+)
 from meme_mcp.cli.reindex_embeddings import make_embedder, reindex_embeddings
 from meme_mcp.cli.seed import run as run_seed
 from meme_mcp.config import Settings, validate_at_startup
@@ -57,6 +65,19 @@ def _parser() -> argparse.ArgumentParser:
     pat_commands = pat.add_subparsers(dest="pat_command", required=True)
     pat_issue = pat_commands.add_parser("issue")
     pat_issue.add_argument("github_login")
+    pat_issue.add_argument(
+        "--ttl-days",
+        type=int,
+        default=DEFAULT_TTL_DAYS,
+        help="Days until the PAT expires (0 means never expires)",
+    )
+    pat_issue.add_argument(
+        "--scope",
+        choices=list(VALID_CAPABILITIES),
+        default=DEFAULT_CAPABILITY,
+        help="Capability scope; readwrite is the historical default",
+    )
+    pat_commands.add_parser("list")
     subcommands.add_parser("reindex-embeddings")
     seed = subcommands.add_parser("seed-memegen")
     seed.add_argument("--upstream-path", default=None)
@@ -80,13 +101,48 @@ def _run_allowlist(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def _run_pat(args: argparse.Namespace, settings: Settings) -> int:
-    if args.pat_command != "issue":
-        raise SystemExit(f"unknown pat command: {args.pat_command}")
     db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
     store = SQLitePatStore(db_path)
-    token = issue_pat(store, args.github_login, settings.pat_hash_pepper.get_secret_value())
-    print(token)
-    return 0
+    if args.pat_command == "issue":
+        if args.ttl_days < 0:
+            print(f"error: --ttl-days must be >= 0 (0 means never expires), got {args.ttl_days}")
+            return 2
+        token = issue_pat(
+            store,
+            args.github_login,
+            settings.pat_hash_pepper.get_secret_value(),
+            ttl_days=args.ttl_days,
+            capability=args.scope,
+        )
+        print(token)
+        return 0
+    if args.pat_command == "list":
+        records = list_pats(store)
+        if not records:
+            print("no PATs issued")
+            return 0
+        now = datetime.now(UTC)
+        print(f"{'login':<24} {'status':<10} {'scope':<10} {'expires_in':<14} {'last_used':<20}")
+        for record in records:
+            if record.revoked_at is not None:
+                status = "revoked"
+                expires_in = "-"
+            elif record.expires_at is None:
+                status = "active"
+                expires_in = "never"
+            elif record.expires_at <= now:
+                status = "expired"
+                expires_in = "expired"
+            else:
+                status = "active"
+                expires_in = f"{(record.expires_at - now).days}d"
+            last_used = record.last_used_at.isoformat() if record.last_used_at else "-"
+            print(
+                f"{record.friend_login:<24} {status:<10} {record.capability:<10} "
+                f"{expires_in:<14} {last_used:<20}"
+            )
+        return 0
+    raise SystemExit(f"unknown pat command: {args.pat_command}")
 
 
 def _run_reindex_embeddings(settings: Settings) -> int:

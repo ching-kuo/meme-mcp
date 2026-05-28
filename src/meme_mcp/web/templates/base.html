@@ -6,6 +6,13 @@
     <title>meme-mcp</title>
     <link rel="stylesheet" href="/static/styles.css">
   </head>
-  <body>{% block body %}{% endblock %}</body>
+  <body>
+    {% if pat_expires_in_days is not none and pat_expires_in_days >= 0 and pat_expires_in_days < 7 %}
+      <div class="banner banner-warning" role="status">
+        Your PAT expires in {{ pat_expires_in_days }} day{{ "" if pat_expires_in_days == 1 else "s" }}.
+        Re-issue via <code>meme-mcp pat issue {{ friend_login }}</code> to avoid losing access.
+      </div>
+    {% endif %}
+    {% block body %}{% endblock %}
+  </body>
 </html>
-

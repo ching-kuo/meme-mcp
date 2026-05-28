@@ -209,6 +209,64 @@ def verify_pat(
     return None
 
 
+def list_pats(store: SQLitePatStore) -> list[PatRecord]:
+    """Operator-facing PAT inventory for `meme-mcp pat list`. Not timing-sensitive —
+    runs from the CLI, never from a request handler. Ordering: active before revoked;
+    within each group, soonest-expiring first (NULL expiries sort last so "never
+    expires" reads as the lowest-priority warning).
+    """
+    with store._connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT friend_login, pat_hash, created_at, expires_at, capability,
+                   revoked_at, last_used_at
+            FROM pats
+            ORDER BY revoked_at IS NOT NULL, expires_at IS NULL, expires_at, created_at
+            """
+        ).fetchall()
+    return [
+        PatRecord(
+            friend_login=str(login),
+            pat_hash=str(pat_hash),
+            created_at=datetime.fromisoformat(str(created_at)),
+            expires_at=_parse_optional_iso(expires_at),
+            capability=_coerce_capability(capability) or DEFAULT_CAPABILITY,
+            revoked_at=_parse_optional_iso(revoked_at),
+            last_used_at=_parse_optional_iso(last_used_at),
+        )
+        for login, pat_hash, created_at, expires_at, capability, revoked_at, last_used_at in rows
+    ]
+
+
+def expires_at_for_login(store: SQLitePatStore, login: str) -> datetime | None:
+    """Returns the soonest-expiring active PAT's expires_at for the given login, or
+    None when no active PAT exists or the active PAT has no expiry. Used by the web
+    expiry banner; PAT-authenticated requests can surface a "renew soon" warning
+    without paying a second pat_hash lookup.
+    """
+    with store._connect() as conn:
+        row = conn.execute(
+            """
+            SELECT expires_at FROM pats
+            WHERE friend_login = ? AND revoked_at IS NULL AND expires_at IS NOT NULL
+            ORDER BY expires_at ASC LIMIT 1
+            """,
+            (login,),
+        ).fetchone()
+    if row is None or row[0] is None:
+        return None
+    return _parse_optional_iso(row[0])
+
+
+def _parse_optional_iso(value: object) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
 def _coerce_capability(value: object) -> Capability | None:
     """Returns the matching Capability, DEFAULT_CAPABILITY for NULL (legacy rows),
     or None for any other value so the caller fails closed on corrupt data.
