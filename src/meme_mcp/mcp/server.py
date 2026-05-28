@@ -74,8 +74,11 @@ class PatTokenVerifier(TokenVerifier):
         self.pepper = pepper
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        login = verify_pat(self.pat_store, token, self.pepper)
-        if login is None or login not in self.allowlist:
+        result = verify_pat(self.pat_store, token, self.pepper)
+        if result is None:
+            return None
+        login, _capability = result
+        if login not in self.allowlist:
             return None
         return AccessToken(token=token, client_id=login, scopes=["meme:read", "meme:write"])
 

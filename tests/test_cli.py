@@ -50,7 +50,10 @@ def test_pat_cli_issue_prints_verifiable_token(tmp_path, capsys) -> None:
     token = capsys.readouterr().out.strip()
 
     store = SQLitePatStore(tmp_path / "meme.db")
-    assert verify_pat(store, token, app_settings.pat_hash_pepper.get_secret_value()) == "friend"
+    assert verify_pat(store, token, app_settings.pat_hash_pepper.get_secret_value()) == (
+        "friend",
+        "readwrite",
+    )
 
 
 class FakeEmbeddingClient:

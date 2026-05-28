@@ -3,7 +3,13 @@
 The service keeps pure primitives separate from HTTP and MCP handlers:
 
 - `envelope.py` and `errors.py` define the stable response contract.
-- `auth/pat.py` issues high-entropy PATs and stores only HMAC-SHA-256 digests.
+- `auth/pat.py` issues high-entropy PATs and stores only HMAC-SHA-256 digests. PAT
+  rows carry `expires_at` (NULL means never expires; new tokens default to 90 days) and
+  `capability` (`read` or `readwrite`; defaults to `readwrite` for back-compat). The
+  verifier's SQL query filters only on `pat_hash`; expiry, revocation, and capability
+  are evaluated in Python after fetch and every failure branch runs a constant-time
+  compare so the query plan and timing cost are uniform across unknown / revoked /
+  expired / corrupt records.
 - `upload/` validates bytes before any persistence and strips image metadata by re-encoding.
 - `rendering/` writes generated PNGs through a content-addressed `ImageStore`.
 - `retrieval/` ranks local template records using typed filters, term overlap, and name boosts.

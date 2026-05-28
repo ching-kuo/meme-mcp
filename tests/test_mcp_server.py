@@ -34,6 +34,23 @@ async def test_pat_token_verifier_validates_sqlite_pat(tmp_path) -> None:
     assert await verifier.verify_token("wrong") is None
 
 
+async def test_pat_token_verifier_scopes_are_static_until_u3(tmp_path) -> None:
+    """Anchor test: AccessToken.scopes is currently hardcoded regardless of capability.
+    When the capability propagation lands, this test must be updated to assert the
+    scope set is derived from the verified PAT's capability. The failure of this test
+    is the signal that the enforcement gap has closed.
+    """
+    store = SQLitePatStore(tmp_path / "auth.db")
+    read_token = issue_pat(store, "alice", "pepper", capability="read")
+    readwrite_token = issue_pat(store, "bob", "pepper", capability="readwrite")
+    verifier = PatTokenVerifier(store, {"alice", "bob"}, "pepper")
+    read_access = await verifier.verify_token(read_token)
+    readwrite_access = await verifier.verify_token(readwrite_token)
+    assert read_access is not None and readwrite_access is not None
+    assert read_access.scopes == ["meme:read", "meme:write"]
+    assert readwrite_access.scopes == ["meme:read", "meme:write"]
+
+
 def test_create_mcp_server_registers_official_fastmcp_tools(tmp_path) -> None:
     store = SQLitePatStore(tmp_path / "auth.db")
     server = create_mcp_server(store, {"alice"}, "pepper")

@@ -163,9 +163,10 @@ def test_pat_store_persists_and_enforces_allowlist(tmp_path) -> None:
     store = SQLitePatStore(tmp_path / "auth.db")
     token = issue_pat(store, "alice", "pepper")
     reopened = SQLitePatStore(tmp_path / "auth.db")
-    assert verify_pat(reopened, token, "pepper") == "alice"
+    assert verify_pat(reopened, token, "pepper") == ("alice", "readwrite")
     friend = require_pat(f"Bearer {token}", reopened, {"alice"}, "pepper")
     assert friend.github_login == "alice"
+    assert friend.capability == "readwrite"
     with pytest.raises(MemeMCPError):
         require_pat(f"Bearer {token}", reopened, set(), "pepper")
 
