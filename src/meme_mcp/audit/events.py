@@ -7,6 +7,7 @@ from typing import Any, Literal
 EventType = Literal[
     "find",
     "generate",
+    "record_outcome",
     "upload",
     "pat_issued",
     "pat_revoked",
