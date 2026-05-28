@@ -60,6 +60,7 @@ Useful routes:
 - `GET /api/mcp/tools`
 - `POST /api/mcp/find`
 - `POST /api/mcp/generate`
+- `POST /api/mcp/record_outcome`
 - `GET /renders/{prefix}/{filename}`
 
 ## MCP client snippets
@@ -110,7 +111,7 @@ Implemented:
 - persisted templates, receipts, pending uploads (with 24h TTL), and vectors
 - upload validation, EXIF-stripping re-encode, duplicate detection, VLM review fallback
 - content-addressed rendering, authenticated receipt fetch, path-traversal guard on `/renders/`
-- per-friend rate limiting on `find`/`generate` across both HTTP and MCP transports
+- per-friend rate limiting on `find`/`generate`/`record_outcome` across both HTTP and MCP transports
 - embedding model-drift startup guard (refuses to boot if persisted vectors disagree with `EMBEDDING_MODEL`)
 - global `DecompressionBombWarning` escalation
 - web browse/search/preview routes

@@ -15,6 +15,18 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
 - `upload/` validates bytes before any persistence and strips image metadata by re-encoding.
 - `rendering/` writes generated PNGs through a content-addressed `ImageStore`.
 - `retrieval/` ranks local template records using typed filters, term overlap, and name boosts.
+  When an `outcome_lookup` callable is supplied (live MCP `find` calls thread
+  `OutcomeEventStore.recent_used_count` through), templates with recent `used` events from
+  `record_outcome` gain +0.05 per event up to a hard cap of +0.20; name matches (+10.0) still
+  dominate, so the share signal nudges ties rather than overriding intent. The boost is applied
+  after `_name_match` and before the `top_k` cut, and templates with score > 0 surface even
+  without a query term hit so frequently-shared templates remain reachable as the corpus grows.
+- `db/outcomes.py` (`OutcomeEventStore`) persists agent share-signal events (`used`, `sent`,
+  `dropped`) with a CHECK constraint and a `(template_id, ts)` index for the 30-day window
+  query. Records can be pruned with `prune(older_than_days=N)`.
+- The MCP server exposes three tools: `find`, `generate`, and `record_outcome`. The last one
+  emits an `audit/events.py` `record_outcome` event so the JSONL audit log carries the same
+  share signal the retrieval boost reads from.
 - `db/uploads.py` enforces a 24h TTL on pending uploads; pre-TTL databases are migrated on first
   connection via an idempotent `ALTER TABLE ADD COLUMN` and stale rows are expired immediately.
 - `db/vectors.py` exposes `EmbeddingMetaStore`, which records the embedding model used for each
