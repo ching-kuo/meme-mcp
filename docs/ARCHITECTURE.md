@@ -94,8 +94,12 @@ work runs.
 
 ## Storage backends
 
-Postgres/pgvector and S3 are deliberate v1.5 stubs. Factories reject those backends at startup
-until their bodies and parity tests exist. See `docs/MIGRATION.md` for the planned switch.
+`PgVectorStore` ships in v1.5 (sync `psycopg` + `pgvector.psycopg.register_vector`); the
+factory dispatches it for any `postgresql...` URL. The Alembic `0002_vector_ddl` revision
+installs the pgvector extension and the `vector(1536)` column with an ivfflat cosine index
+on Postgres; SQLite stays on the JSON-backed `template_vectors` table from the baseline.
+`S3ImageStore` is still a v1.5 stub until U15 lands. See `docs/MIGRATION.md` for the
+end-to-end switch and `tests/test_vectors_postgres.py` for the parity suite.
 
 ## Visual parity testing
 

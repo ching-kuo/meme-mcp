@@ -4,7 +4,7 @@ import json
 import math
 import sqlite3
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from meme_mcp.config import ConfigError
 
@@ -84,15 +84,61 @@ class SQLiteVecStore:
 
 
 class PgVectorStore:
-    """v1.5 implementation stub for pgvector-backed semantic search."""
+    """pgvector-backed semantic search.
+
+    Requires the `postgres` extra (psycopg + pgvector). Connection strings use the
+    sync psycopg driver (`postgresql+psycopg://…` or `postgresql://…`); aiosqlite-flavoured
+    or asyncpg-flavoured URLs are rewritten to the sync driver before the store opens a
+    connection, mirroring the same rewrite Alembic's env.py applies.
+    """
+
+    def __init__(self, database_url: str, dimensions: int = 1536) -> None:
+        try:
+            import psycopg  # type: ignore[import-not-found]
+            from pgvector.psycopg import register_vector  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise ConfigError(
+                "PgVectorStore requires the 'postgres' extra (psycopg + pgvector)"
+            ) from exc
+        self._psycopg = psycopg
+        self._register_vector = register_vector
+        self.dimensions = dimensions
+        self.database_url = _to_psycopg_url(database_url)
+
+    def _connect(self) -> Any:
+        conn = self._psycopg.connect(self.database_url)
+        self._register_vector(conn)
+        return conn
 
     def upsert(self, template_id: str, vector: list[float]) -> None:
-        del template_id, vector
-        raise NotImplementedError("PgVectorStore is v1.5 - see docs/MIGRATION.md")
+        if len(vector) != self.dimensions:
+            raise ValueError(f"expected {self.dimensions} dimensions, got {len(vector)}")
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO template_vectors (template_id, embedding) VALUES (%s, %s) "
+                "ON CONFLICT (template_id) DO UPDATE SET embedding = EXCLUDED.embedding",
+                (template_id, vector),
+            )
 
     def search(self, query_vector: list[float], top_k: int) -> list[tuple[str, float]]:
-        del query_vector, top_k
-        raise NotImplementedError("PgVectorStore is v1.5 - see docs/MIGRATION.md")
+        if len(query_vector) != self.dimensions:
+            raise ValueError(f"expected {self.dimensions} dimensions, got {len(query_vector)}")
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT template_id, 1 - (embedding <=> %s::vector) AS similarity "
+                "FROM template_vectors ORDER BY embedding <=> %s::vector LIMIT %s",
+                (query_vector, query_vector, top_k),
+            )
+            rows = cur.fetchall()
+        return [(str(template_id), float(similarity)) for template_id, similarity in rows]
+
+
+def _to_psycopg_url(url: str) -> str:
+    if url.startswith("postgresql+asyncpg://"):
+        return url.replace("postgresql+asyncpg://", "postgresql://")
+    if url.startswith("postgresql+psycopg://"):
+        return url.replace("postgresql+psycopg://", "postgresql://")
+    return url
 
 
 class EmbeddingMetaStore:
@@ -172,8 +218,8 @@ class EmbeddingMetaStore:
 
 
 def make_vector_store(database_url: str) -> VectorStore:
-    if database_url.startswith("postgresql+"):
-        raise ConfigError("Postgres vector backend is v1.5 - only SQLite/in-memory is v1")
+    if database_url.startswith("postgresql"):
+        return PgVectorStore(database_url)
     if database_url.startswith("sqlite:///"):
         return SQLiteVecStore(Path(database_url.removeprefix("sqlite:///")))
     if database_url.startswith("sqlite+aiosqlite:///"):

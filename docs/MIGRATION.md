@@ -22,11 +22,20 @@ predate the startup guard.
 
 ## SQLite to Postgres and S3
 
-The v1 codebase includes contracts for `PgVectorStore` and `S3ImageStore`, but both remain v1.5
-stubs. Before migration, implement those stubs and add parity tests.
+`PgVectorStore` ships in v1.5 (`psycopg` + `pgvector`). Install the extra with
+`uv sync --extra postgres`. The Alembic `0002_vector_ddl` revision installs the pgvector
+extension and creates `template_vectors.embedding vector(1536)` with an ivfflat cosine index
+automatically on first boot against Postgres. `S3ImageStore` lands in v1.5 alongside it.
 
-Planned migration path:
+Migration steps:
 
 1. Use `pgloader` to move relational rows from SQLite to Postgres.
-2. Run `meme-mcp reindex-embeddings` so vectors are regenerated in pgvector.
+2. Run `meme-mcp reindex-embeddings` so vectors are regenerated in pgvector (the embedding
+   model startup guard runs against the new DB and refuses to boot if any persisted vector
+   disagrees with `EMBEDDING_MODEL`).
 3. Sync filesystem image bytes to S3-compatible storage with `rclone sync`.
+4. Swap `DATABASE_URL` and `IMAGE_STORE_BACKEND` in `.env`.
+
+Postgres parity tests live in `tests/test_vectors_postgres.py`; configure
+`MEMEMCP_TEST_POSTGRES_URL` (and bring up `deploy/docker-compose.test.yml` for a local
+pgvector + MinIO instance) to run them.

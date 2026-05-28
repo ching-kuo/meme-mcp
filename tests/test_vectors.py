@@ -1,9 +1,7 @@
 import pytest
 
-from meme_mcp.config import ConfigError
 from meme_mcp.db.vectors import (
     InMemoryVectorStore,
-    PgVectorStore,
     SQLiteVecStore,
     make_vector_store,
 )
@@ -24,11 +22,27 @@ def test_sqlite_vec_store_persists_vectors(tmp_path) -> None:
     assert reopened.search([0.9, 0.1], top_k=1)[0][0] == "a"
 
 
-def test_pg_vector_store_is_v15_stub() -> None:
-    with pytest.raises(NotImplementedError, match="v1.5"):
-        PgVectorStore().upsert("x", [1.0])
+def test_sqlite_vec_store_rejects_dimension_mismatch(tmp_path) -> None:
+    store = SQLiteVecStore(tmp_path / "vectors.db", dimensions=3)
+    with pytest.raises(ValueError, match="dimensions"):
+        store.upsert("a", [1.0, 0.0])
+    with pytest.raises(ValueError, match="dimensions"):
+        store.search([0.5, 0.5], top_k=1)
 
 
-def test_postgres_factory_rejects_at_startup() -> None:
-    with pytest.raises(ConfigError, match="v1.5"):
-        make_vector_store("postgresql+asyncpg://example")
+def test_factory_dispatches_postgres_url_to_pgvector_store() -> None:
+    """make_vector_store no longer rejects Postgres URLs; the PgVectorStore is built
+    when psycopg/pgvector are importable, or surfaces ConfigError at construction if
+    the postgres extra is missing. The Postgres parity test suite at
+    tests/test_vectors_postgres.py exercises the working PgVectorStore behaviour
+    end-to-end."""
+    try:
+        store = make_vector_store("postgresql+psycopg://localhost/nope")
+    except Exception as exc:  # noqa: BLE001 — ConfigError raised when postgres extra absent
+        from meme_mcp.config import ConfigError
+
+        assert isinstance(exc, ConfigError)
+        return
+    # Successful construction means psycopg/pgvector were importable. No further
+    # assertion here — actual connectivity is exercised in test_vectors_postgres.py.
+    assert store is not None
