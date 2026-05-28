@@ -87,6 +87,7 @@ def test_app_wires_web_mcp_ready_and_authenticated_renders(tmp_path) -> None:
     assert client.get("/api/mcp/tools", headers=authed).json()["data"]["tools"] == [
         "find",
         "generate",
+        "record_outcome",
     ]
     assert any(getattr(route, "path", None) == "/mcp" for route in app.routes)
     assert client.post("/api/mcp/find", headers=authed, json={"query": "drake"}).status_code == 200

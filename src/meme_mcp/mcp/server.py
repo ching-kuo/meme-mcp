@@ -12,7 +12,7 @@ from meme_mcp.auth.pat import SQLitePatStore, verify_pat
 from meme_mcp.envelope import Envelope
 from meme_mcp.errors import ErrorCode, MemeMCPError
 
-EXPECTED_TOOLS = {"find", "generate"}
+EXPECTED_TOOLS = {"find", "generate", "record_outcome"}
 
 
 class MCPBackend(Protocol):
@@ -28,6 +28,13 @@ class MCPBackend(Protocol):
         template_id: str,
         slot_fills: list[str],
         dry_run: bool,
+        actor: str,
+    ) -> Envelope: ...
+
+    def record_outcome(
+        self,
+        template_id: str,
+        outcome: str,
         actor: str,
     ) -> Envelope: ...
 
@@ -56,6 +63,18 @@ def tool_schemas() -> dict[str, dict[str, Any]]:
                     "dry_run": {"type": "boolean", "default": False},
                 },
                 "required": ["template_id", "slot_fills"],
+                "additionalProperties": False,
+            },
+        },
+        "record_outcome": {
+            "description": "Report what happened with a template ('used'/'sent'/'dropped').",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "string"},
+                    "outcome": {"type": "string", "enum": ["used", "sent", "dropped"]},
+                },
+                "required": ["template_id", "outcome"],
                 "additionalProperties": False,
             },
         },
@@ -130,6 +149,15 @@ def create_mcp_server(
                 },
             }
         return backend.generate(template_id, slot_fills, dry_run, actor)
+
+    @mcp.tool()
+    def record_outcome(template_id: str, outcome: str) -> dict[str, Any] | Envelope:
+        """Report what happened with a template ('used'/'sent'/'dropped')."""
+        actor = _authenticated_actor()
+        _require_write_scope()
+        if backend is None:
+            return {"ok": True, "data": {"template_id": template_id, "outcome": outcome}}
+        return backend.record_outcome(template_id, outcome, actor)
 
     return mcp
 

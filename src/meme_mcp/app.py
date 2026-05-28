@@ -26,6 +26,7 @@ from meme_mcp.auth.depends import Friend, require_pat, require_write
 from meme_mcp.auth.pat import SQLitePatStore, expires_at_for_login
 from meme_mcp.config import Settings, validate_at_startup
 from meme_mcp.db.engine import sqlite_path
+from meme_mcp.db.outcomes import VALID_OUTCOMES, OutcomeEventStore
 from meme_mcp.db.receipts import ReceiptStore
 from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate, TemplateRow
 from meme_mcp.db.uploads import PendingUploadStore
@@ -113,6 +114,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
         app.state.pat_store = SQLitePatStore(db_path)
         app.state.receipts = ReceiptStore(db_path)
+        app.state.outcomes = OutcomeEventStore(db_path)
         app.state.templates = SQLiteTemplateRepository(db_path)
         app.state.pending_uploads = PendingUploadStore(db_path)
         app.state.embedding_meta = EmbeddingMetaStore(db_path)
@@ -460,6 +462,16 @@ class AppMCPBackend:
         return make_success(
             _receipt(template_id, slot_fills, result.rendered_url, result.hash, result.alt_text)
         )
+
+    def record_outcome(self, template_id: str, outcome: str, actor: str) -> Envelope:
+        if outcome not in VALID_OUTCOMES:
+            raise MemeMCPError(
+                ErrorCode.INVALID_INPUT,
+                [{"field": "outcome", "reason": "must be used|sent|dropped"}],
+            )
+        self.app.state.find_limiter.hit(actor)
+        self.app.state.outcomes.record(template_id, actor, outcome)
+        return make_success({"template_id": template_id, "outcome": outcome})
 
 
 def _pat_expires_in_days(app: FastAPI, login: str) -> int | None:

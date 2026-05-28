@@ -17,9 +17,9 @@ from meme_mcp.mcp.server import (
 )
 
 
-def test_mcp_exposes_exactly_find_and_generate_with_small_schemas() -> None:
+def test_mcp_exposes_three_tools_under_schema_budget() -> None:
     schemas = tool_schemas()
-    assert set(schemas) == EXPECTED_TOOLS == {"find", "generate"}
+    assert set(schemas) == EXPECTED_TOOLS == {"find", "generate", "record_outcome"}
     budget = sum(len(json.dumps(schema)) for schema in schemas.values())
     assert budget < 4096
 
