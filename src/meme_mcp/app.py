@@ -122,7 +122,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.embedding_meta = EmbeddingMetaStore(db_path)
         validate_embedding_model(app.state.embedding_meta, settings.embedding_model)
         app.state.image_store = make_image_store(
-            settings.image_store_backend, settings.image_store_fs_path
+            settings.image_store_backend,
+            fs_path=settings.image_store_fs_path,
+            s3_endpoint=settings.s3_endpoint,
+            s3_bucket=settings.s3_bucket,
+            s3_region=settings.s3_region,
+            s3_access_key_id=(
+                settings.s3_access_key_id.get_secret_value()
+                if settings.s3_access_key_id is not None
+                else None
+            ),
+            s3_secret_access_key=(
+                settings.s3_secret_access_key.get_secret_value()
+                if settings.s3_secret_access_key is not None
+                else None
+            ),
         )
         app.state.web_allowlist = FileAllowlist(settings.github_allowlist_path)
         app.state.allowlist = app.state.web_allowlist

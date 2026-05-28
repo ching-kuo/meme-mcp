@@ -35,7 +35,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3", "pytest-asyncio>=0.25", "ruff>=0.8", "mypy>=1.14"]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.25", "ruff>=0.8", "mypy>=1.14", "moto[s3]>=5", "types-PyYAML>=6"]
 postgres = ["asyncpg>=0.30", "pgvector>=0.3", "psycopg[binary]>=3.2"]
 s3 = ["boto3>=1.35"]
 all = ["meme-mcp[postgres,s3]"]

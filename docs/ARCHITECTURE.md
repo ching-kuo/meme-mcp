@@ -98,8 +98,13 @@ work runs.
 factory dispatches it for any `postgresql...` URL. The Alembic `0002_vector_ddl` revision
 installs the pgvector extension and the `vector(1536)` column with an ivfflat cosine index
 on Postgres; SQLite stays on the JSON-backed `template_vectors` table from the baseline.
-`S3ImageStore` is still a v1.5 stub until U15 lands. See `docs/MIGRATION.md` for the
-end-to-end switch and `tests/test_vectors_postgres.py` for the parity suite.
+`S3ImageStore` ships in v1.5 as well (sync `boto3` against S3 or any S3-compatible endpoint
+like MinIO, R2, B2); content-addressed keys match the filesystem store's `<aa>/<bb..>.ext`
+layout, `put` is idempotent via `HeadObject`-then-`PutObject`, and `get` raises
+`FileNotFoundError` on `NoSuchKey` so callers see the same shape as the filesystem path.
+`make_image_store` dispatches on `image_store_backend`. See `docs/MIGRATION.md` for the
+end-to-end switch and `tests/test_vectors_postgres.py` + `tests/test_s3_image_store*.py` for
+the parity / smoke suites.
 
 ## Visual parity testing
 

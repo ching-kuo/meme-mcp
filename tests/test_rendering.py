@@ -1,5 +1,6 @@
 from io import BytesIO
 
+import pytest
 from PIL import Image
 
 from meme_mcp.rendering import pipeline
@@ -23,14 +24,12 @@ def test_filesystem_store_is_content_addressed(tmp_path) -> None:
     assert (tmp_path / first).exists()
 
 
-def test_s3_store_is_v15_stub() -> None:
-    store = S3ImageStore()
-    try:
-        store.put(b"x", "png")
-    except NotImplementedError as exc:
-        assert "v1.5" in str(exc)
-    else:
-        raise AssertionError("S3ImageStore must remain a v1.5 stub")
+def test_s3_image_store_requires_construction_kwargs() -> None:
+    """S3ImageStore is live as of U15; this regression check ensures it cannot be
+    instantiated without the connection config, surfacing a TypeError at construction
+    rather than NoSuchKey from boto3 mid-request."""
+    with pytest.raises(TypeError):
+        S3ImageStore()  # type: ignore[call-arg]
 
 
 def test_render_meme_returns_stable_hash_and_alt_text(tmp_path) -> None:

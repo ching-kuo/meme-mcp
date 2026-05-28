@@ -94,8 +94,8 @@ class PgVectorStore:
 
     def __init__(self, database_url: str, dimensions: int = 1536) -> None:
         try:
-            import psycopg  # type: ignore[import-not-found]
-            from pgvector.psycopg import register_vector  # type: ignore[import-not-found]
+            import psycopg
+            from pgvector.psycopg import register_vector  # type: ignore[import-untyped]
         except ImportError as exc:
             raise ConfigError(
                 "PgVectorStore requires the 'postgres' extra (psycopg + pgvector)"

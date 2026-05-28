@@ -22,10 +22,16 @@ predate the startup guard.
 
 ## SQLite to Postgres and S3
 
-`PgVectorStore` ships in v1.5 (`psycopg` + `pgvector`). Install the extra with
-`uv sync --extra postgres`. The Alembic `0002_vector_ddl` revision installs the pgvector
-extension and creates `template_vectors.embedding vector(1536)` with an ivfflat cosine index
-automatically on first boot against Postgres. `S3ImageStore` lands in v1.5 alongside it.
+`PgVectorStore` ships in v1.5 (`psycopg` + `pgvector`). Install with `uv sync --extra postgres`.
+The Alembic `0002_vector_ddl` revision installs the pgvector extension and creates
+`template_vectors.embedding vector(1536)` with an ivfflat cosine index automatically on first
+boot against Postgres.
+
+`S3ImageStore` also ships in v1.5 (sync `boto3` against any S3-compatible endpoint). Install
+with `uv sync --extra s3`. Configure `IMAGE_STORE_BACKEND=s3` plus the `S3_*` settings
+(`S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`).
+Content-addressed key layout matches the filesystem store exactly so blobs sync 1:1 via
+`rclone` without rewriting paths.
 
 Migration steps:
 

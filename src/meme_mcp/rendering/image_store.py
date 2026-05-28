@@ -66,26 +66,100 @@ class FilesystemImageStore:
 
 
 class S3ImageStore:
-    """v1.5 implementation stub for S3-compatible object storage."""
+    """Sync boto3-backed object storage for S3 and S3-compatible endpoints (MinIO, R2, B2).
+
+    Content-addressed keys mirror FilesystemImageStore (`<aa>/<bb..>.ext`). `put` is
+    idempotent via HeadObject-then-PutObject. `get` raises FileNotFoundError on NoSuchKey
+    to match the filesystem store's `Path.read_bytes` failure surface.
+    """
+
+    def __init__(
+        self,
+        *,
+        endpoint: str,
+        bucket: str,
+        region: str,
+        access_key_id: str,
+        secret_access_key: str,
+    ) -> None:
+        try:
+            import boto3  # type: ignore[import-untyped]
+            from botocore.config import Config  # type: ignore[import-untyped]
+            from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+        except ImportError as exc:
+            raise ConfigError("S3ImageStore requires the 's3' extra (boto3)") from exc
+        self._client_error = ClientError
+        self.bucket = bucket
+        self.client = boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            aws_access_key_id=access_key_id,
+            aws_secret_access_key=secret_access_key,
+            region_name=region,
+            config=Config(s3={"addressing_style": "path"}),
+        )
 
     def put(self, content: bytes, ext: str) -> str:
-        del content, ext
-        raise NotImplementedError("S3ImageStore is v1.5 - see docs/MIGRATION.md")
+        digest = hashlib.sha256(content).hexdigest()[:16]
+        key = f"{digest[:2]}/{digest[2:]}.{ext}"
+        try:
+            self.client.head_object(Bucket=self.bucket, Key=key)
+        except self._client_error as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code not in {"404", "NoSuchKey", "NotFound"}:
+                raise
+            self.client.put_object(Bucket=self.bucket, Key=key, Body=content)
+        return key
 
     def get(self, path: str) -> bytes:
-        del path
-        raise NotImplementedError("S3ImageStore is v1.5 - see docs/MIGRATION.md")
+        try:
+            response = self.client.get_object(Bucket=self.bucket, Key=path)
+        except self._client_error as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in {"NoSuchKey", "404", "NotFound"}:
+                raise FileNotFoundError(path) from exc
+            raise
+        body = response["Body"].read()
+        return bytes(body)
 
 
-def make_image_store(backend: str, fs_path: str) -> ImageStore:
+def make_image_store(
+    backend: str,
+    *,
+    fs_path: str | None = None,
+    s3_endpoint: str | None = None,
+    s3_bucket: str | None = None,
+    s3_region: str | None = None,
+    s3_access_key_id: str | None = None,
+    s3_secret_access_key: str | None = None,
+) -> ImageStore:
     """Factory dispatching by `backend`. Returns the Protocol so callers stay
     independent of the concrete implementation.
     """
     if backend == "filesystem":
+        if fs_path is None:
+            raise ConfigError("filesystem backend requires fs_path")
         return FilesystemImageStore(fs_path)
     if backend == "s3":
-        raise ConfigError(
-            "S3 image store backend lands in U15; configure image_store_backend='filesystem'"
+        missing = [
+            name
+            for name, value in (
+                ("endpoint", s3_endpoint),
+                ("bucket", s3_bucket),
+                ("region", s3_region),
+                ("access_key_id", s3_access_key_id),
+                ("secret_access_key", s3_secret_access_key),
+            )
+            if not value
+        ]
+        if missing:
+            raise ConfigError(f"s3 backend missing config: {', '.join(missing)}")
+        return S3ImageStore(
+            endpoint=s3_endpoint or "",
+            bucket=s3_bucket or "",
+            region=s3_region or "",
+            access_key_id=s3_access_key_id or "",
+            secret_access_key=s3_secret_access_key or "",
         )
     raise ConfigError(f"unknown image_store_backend: {backend!r}")
 
