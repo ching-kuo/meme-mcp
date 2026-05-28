@@ -77,10 +77,11 @@ class PatTokenVerifier(TokenVerifier):
         result = verify_pat(self.pat_store, token, self.pepper)
         if result is None:
             return None
-        login, _capability = result
+        login, capability = result
         if login not in self.allowlist:
             return None
-        return AccessToken(token=token, client_id=login, scopes=["meme:read", "meme:write"])
+        scopes = ["meme:read"] + (["meme:write"] if capability == "readwrite" else [])
+        return AccessToken(token=token, client_id=login, scopes=scopes)
 
 
 def create_mcp_server(
@@ -117,6 +118,8 @@ def create_mcp_server(
         template_id: str, slot_fills: list[str], dry_run: bool = False
     ) -> dict[str, Any] | Envelope:
         """Render a selected meme template and return a receipt."""
+        actor = _authenticated_actor()
+        _require_write_scope()
         if backend is None:
             return {
                 "ok": True,
@@ -126,7 +129,7 @@ def create_mcp_server(
                     "rendered_url": None if dry_run else "",
                 },
             }
-        return backend.generate(template_id, slot_fills, dry_run, _authenticated_actor())
+        return backend.generate(template_id, slot_fills, dry_run, actor)
 
     return mcp
 
@@ -136,3 +139,12 @@ def _authenticated_actor() -> str:
     if access is None or not access.client_id:
         raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "auth", "reason": "missing"}])
     return access.client_id
+
+
+def _require_write_scope() -> None:
+    access = get_access_token()
+    if access is None or "meme:write" not in access.scopes:
+        raise MemeMCPError(
+            ErrorCode.UNAUTHORIZED,
+            [{"field": "scope", "reason": "meme:write_required"}],
+        )

@@ -24,6 +24,15 @@ def require_operator(user: Friend, operator_login: str) -> Friend:
     return user
 
 
+def require_write(friend: Friend) -> Friend:
+    if friend.capability != "readwrite":
+        raise MemeMCPError(
+            ErrorCode.UNAUTHORIZED,
+            [{"field": "capability", "reason": "write_scope_required"}],
+        )
+    return friend
+
+
 def require_pat(
     authorization: str | None,
     pat_store: InMemoryPatStore | SQLitePatStore,

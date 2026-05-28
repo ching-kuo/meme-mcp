@@ -34,11 +34,10 @@ async def test_pat_token_verifier_validates_sqlite_pat(tmp_path) -> None:
     assert await verifier.verify_token("wrong") is None
 
 
-async def test_pat_token_verifier_scopes_are_static_until_u3(tmp_path) -> None:
-    """Anchor test: AccessToken.scopes is currently hardcoded regardless of capability.
-    When the capability propagation lands, this test must be updated to assert the
-    scope set is derived from the verified PAT's capability. The failure of this test
-    is the signal that the enforcement gap has closed.
+async def test_pat_token_verifier_scopes_derive_from_capability(tmp_path) -> None:
+    """Read-scope PATs receive only meme:read; readwrite PATs receive meme:read +
+    meme:write. The MCP tool wrappers (and the web write routes) gate on the resulting
+    scope set so a read-scope PAT cannot drive any write path.
     """
     store = SQLitePatStore(tmp_path / "auth.db")
     read_token = issue_pat(store, "alice", "pepper", capability="read")
@@ -47,7 +46,7 @@ async def test_pat_token_verifier_scopes_are_static_until_u3(tmp_path) -> None:
     read_access = await verifier.verify_token(read_token)
     readwrite_access = await verifier.verify_token(readwrite_token)
     assert read_access is not None and readwrite_access is not None
-    assert read_access.scopes == ["meme:read", "meme:write"]
+    assert read_access.scopes == ["meme:read"]
     assert readwrite_access.scopes == ["meme:read", "meme:write"]
 
 
@@ -71,3 +70,37 @@ def test_authenticated_actor_returns_verified_token_login() -> None:
         assert _authenticated_actor() == "alice"
     finally:
         auth_context_var.reset(token_handle)
+
+
+def test_require_write_scope_rejects_read_only_token() -> None:
+    from meme_mcp.mcp.server import _require_write_scope
+
+    access = AccessToken(token="t", client_id="alice", scopes=["meme:read"])
+    token_handle = auth_context_var.set(AuthenticatedUser(access))
+    try:
+        with pytest.raises(MemeMCPError) as info:
+            _require_write_scope()
+        assert info.value.error_code is ErrorCode.UNAUTHORIZED
+    finally:
+        auth_context_var.reset(token_handle)
+
+
+def test_require_write_scope_accepts_readwrite_token() -> None:
+    from meme_mcp.mcp.server import _require_write_scope
+
+    access = AccessToken(
+        token="t", client_id="alice", scopes=["meme:read", "meme:write"]
+    )
+    token_handle = auth_context_var.set(AuthenticatedUser(access))
+    try:
+        _require_write_scope()  # no exception
+    finally:
+        auth_context_var.reset(token_handle)
+
+
+def test_require_write_scope_rejects_missing_context() -> None:
+    from meme_mcp.mcp.server import _require_write_scope
+
+    with pytest.raises(MemeMCPError) as info:
+        _require_write_scope()
+    assert info.value.error_code is ErrorCode.UNAUTHORIZED

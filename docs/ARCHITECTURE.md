@@ -49,7 +49,12 @@ Two auth surfaces share one tree:
   `https://github.com/login/oauth/access_token` and the user-profile fetch targets
   `https://api.github.com/user` — two distinct hosts, not a shared `base_url` client.
 - MCP (`/mcp` and `/api/mcp/*`) uses a static PAT in `Authorization: Bearer …`. Verification is
-  HMAC-SHA-256 with a server-side pepper.
+  HMAC-SHA-256 with a server-side pepper. The verifier emits `meme:read` for every valid PAT
+  and adds `meme:write` only when the PAT was issued with `readwrite` capability. The MCP
+  `generate` tool and the `/api/mcp/generate`, `/api/uploads/analyze`, and
+  `/api/uploads/{id}/approve` HTTP routes gate on `meme:write` (or `friend.capability ==
+  "readwrite"` for HTTP) before any backend work; read-scope PATs receive `UNAUTHORIZED` at
+  the wrapper.
 
 The MCP tool wrappers derive the rate-limit actor from the validated `AccessToken` via
 `mcp.server.auth.middleware.auth_context.get_access_token()` — never from

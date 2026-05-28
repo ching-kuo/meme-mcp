@@ -22,7 +22,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
 
 from meme_mcp.auth.allowlist import FileAllowlist
-from meme_mcp.auth.depends import Friend, require_pat
+from meme_mcp.auth.depends import Friend, require_pat, require_write
 from meme_mcp.auth.pat import SQLitePatStore, expires_at_for_login
 from meme_mcp.config import Settings, validate_at_startup
 from meme_mcp.db.engine import sqlite_path
@@ -278,7 +278,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: dict[str, object],
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
-        friend = _friend_from_header(app, authorization)
+        friend = require_write(_friend_from_header(app, authorization))
         template_id = str(payload.get("template_id", "")).strip()
         slot_fills_raw = payload.get("slot_fills", [])
         if not template_id or not isinstance(slot_fills_raw, list):
@@ -297,7 +297,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: dict[str, object],
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
-        friend = _friend_from_header(app, authorization)
+        friend = require_write(_friend_from_header(app, authorization))
         app.state.upload_limiter.hit(friend.github_login)
         filename = str(payload.get("filename", "upload"))
         mime = str(payload.get("mime", ""))
@@ -367,7 +367,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: dict[str, object],
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
-        friend = _friend_from_header(app, authorization)
+        friend = require_write(_friend_from_header(app, authorization))
         try:
             pending = app.state.pending_uploads.get(upload_id, friend.github_login)
         except KeyError as exc:
