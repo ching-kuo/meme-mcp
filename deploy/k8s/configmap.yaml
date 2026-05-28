@@ -8,4 +8,5 @@ data:
   IMAGE_STORE_BACKEND: "filesystem"
   IMAGE_STORE_FS_PATH: "/data/images"
   STORAGE_DIR: "/data"
+  DATABASE_URL: "sqlite+aiosqlite:////data/meme-mcp.db"
 

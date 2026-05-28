@@ -10,4 +10,5 @@ __pycache__/
 .code-review-graph/
 storage/
 deploy/k8s/secret.yaml
+.DS_Store
 

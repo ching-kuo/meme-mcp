@@ -34,7 +34,8 @@ def run(argv: Sequence[str] | None = None, settings: Settings | None = None) -> 
         return _run_reindex_embeddings(app_settings)
     if args.command == "seed-memegen":
         upstream = Path(args.upstream_path) if args.upstream_path else None
-        return run_seed(app_settings, upstream_path=upstream)
+        manifest = Path(args.manifest_path) if args.manifest_path else None
+        return run_seed(app_settings, upstream_path=upstream, manifest_path=manifest)
     parser.error(f"unknown command: {args.command}")
     return 2
 
@@ -59,6 +60,7 @@ def _parser() -> argparse.ArgumentParser:
     subcommands.add_parser("reindex-embeddings")
     seed = subcommands.add_parser("seed-memegen")
     seed.add_argument("--upstream-path", default=None)
+    seed.add_argument("--manifest-path", default=None)
     return parser
 
 

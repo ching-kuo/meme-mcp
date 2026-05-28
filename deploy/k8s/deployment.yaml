@@ -12,6 +12,8 @@ spec:
       labels:
         app: meme-mcp
     spec:
+      securityContext:
+        fsGroup: 10001
       containers:
         - name: meme-mcp
           image: meme-mcp:latest
