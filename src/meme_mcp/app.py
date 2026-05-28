@@ -26,6 +26,7 @@ from meme_mcp.auth.depends import Friend, require_pat, require_write
 from meme_mcp.auth.pat import SQLitePatStore, expires_at_for_login
 from meme_mcp.config import Settings, validate_at_startup
 from meme_mcp.db.engine import sqlite_path
+from meme_mcp.db.migrations import run_migrations
 from meme_mcp.db.outcomes import VALID_OUTCOMES, OutcomeEventStore
 from meme_mcp.db.receipts import ReceiptStore
 from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate, TemplateRow
@@ -111,6 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             https_only=not settings.github_redirect_uri.startswith("http://localhost"),
         )
         app.state.settings = settings
+        run_migrations(settings)
         db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
         app.state.pat_store = SQLitePatStore(db_path)
         app.state.receipts = ReceiptStore(db_path)

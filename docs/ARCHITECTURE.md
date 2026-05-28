@@ -33,6 +33,14 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
   template's vector. `embeddings.client.validate_embedding_model` runs at app boot and refuses to
   start if any persisted vector disagrees with `EMBEDDING_MODEL`, or if any vector lacks a model
   record (the "orphan vector" case from pre-guard installs).
+- `alembic/` holds the migration tree. `alembic/env.py` rewrites async driver URLs
+  (`aiosqlite`, `asyncpg`) to their sync counterparts so Alembic's sync command path works.
+  `alembic/versions/0001_baseline.py` captures every table the inline-DDL stores create
+  (`templates`, `pats` with v1.5's `expires_at`+`capability`, `pending_uploads`,
+  `template_vectors`, `template_embeddings_meta`, `generated_receipts`, `outcome_events`).
+  `src/meme_mcp/db/migrations.py:run_migrations(settings)` is called at app boot to bring
+  any DB to head; the inline `CREATE TABLE IF NOT EXISTS` calls in store `__init__`s remain
+  as defense-in-depth so direct-test fixtures that skip the app boot still work.
 - `db/engine.py` exposes `sqlite_path(database_url, fallback)` — the single source of truth for
   resolving a `sqlite+aiosqlite:///...` URL to a concrete `Path`. All CLI entrypoints and the app
   factory share this helper.
