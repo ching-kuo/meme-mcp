@@ -3,8 +3,17 @@ from __future__ import annotations
 import hashlib
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Protocol
 
 import portalocker
+
+from meme_mcp.config import ConfigError
+
+
+class ImageStore(Protocol):
+    def put(self, content: bytes, ext: str) -> str: ...
+
+    def get(self, path: str) -> bytes: ...
 
 
 class FilesystemImageStore:
@@ -66,4 +75,17 @@ class S3ImageStore:
     def get(self, path: str) -> bytes:
         del path
         raise NotImplementedError("S3ImageStore is v1.5 - see docs/MIGRATION.md")
+
+
+def make_image_store(backend: str, fs_path: str) -> ImageStore:
+    """Factory dispatching by `backend`. Returns the Protocol so callers stay
+    independent of the concrete implementation.
+    """
+    if backend == "filesystem":
+        return FilesystemImageStore(fs_path)
+    if backend == "s3":
+        raise ConfigError(
+            "S3 image store backend lands in U15; configure image_store_backend='filesystem'"
+        )
+    raise ConfigError(f"unknown image_store_backend: {backend!r}")
 

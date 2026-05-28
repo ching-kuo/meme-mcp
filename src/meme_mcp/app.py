@@ -37,7 +37,7 @@ from meme_mcp.envelope import Envelope, make_error, make_success
 from meme_mcp.errors import ErrorCode, MemeMCPError, status_for_error
 from meme_mcp.limits import WindowedRateLimiter
 from meme_mcp.mcp.server import create_mcp_server, tool_schemas
-from meme_mcp.rendering.image_store import FilesystemImageStore
+from meme_mcp.rendering.image_store import make_image_store
 from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_meme
 from meme_mcp.upload.dedupe import DuplicateIndex, check_duplicates
 from meme_mcp.upload.strip import strip_and_reencode
@@ -121,7 +121,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.pending_uploads = PendingUploadStore(db_path)
         app.state.embedding_meta = EmbeddingMetaStore(db_path)
         validate_embedding_model(app.state.embedding_meta, settings.embedding_model)
-        app.state.image_store = FilesystemImageStore(settings.image_store_fs_path)
+        app.state.image_store = make_image_store(
+            settings.image_store_backend, settings.image_store_fs_path
+        )
         app.state.web_allowlist = FileAllowlist(settings.github_allowlist_path)
         app.state.allowlist = app.state.web_allowlist
         app.state.find_limiter = WindowedRateLimiter(settings.rate_find_per_min, 60)

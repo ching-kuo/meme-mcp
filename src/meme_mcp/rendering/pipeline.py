@@ -13,7 +13,7 @@ from typing import Any, cast
 from PIL import Image, ImageDraw, ImageFont
 
 from meme_mcp.errors import ErrorCode, MemeMCPError
-from meme_mcp.rendering.image_store import FilesystemImageStore
+from meme_mcp.rendering.image_store import ImageStore
 from meme_mcp.rendering.text_layout import select_wrap
 
 
@@ -191,7 +191,7 @@ def _render_png_bytes(spec: TemplateSpec, slot_fills: list[str]) -> bytes:
 
 
 def render_meme(
-    spec: TemplateSpec, slot_fills: list[str], image_store: FilesystemImageStore
+    spec: TemplateSpec, slot_fills: list[str], image_store: ImageStore
 ) -> RenderResult:
     content = _render_png_bytes(spec, slot_fills)
     digest = hashlib.sha256(content).hexdigest()[:16]
