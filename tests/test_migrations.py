@@ -78,7 +78,9 @@ def test_baseline_skips_when_inline_ddl_already_created_tables(tmp_path: Path) -
     run_migrations(settings)
     with sqlite3.connect(db_path) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()
-    assert version == ("0001_baseline",)
+    # Head moves with each new revision; assert the version row exists rather than pinning
+    # to a specific revision id that changes when we add migrations.
+    assert version is not None
 
 
 def test_sync_url_rewrites_async_drivers() -> None:
@@ -107,3 +109,16 @@ def test_outcome_events_table_has_index_and_check_constraint(tmp_path: Path) -> 
     with sqlite3.connect(tmp_path / "meme.db") as conn:
         indexes = {row[1] for row in conn.execute("PRAGMA index_list(outcome_events)")}
     assert "outcome_events_template_ts" in indexes
+
+
+def test_vector_ddl_revision_is_noop_on_sqlite(tmp_path: Path) -> None:
+    """0002_vector_ddl must leave the SQLite template_vectors table untouched (the
+    baseline created it with vector_json TEXT; Postgres takes its own DDL branch).
+    """
+    settings = _settings(tmp_path)
+    run_migrations(settings)
+    with sqlite3.connect(tmp_path / "meme.db") as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(template_vectors)")}
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()
+    assert {"template_id", "vector_json", "dimensions"} <= columns
+    assert version == ("0002_vector_ddl",)
