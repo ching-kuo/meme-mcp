@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 from pathlib import Path
+
+import portalocker
 
 
 class FilesystemImageStore:
@@ -20,6 +23,37 @@ class FilesystemImageStore:
 
     def get(self, path: str) -> bytes:
         return (self.root / path).read_bytes()
+
+    def path_for_hash(self, rendered_hash: str, ext: str = "png") -> Path:
+        return self.root / rendered_hash[:2] / f"{rendered_hash[2:]}.{ext}"
+
+    def size_of(self, rendered_hash: str, ext: str = "png") -> int:
+        path = self.path_for_hash(rendered_hash, ext)
+        if not path.exists():
+            return 0
+        return path.stat().st_size
+
+    def delete(self, rendered_hash: str, ext: str = "png") -> bool:
+        path = self.path_for_hash(rendered_hash, ext)
+        try:
+            path.unlink()
+            return True
+        except FileNotFoundError:
+            return False
+
+    @contextmanager
+    def shard_lock(self, rendered_hash: str):  # type: ignore[no-untyped-def]
+        """Per-shard advisory lock used by GC to avoid racing with a concurrent put.
+
+        FilesystemImageStore.put is naturally idempotent (stat-then-skip), so puts do
+        not need the lock; only GC takes it before unlinking. The lock file lives in
+        the shard directory and is created on demand.
+        """
+        shard = self.root / rendered_hash[:2]
+        shard.mkdir(parents=True, exist_ok=True)
+        lockfile = shard / ".gc.lock"
+        with portalocker.Lock(str(lockfile), mode="a", timeout=10):
+            yield
 
 
 class S3ImageStore:

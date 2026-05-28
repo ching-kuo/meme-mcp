@@ -14,6 +14,7 @@ from meme_mcp.auth.pat import (
     issue_pat,
     list_pats,
 )
+from meme_mcp.cli.gc_renders import run as run_gc_renders
 from meme_mcp.cli.reindex_embeddings import make_embedder, reindex_embeddings
 from meme_mcp.cli.seed import run as run_seed
 from meme_mcp.config import Settings, validate_at_startup
@@ -44,6 +45,13 @@ def run(argv: Sequence[str] | None = None, settings: Settings | None = None) -> 
         upstream = Path(args.upstream_path) if args.upstream_path else None
         manifest = Path(args.manifest_path) if args.manifest_path else None
         return run_seed(app_settings, upstream_path=upstream, manifest_path=manifest)
+    if args.command == "gc-renders":
+        return run_gc_renders(
+            app_settings,
+            ttl_days=args.ttl_days,
+            max_bytes=args.max_bytes,
+            dry_run=args.dry_run,
+        )
     parser.error(f"unknown command: {args.command}")
     return 2
 
@@ -82,6 +90,10 @@ def _parser() -> argparse.ArgumentParser:
     seed = subcommands.add_parser("seed-memegen")
     seed.add_argument("--upstream-path", default=None)
     seed.add_argument("--manifest-path", default=None)
+    gc = subcommands.add_parser("gc-renders")
+    gc.add_argument("--ttl-days", type=int, default=None)
+    gc.add_argument("--max-bytes", type=int, default=None)
+    gc.add_argument("--dry-run", action="store_true")
     return parser
 
 

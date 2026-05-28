@@ -32,6 +32,12 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
   external callers that already inspect it. `import_upstream_corpus` persists templates and
   returns a manifest of `slug -> SHA-256(image bytes)` pinned to the upstream commit, which
   `cli/seed.py` writes to `assets/memegen-seed-manifest.json` for reproducible seeding.
+- `cli/gc_renders.py` and the `meme-mcp gc-renders` CLI prune render outputs by TTL
+  (`--ttl-days N`) or by max-byte budget (`--max-bytes N`, LRU by `generated_receipts.created_at`).
+  Scope is the receipts-table — template seed images have no receipt row and are never touched.
+  Each delete is guarded by a per-shard `portalocker` advisory lock so GC does not race a
+  concurrent `put`. Missing-blob-with-extant-receipt rows are pruned cleanly. The
+  `deploy/k8s/cronjob-gc-renders.yaml` manifest schedules a daily 30-day TTL sweep.
 - `rendering/` reads each slot's `box` to derive pixel anchor, alignment, and box dimensions
   (see `_slot_anchor` in `rendering/pipeline.py`). `text_layout.select_wrap` picks the 1/2/3-line
   layout that fills ≥60% of box width while maximizing font size, and `fit_font` runs a
