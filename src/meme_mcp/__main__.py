@@ -15,6 +15,7 @@ from meme_mcp.auth.pat import (
     list_pats,
 )
 from meme_mcp.cli.gc_renders import run as run_gc_renders
+from meme_mcp.cli.gc_uploads import run as run_gc_uploads
 from meme_mcp.cli.migrate import run as run_migrate
 from meme_mcp.cli.reindex_embeddings import make_embedder, reindex_embeddings
 from meme_mcp.cli.seed import run as run_seed
@@ -53,6 +54,8 @@ def run(argv: Sequence[str] | None = None, settings: Settings | None = None) -> 
             max_bytes=args.max_bytes,
             dry_run=args.dry_run,
         )
+    if args.command == "gc-uploads":
+        return run_gc_uploads(app_settings, dry_run=args.dry_run)
     if args.command == "migrate":
         return run_migrate(
             app_settings,
@@ -106,6 +109,8 @@ def _parser() -> argparse.ArgumentParser:
     gc.add_argument("--ttl-days", type=int, default=None)
     gc.add_argument("--max-bytes", type=int, default=None)
     gc.add_argument("--dry-run", action="store_true")
+    gc_uploads = subcommands.add_parser("gc-uploads")
+    gc_uploads.add_argument("--dry-run", action="store_true")
     migrate = subcommands.add_parser("migrate")
     migrate.add_argument("--target-db", required=True)
     migrate.add_argument("--target-s3-endpoint", required=True)

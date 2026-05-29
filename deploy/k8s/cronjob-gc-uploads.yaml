@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: meme-mcp-gc-uploads
+spec:
+  schedule: "47 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            fsGroup: 10001
+          containers:
+            - name: gc
+              image: meme-mcp:latest
+              command: ["uv", "run", "meme-mcp", "gc-uploads"]
+              envFrom:
+                - configMapRef:
+                    name: meme-mcp
+                - secretRef:
+                    name: meme-mcp
+              volumeMounts:
+                - name: storage
+                  mountPath: /data
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                runAsUser: 10001
+          volumes:
+            - name: storage
+              persistentVolumeClaim:
+                claimName: meme-mcp-storage
