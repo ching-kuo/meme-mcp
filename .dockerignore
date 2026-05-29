@@ -1,0 +1,22 @@
+# Build/runtime artifacts and local state that must not enter the image.
+.venv/
+storage/
+dist/
+.git/
+node_modules/
+
+# Local config and data that could leak secrets or pollute the image.
+.env
+.env.*
+*.db
+*.sqlite
+*.sqlite3
+
+# Python caches.
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
