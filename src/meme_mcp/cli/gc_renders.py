@@ -82,7 +82,7 @@ def _gc(
     freed = 0
     for rendered_hash, size in unique:
         with store.shard_lock(rendered_hash):
-            if store.delete(rendered_hash):
+            if store.delete_by_hash(rendered_hash):
                 freed += size
             receipts.delete(rendered_hash)
             deleted += 1

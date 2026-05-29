@@ -15,6 +15,8 @@ class ImageStore(Protocol):
 
     def get(self, path: str) -> bytes: ...
 
+    def delete(self, path: str) -> bool: ...
+
 
 class FilesystemImageStore:
     def __init__(self, root: str | Path) -> None:
@@ -33,6 +35,22 @@ class FilesystemImageStore:
     def get(self, path: str) -> bytes:
         return (self.root / path).read_bytes()
 
+    def delete(self, path: str) -> bool:
+        """Path-keyed delete, keyed on the `image_path` returned by `put`.
+
+        Resolves `self.root / path` and refuses to unlink anything that escapes the
+        store root (traversal guard), so a hostile `../../etc/passwd` returns False
+        without touching the filesystem. An absent path is idempotent (returns False).
+        """
+        target = (self.root / path).resolve()
+        if not target.is_relative_to(self.root.resolve()):
+            return False
+        try:
+            target.unlink()
+            return True
+        except FileNotFoundError:
+            return False
+
     def path_for_hash(self, rendered_hash: str, ext: str = "png") -> Path:
         return self.root / rendered_hash[:2] / f"{rendered_hash[2:]}.{ext}"
 
@@ -42,7 +60,13 @@ class FilesystemImageStore:
             return 0
         return path.stat().st_size
 
-    def delete(self, rendered_hash: str, ext: str = "png") -> bool:
+    def delete_by_hash(self, rendered_hash: str, ext: str = "png") -> bool:
+        """Hash-keyed delete used by the render-output GC (`gc_renders`).
+
+        Distinct from the path-keyed `delete(path)` Protocol method: this resolves the
+        blob from a content hash + extension, while `delete` takes the `image_path`
+        string returned by `put`.
+        """
         path = self.path_for_hash(rendered_hash, ext)
         try:
             path.unlink()
@@ -121,6 +145,13 @@ class S3ImageStore:
             raise
         body = response["Body"].read()
         return bytes(body)
+
+    def delete(self, path: str) -> bool:
+        """Path-keyed delete via DeleteObject. S3 DeleteObject is idempotent: an absent
+        key succeeds, so this returns True whenever the call completes without error.
+        """
+        self.client.delete_object(Bucket=self.bucket, Key=path)
+        return True
 
 
 def make_image_store(

@@ -69,3 +69,15 @@ def test_idempotent_put_via_head_then_put(s3_store: S3ImageStore) -> None:
 def test_get_missing_raises_file_not_found(s3_store: S3ImageStore) -> None:
     with pytest.raises(FileNotFoundError):
         s3_store.get("dead/beef.png")
+
+
+def test_delete_removes_object_and_get_then_raises(s3_store: S3ImageStore) -> None:
+    path = s3_store.put(b"deletable", "png")
+    assert s3_store.delete(path) is True
+    with pytest.raises(FileNotFoundError):
+        s3_store.get(path)
+
+
+def test_delete_absent_key_is_idempotent(s3_store: S3ImageStore) -> None:
+    # DeleteObject on a key that never existed succeeds (idempotent).
+    assert s3_store.delete("dead/beef.png") is True

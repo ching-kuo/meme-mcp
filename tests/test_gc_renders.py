@@ -123,7 +123,7 @@ def test_gc_handles_missing_blob_with_extant_receipt(tmp_path) -> None:
     store = FilesystemImageStore(s.image_store_fs_path)
     orphan = _seed_render(store, receipts, age_days=30)
     # Delete the blob but leave the receipt row.
-    store.delete(orphan)
+    store.delete_by_hash(orphan)
 
     assert run_gc(s, ttl_days=7) == 0
     # Receipt row should be gone after GC.

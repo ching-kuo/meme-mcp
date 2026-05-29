@@ -24,6 +24,29 @@ def test_filesystem_store_is_content_addressed(tmp_path) -> None:
     assert (tmp_path / first).exists()
 
 
+def test_filesystem_delete_removes_blob_and_get_then_raises(tmp_path) -> None:
+    store = FilesystemImageStore(tmp_path)
+    path = store.put(b"to be deleted", "png")
+    assert store.delete(path) is True
+    with pytest.raises(FileNotFoundError):
+        store.get(path)
+
+
+def test_filesystem_delete_absent_path_returns_false(tmp_path) -> None:
+    store = FilesystemImageStore(tmp_path)
+    assert store.delete("ab/cdef0123456789.png") is False
+
+
+def test_filesystem_delete_rejects_traversal(tmp_path) -> None:
+    store = FilesystemImageStore(tmp_path / "images")
+    # A sibling file outside the store root must never be unlinked.
+    outside = tmp_path / "secret.txt"
+    outside.write_text("keep me")
+    assert store.delete("../secret.txt") is False
+    assert store.delete("../../etc/passwd") is False
+    assert outside.exists()
+
+
 def test_s3_image_store_requires_construction_kwargs() -> None:
     """S3ImageStore is live as of U15; this regression check ensures it cannot be
     instantiated without the connection config, surfacing a TypeError at construction
