@@ -39,7 +39,7 @@ from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_
 from meme_mcp.upload.dedupe import DuplicateIndex
 from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pending
 from meme_mcp.vlm.client import VLMClient
-from meme_mcp.web.csrf import require_csrf
+from meme_mcp.web.csrf import require_csrf, safe_next
 
 
 class GitHubOAuthClient(Protocol):
@@ -206,6 +206,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         verifier = secrets.token_urlsafe(48)
         request.session["oauth_state"] = state
         request.session["oauth_code_verifier"] = verifier
+        request.session["post_login_next"] = safe_next(request.query_params.get("next"))
         challenge = _pkce_challenge(verifier)
         query = urlencode(
             {
@@ -220,7 +221,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return RedirectResponse(f"https://github.com/login/oauth/authorize?{query}")
 
     @app.get("/auth/callback")
-    async def auth_callback(request: Request, code: str, state: str) -> JSONResponse:
+    async def auth_callback(request: Request, code: str, state: str) -> Response:
         if not secrets.compare_digest(str(request.session.get("oauth_state", "")), state):
             raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "state", "reason": "mismatch"}])
         code_verifier = request.session.get("oauth_code_verifier")
@@ -230,13 +231,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         login = str(user.get("login", "")).strip()
         if not login or not app.state.web_allowlist.is_allowlisted(login):
-            raise MemeMCPError(
-                ErrorCode.FORBIDDEN_NOT_ALLOWLISTED,
-                [{"field": "github_login", "reason": "not_allowlisted"}],
+            # Render the explanatory page without establishing a session; the
+            # actor stays unauthenticated. A JSON 403 would be opaque to a
+            # human arriving in a browser (KTD9).
+            return templates.TemplateResponse(
+                request,
+                "restricted.html",
+                {
+                    "operator_github_login": app.state.settings.operator_github_login,
+                    "pat_expires_in_days": None,
+                    "friend_login": None,
+                },
+                status_code=403,
             )
+        # Read and re-validate the return target BEFORE clearing the session:
+        # session.clear() drops post_login_next, so reading it afterwards would
+        # always yield the default and silently lose the requested page. The
+        # subsequent clear() discards it, so a separate pop is unnecessary.
+        # Re-validating defends against a tampered session value (KTD9).
+        target = safe_next(request.session.get("post_login_next"))
         request.session.clear()
         request.session["github_login"] = login
-        return JSONResponse(make_success({"github_login": login}))
+        return RedirectResponse(target, status_code=303)
 
     @app.post("/auth/logout")
     async def auth_logout(request: Request) -> JSONResponse:

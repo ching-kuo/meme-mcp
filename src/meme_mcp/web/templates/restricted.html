@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block body %}
+  <main>
+    <h1>Access restricted</h1>
+    <p>
+      Your GitHub account is signed in, but it is not on the allowlist for
+      this meme-mcp instance, so an upload session was not created.
+    </p>
+    <p>
+      To request access, ask the operator
+      (<code>{{ operator_github_login }}</code>) to add your GitHub login to
+      the allowlist.
+    </p>
+    <p><a href="/browse">Back to browse</a></p>
+  </main>
+{% endblock %}

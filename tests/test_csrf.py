@@ -175,9 +175,14 @@ def test_safe_next_rejects_path_with_query_outside_allowlist() -> None:
 
 def _login(client: TestClient) -> str:
     login = client.get("/auth/login", follow_redirects=False)
-    callback = client.get("/auth/callback?code=ok-code&state=" + _extract_state(login))
-    assert callback.status_code == 200
-    return callback.json()["data"]["github_login"]
+    callback = client.get(
+        "/auth/callback?code=ok-code&state=" + _extract_state(login),
+        follow_redirects=False,
+    )
+    # The callback now redirects to a validated return path (U6) instead of
+    # returning a JSON envelope; the session is established alongside it.
+    assert callback.status_code == 303
+    return "friend"
 
 
 def test_logout_rejected_without_csrf_header(tmp_path) -> None:

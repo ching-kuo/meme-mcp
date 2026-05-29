@@ -29,10 +29,13 @@ def test_oauth_callback_creates_allowlisted_session(tmp_path) -> None:
     assert "github.com/login/oauth/authorize" in login.headers["location"]
     assert state
 
-    callback = client.get("/auth/callback?code=ok-code&state=" + _extract_state(login))
+    callback = client.get(
+        "/auth/callback?code=ok-code&state=" + _extract_state(login),
+        follow_redirects=False,
+    )
 
-    assert callback.status_code == 200
-    assert callback.json()["data"]["github_login"] == "friend"
+    assert callback.status_code == 303
+    assert callback.headers["location"] == "/browse"
     assert client.get("/browse").status_code == 200
 
 
@@ -44,10 +47,99 @@ def test_oauth_callback_rejects_non_allowlisted_user(tmp_path) -> None:
     client = TestClient(app)
     login = client.get("/auth/login", follow_redirects=False)
 
-    response = client.get("/auth/callback?code=ok-code&state=" + _extract_state(login))
+    response = client.get(
+        "/auth/callback?code=ok-code&state=" + _extract_state(login),
+        follow_redirects=False,
+    )
 
+    # Non-allowlisted authenticated user gets the HTML restricted page (403,
+    # text/html), naming the operator, and no session is established (AE12).
     assert response.status_code == 403
-    assert response.json()["error_code"] == "FORBIDDEN_NOT_ALLOWLISTED"
+    assert response.headers["content-type"].startswith("text/html")
+    assert "operator" in response.text
+    # The restricted page is HTML, not the JSON error envelope.
+    assert "FORBIDDEN_NOT_ALLOWLISTED" not in response.text
+    # No session was created, so a protected page stays unauthorized.
+    assert client.get("/browse").status_code == 401
+
+
+def test_oauth_callback_honors_next_through_session_clear(tmp_path) -> None:
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.github_oauth = FakeGitHubOAuth("friend")
+    (tmp_path / "allowlist.txt").write_text("friend\n", encoding="utf-8")
+    client = TestClient(app)
+
+    login = client.get("/auth/login?next=/upload", follow_redirects=False)
+    callback = client.get(
+        "/auth/callback?code=ok-code&state=" + _extract_state(login),
+        follow_redirects=False,
+    )
+
+    # next=/upload survives session.clear() and lands on /upload (AE12).
+    assert callback.status_code == 303
+    assert callback.headers["location"] == "/upload"
+
+
+def test_unauthenticated_session_login_carries_next(tmp_path) -> None:
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.github_oauth = FakeGitHubOAuth("friend")
+    client = TestClient(app)
+
+    login = client.get("/auth/login?next=/upload", follow_redirects=False)
+
+    assert login.status_code == 307
+    # The carried next is stored in the session for the callback to honor.
+    callback = client.get(
+        "/auth/callback?code=ok-code&state=" + _extract_state(login),
+        follow_redirects=False,
+    )
+    # No allowlist entry -> restricted page, but the carried next still parsed.
+    assert callback.status_code == 403
+
+
+def test_oauth_login_rejects_open_redirect_next(tmp_path) -> None:
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.github_oauth = FakeGitHubOAuth("friend")
+    (tmp_path / "allowlist.txt").write_text("friend\n", encoding="utf-8")
+
+    # The control-char case is percent-encoded so httpx accepts the URL;
+    # Starlette decodes %00 back to a NUL in query_params before safe_next runs.
+    for hostile in ("//evil.com", "https://evil.com", "/\\evil", "/x%00", ""):
+        client = TestClient(app)
+        login = client.get(
+            "/auth/login?next=" + hostile,
+            follow_redirects=False,
+        )
+        callback = client.get(
+            "/auth/callback?code=ok-code&state=" + _extract_state(login),
+            follow_redirects=False,
+        )
+        assert callback.status_code == 303
+        assert callback.headers["location"] == "/browse"
+
+
+def test_oauth_login_missing_next_defaults_to_browse(tmp_path) -> None:
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.github_oauth = FakeGitHubOAuth("friend")
+    (tmp_path / "allowlist.txt").write_text("friend\n", encoding="utf-8")
+    client = TestClient(app)
+
+    login = client.get("/auth/login", follow_redirects=False)
+    callback = client.get(
+        "/auth/callback?code=ok-code&state=" + _extract_state(login),
+        follow_redirects=False,
+    )
+
+    assert callback.status_code == 303
+    assert callback.headers["location"] == "/browse"
 
 
 def test_oauth_callback_rejects_state_mismatch(tmp_path) -> None:
