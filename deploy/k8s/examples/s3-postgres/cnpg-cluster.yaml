@@ -1,0 +1,64 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: meme-mcp-postgres
+spec:
+  instances: 3
+  # The image MUST ship the `vector` extension. CNPG's default postgres image
+  # does not. Build a derived image (see README.md in this directory) or
+  # substitute a vendor image that bundles pgvector.
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.5-standard-trixie
+  primaryUpdateStrategy: unsupervised
+
+  bootstrap:
+    initdb:
+      database: meme
+      owner: meme
+      # Runs as the postgres superuser on the `meme` database, before the app
+      # connects. The app user `meme` does not have CREATE EXTENSION rights,
+      # so the extension must be installed here. Alembic revision
+      # 0002_vector_ddl reissues `CREATE EXTENSION IF NOT EXISTS vector` and
+      # becomes a no-op.
+      postInitApplicationSQL:
+        - "CREATE EXTENSION IF NOT EXISTS vector;"
+
+  storage:
+    size: 50Gi
+    # storageClass: standard      # set to your cluster's block-storage class
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: kubernetes.io/hostname
+
+  # Uncomment if the Prometheus Operator is installed in the cluster.
+  # monitoring:
+  #   enablePodMonitor: true
+
+  # Uncomment to push WAL + base backups to S3 via barman-cloud. Use a
+  # separate prefix from the image bucket so a bucket-wide policy can
+  # restrict app credentials to the image prefix only.
+  #
+  # backup:
+  #   retentionPolicy: "14d"
+  #   barmanObjectStore:
+  #     destinationPath: s3://meme-mcp/backups/postgres
+  #     endpointURL: https://s3.example.com
+  #     s3Credentials:
+  #       accessKeyId:
+  #         name: meme-mcp-postgres-backup
+  #         key: ACCESS_KEY_ID
+  #       secretAccessKey:
+  #         name: meme-mcp-postgres-backup
+  #         key: SECRET_ACCESS_KEY
+  #     wal:
+  #       compression: gzip
+  #     data:
+  #       compression: gzip
