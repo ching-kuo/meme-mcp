@@ -26,6 +26,13 @@ class PendingUpload:
     suspect_flags: list[str]
 
 
+@dataclass(frozen=True)
+class ExpiredPending:
+    upload_id: str
+    image_path: str
+    expires_at: datetime
+
+
 class PendingUploadStore:
     def __init__(
         self,
@@ -154,6 +161,56 @@ class PendingUploadStore:
     def delete(self, upload_id: str) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM pending_uploads WHERE id = ?", (upload_id,))
+
+    def delete_owned(self, upload_id: str, friend_login: str) -> str | None:
+        """Owner-scoped delete: remove the row only if it belongs to friend_login.
+
+        Returns the deleted row's image_path, or None if no row matched (not
+        owned or not found). The discard path uses this so it can never delete
+        another friend's pending row. Unlike delete(upload_id), this is scoped
+        to the owning login.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT image_path FROM pending_uploads WHERE id = ? AND friend_login = ?",
+                (upload_id, friend_login),
+            ).fetchone()
+            if row is None:
+                return None
+            conn.execute(
+                "DELETE FROM pending_uploads WHERE id = ? AND friend_login = ?",
+                (upload_id, friend_login),
+            )
+        return str(row[0])
+
+    def expired(self) -> list[ExpiredPending]:
+        """Enumerate expired rows for the grace-windowed cleanup sweep.
+
+        Returns one entry per expired row carrying the upload_id, image_path,
+        and expires_at, so the gc-uploads sweep can apply its grace window and
+        recompute references before reclaiming blobs. Expiry is evaluated
+        against the injected clock (expires_at <= now); non-expired rows are
+        excluded.
+        """
+        now_iso = self._clock().isoformat()
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, image_path, expires_at
+                FROM pending_uploads
+                WHERE expires_at <= ?
+                ORDER BY expires_at, id
+                """,
+                (now_iso,),
+            ).fetchall()
+        return [
+            ExpiredPending(
+                upload_id=str(row[0]),
+                image_path=str(row[1]),
+                expires_at=datetime.fromisoformat(str(row[2])),
+            )
+            for row in rows
+        ]
 
     def cleanup_expired(self) -> int:
         now_iso = self._clock().isoformat()
