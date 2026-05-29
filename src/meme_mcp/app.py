@@ -39,6 +39,7 @@ from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_
 from meme_mcp.upload.dedupe import DuplicateIndex
 from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pending
 from meme_mcp.vlm.client import VLMClient
+from meme_mcp.web.csrf import require_csrf
 
 
 class GitHubOAuthClient(Protocol):
@@ -239,6 +240,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/auth/logout")
     async def auth_logout(request: Request) -> JSONResponse:
+        require_csrf(request)
         request.session.clear()
         return JSONResponse(make_success({"logged_out": True}))
 
