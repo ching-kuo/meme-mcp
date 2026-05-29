@@ -224,6 +224,158 @@ def test_upload_approval_requires_ack_for_suspect_metadata(tmp_path) -> None:
     assert template.name == "Bad"
 
 
+def _analyze_for_approve(client: TestClient, headers: dict[str, str]) -> dict[str, Any]:
+    return client.post(
+        "/api/uploads/analyze",
+        headers=headers,
+        json={
+            "filename": "deploy.png",
+            "mime": "image/png",
+            "content_base64": base64.b64encode(png_bytes()).decode(),
+            "title_hint": "Deploy Face",
+        },
+    ).json()["data"]
+
+
+def test_upload_approval_rejects_blank_or_placeholder_name(tmp_path) -> None:
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = FakeVLMClient()
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = _analyze_for_approve(client, headers)
+
+    for bad_name in ["", "   ", "Uploaded Meme"]:
+        metadata = dict(analyzed["metadata"])
+        metadata["name"] = bad_name
+        response = client.post(
+            f"/api/uploads/{analyzed['pending_upload_id']}/approve",
+            headers=headers,
+            json={"metadata": metadata},
+        )
+        assert response.status_code == 400, bad_name
+        body = response.json()
+        assert body["error_code"] == "INVALID_INPUT"
+        assert body["errors"] == [{"field": "name", "reason": "name_required"}]
+
+    # No template was upserted for any of the rejected attempts.
+    assert app.state.templates.list_rows() == []
+
+
+def test_vlm_unavailable_placeholder_name_fails_even_with_ack(tmp_path) -> None:
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = TimeoutVLMClient()
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = client.post(
+        "/api/uploads/analyze",
+        headers=headers,
+        json={
+            "filename": "deploy.png",
+            "mime": "image/png",
+            "content_base64": base64.b64encode(png_bytes()).decode(),
+        },
+    ).json()["data"]
+    # VLM-unavailable falls back to the placeholder name and a vlm_* suspect flag.
+    assert analyzed["metadata"]["name"] == "Uploaded Meme"
+    assert analyzed["suspect_flags"] == ["vlm_timeout"]
+
+    # Even acknowledging the suspect flag, the placeholder name still fails the
+    # independent name-required check (KTD7).
+    response = client.post(
+        f"/api/uploads/{analyzed['pending_upload_id']}/approve",
+        headers=headers,
+        json={"metadata": analyzed["metadata"], "ack_suspect": True},
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error_code"] == "INVALID_INPUT"
+    assert body["errors"] == [{"field": "name", "reason": "name_required"}]
+    assert app.state.templates.list_rows() == []
+
+
+def test_vlm_unavailable_with_real_name_and_ack_promotes(tmp_path) -> None:
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = TimeoutVLMClient()
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = client.post(
+        "/api/uploads/analyze",
+        headers=headers,
+        json={
+            "filename": "deploy.png",
+            "mime": "image/png",
+            "content_base64": base64.b64encode(png_bytes()).decode(),
+        },
+    ).json()["data"]
+
+    metadata = dict(analyzed["metadata"])
+    metadata["name"] = "Real Manual Name"
+    response = client.post(
+        f"/api/uploads/{analyzed['pending_upload_id']}/approve",
+        headers=headers,
+        json={"metadata": metadata, "ack_suspect": True},
+    )
+    assert response.status_code == 200
+    template = app.state.templates.get(response.json()["data"]["template_id"])
+    assert template.name == "Real Manual Name"
+    assert template.source == "friend"
+    # Pending row was deleted after approve.
+    import pytest
+
+    with pytest.raises(KeyError):
+        app.state.pending_uploads.get(analyzed["pending_upload_id"], "friend")
+
+
+def test_upload_rejects_mime_mismatch_through_service(tmp_path) -> None:
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = FakeVLMClient()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/uploads/analyze",
+        headers=auth_headers(client),
+        json={
+            "filename": "deploy.jpg",
+            "mime": "image/jpeg",
+            "content_base64": base64.b64encode(png_bytes()).decode(),
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "UPLOAD_REJECTED"
+    assert response.json()["errors"] == [{"field": "file", "reason": "mime_mismatch"}]
+
+
+def test_upload_base64_garbage_charges_limiter_and_returns_invalid_input(tmp_path) -> None:
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = FakeVLMClient()
+    client = TestClient(app)
+    headers = auth_headers(client)
+
+    response = client.post(
+        "/api/uploads/analyze",
+        headers=headers,
+        json={"filename": "x.png", "mime": "image/png", "content_base64": "not base64!!"},
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error_code"] == "INVALID_INPUT"
+    assert body["errors"] == [{"field": "content_base64", "reason": "base64"}]
+    # The shared service charges the limiter before decoding (KTD2 ordering): a
+    # window now exists for the friend even though the request was rejected.
+    _start, count = app.state.upload_limiter._windows["friend"]
+    assert count == 1
+
+
 def test_upload_analysis_blocks_exact_duplicate(tmp_path) -> None:
     from meme_mcp.app import create_app
     from meme_mcp.upload.strip import strip_and_reencode
@@ -262,3 +414,50 @@ def test_upload_analysis_blocks_exact_duplicate(tmp_path) -> None:
     assert response.json()["error_code"] == "DUPLICATE_TEMPLATE"
     errors: list[dict[str, Any]] = response.json()["errors"]
     assert json.dumps(errors).find("existing") != -1
+
+
+def _ok_metadata(name: str = "Real Name") -> dict[str, Any]:
+    return {
+        "name": name,
+        "description": "d",
+        "emotion": "e",
+        "usage_context": "u",
+        "tags": ["x"],
+        "format": "static",
+        "slot_definitions": [{"name": "top", "position": "top"}],
+    }
+
+
+def test_validated_metadata_suspect_gate_precedes_name_check() -> None:
+    import pytest
+
+    from meme_mcp.errors import ErrorCode, MemeMCPError
+    from meme_mcp.upload.service import _validated_metadata
+
+    # With a suspect flag and no ack, the suspect gate fires first even though
+    # the name is also blank, so callers learn about the ack requirement first.
+    with pytest.raises(MemeMCPError) as exc_info:
+        _validated_metadata(_ok_metadata(name=""), ["markup"], ack_suspect=False)
+    assert exc_info.value.error_code == ErrorCode.VLM_OUTPUT_SUSPECT
+
+
+def test_validated_metadata_name_check_runs_after_ack_passes() -> None:
+    import pytest
+
+    from meme_mcp.errors import ErrorCode, MemeMCPError
+    from meme_mcp.upload.service import _validated_metadata
+
+    # Acknowledging the suspect flag passes the ack gate, but the independent
+    # name-required check then rejects the blank name (KTD7).
+    with pytest.raises(MemeMCPError) as exc_info:
+        _validated_metadata(_ok_metadata(name="   "), ["markup"], ack_suspect=True)
+    assert exc_info.value.error_code == ErrorCode.INVALID_INPUT
+    assert exc_info.value.errors == [{"field": "name", "reason": "name_required"}]
+
+
+def test_validated_metadata_accepts_real_name() -> None:
+    from meme_mcp.upload.service import _validated_metadata
+
+    cleaned = _validated_metadata(_ok_metadata(name="Deploy Face"), [], ack_suspect=False)
+    assert cleaned["name"] == "Deploy Face"
+    assert cleaned["format"] == "static"
