@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from PIL import Image
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.depends import Friend, require_pat, require_write
@@ -40,6 +41,55 @@ from meme_mcp.upload.dedupe import DuplicateIndex
 from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pending
 from meme_mcp.vlm.client import VLMClient
 from meme_mcp.web.csrf import require_csrf, safe_next
+from meme_mcp.web.upload_routes import register_upload_routes
+
+# Pre-buffer body-size cap for the analyze endpoints. A 10 MB image base64
+# encodes to ~13.3 MB; 14 MB leaves headroom for the surrounding JSON envelope
+# while still rejecting clearly oversized bodies before they are buffered into
+# memory (KTD11). validate_upload's 10 MB content check stays authoritative.
+MAX_ANALYZE_BODY_BYTES = 14 * 1024 * 1024
+_ANALYZE_PATHS = frozenset({"/api/uploads/analyze", "/upload/analyze"})
+
+
+class BodySizeGuardMiddleware:
+    """Reject oversized analyze POSTs on Content-Length before buffering.
+
+    A pure-ASGI middleware (not BaseHTTPMiddleware) so the rejection happens
+    before Starlette parses or buffers the request body. It only inspects POSTs
+    to the two analyze paths (KTD11/F01); every other request passes through
+    untouched. Returns the standard JSON error envelope rather than a 500.
+    """
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope.get("method") == "POST":
+            path = scope.get("path", "")
+            if path in _ANALYZE_PATHS:
+                content_length = _header_value(scope, b"content-length")
+                if content_length is not None and content_length > self.max_bytes:
+                    response = JSONResponse(
+                        make_error(
+                            ErrorCode.UPLOAD_REJECTED,
+                            [{"field": "file", "reason": "size"}],
+                        ),
+                        status_code=status_for_error(ErrorCode.UPLOAD_REJECTED),
+                    )
+                    await response(scope, receive, send)
+                    return
+        await self.app(scope, receive, send)
+
+
+def _header_value(scope: Scope, name: bytes) -> int | None:
+    for key, value in scope.get("headers", []):
+        if key == name:
+            try:
+                return int(value)
+            except ValueError:
+                return None
+    return None
 
 
 class GitHubOAuthClient(Protocol):
@@ -107,6 +157,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             same_site="lax",
             https_only=not settings.github_redirect_uri.startswith("http://localhost"),
         )
+        # Added after SessionMiddleware so it is the OUTERMOST layer
+        # (add_middleware prepends): it rejects oversized analyze bodies on
+        # Content-Length before the session layer or any route reads the body
+        # (KTD11/F01).
+        app.add_middleware(BodySizeGuardMiddleware, max_bytes=MAX_ANALYZE_BODY_BYTES)
         app.state.settings = settings
         run_migrations(settings)
         db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
@@ -395,6 +450,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not path.is_relative_to(root) or not path.exists():
             raise MemeMCPError(ErrorCode.NOT_FOUND, [])
         return FileResponse(path, media_type="image/png")
+
+    register_upload_routes(app, _upload_deps)
 
     return app
 
