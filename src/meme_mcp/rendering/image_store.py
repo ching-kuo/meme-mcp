@@ -7,7 +7,7 @@ from typing import Protocol
 
 import portalocker
 
-from meme_mcp.config import ConfigError
+from meme_mcp.config import ConfigError, Settings
 
 
 class ImageStore(Protocol):
@@ -193,4 +193,30 @@ def make_image_store(
             secret_access_key=s3_secret_access_key or "",
         )
     raise ConfigError(f"unknown image_store_backend: {backend!r}")
+
+
+def make_image_store_from_settings(settings: Settings) -> ImageStore:
+    """Build the image store from a Settings object.
+
+    The single place that maps Settings to make_image_store's explicit kwargs, so
+    create_app and the gc CLIs cannot drift in how they configure the backend (a
+    mismatch would silently make a sweep no-op on S3).
+    """
+    return make_image_store(
+        settings.image_store_backend,
+        fs_path=settings.image_store_fs_path,
+        s3_endpoint=settings.s3_endpoint,
+        s3_bucket=settings.s3_bucket,
+        s3_region=settings.s3_region,
+        s3_access_key_id=(
+            settings.s3_access_key_id.get_secret_value()
+            if settings.s3_access_key_id is not None
+            else None
+        ),
+        s3_secret_access_key=(
+            settings.s3_secret_access_key.get_secret_value()
+            if settings.s3_secret_access_key is not None
+            else None
+        ),
+    )
 

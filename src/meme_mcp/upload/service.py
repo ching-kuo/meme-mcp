@@ -28,7 +28,7 @@ from meme_mcp.errors import ErrorCode, MemeMCPError
 from meme_mcp.rendering.image_store import ImageStore
 from meme_mcp.upload.dedupe import DuplicateIndex, check_duplicates
 from meme_mcp.upload.strip import strip_and_reencode
-from meme_mcp.upload.validation import compute_hashes, detect_mime, validate_upload
+from meme_mcp.upload.validation import compute_hashes, validate_upload
 from meme_mcp.vlm.sanitize import flag_anomalies, hard_sanitize_metadata
 
 PLACEHOLDER_NAME = "Uploaded Meme"
@@ -79,7 +79,7 @@ async def analyze_image(
     content_base64: str,
     declared_mime: str,
     filename: str,
-    title_hint: str | None,
+    title_hint: object,
     friend_login: str,
     deps: UploadServiceDeps,
 ) -> AnalyzeResult:
@@ -91,6 +91,7 @@ async def analyze_image(
     validation failure, exact-hash duplicate).
     """
     deps.upload_limiter.hit(friend_login)
+    hint = _normalize_title_hint(title_hint)
     content = _decode_base64(content_base64)
     validated = validate_upload(content, declared_mime, filename)
     sanitized = strip_and_reencode(content, validated.mime)
@@ -104,19 +105,19 @@ async def analyze_image(
     enrichment = await asyncio.to_thread(
         deps.vlm_client.enrich_template,
         sanitized,
-        title_hint,
+        hint,
     )
     if enrichment.status == "success" and enrichment.metadata is not None:
         metadata = enrichment.metadata
         suspect_flags = enrichment.suspect_flags
     else:
-        metadata = _blank_upload_metadata(title_hint)
+        metadata = _blank_upload_metadata(hint)
         suspect_flags = [f"vlm_{enrichment.status}"]
     slot_definitions = slot_definitions_for(metadata)
-    # detect_mime(content) is the content of record (R7); the declared mime was
-    # already cross-checked against it inside validate_upload.
-    content_mime = detect_mime(content) or validated.mime
-    image_path = deps.image_store.put(sanitized, _extension_for_mime(content_mime))
+    # validate_upload already proved detect_mime(content) == declared and returned
+    # it as validated.mime, so that is the content-of-record MIME (R7) -- no need to
+    # re-run the libmagic scan.
+    image_path = deps.image_store.put(sanitized, _extension_for_mime(validated.mime))
     pending = deps.pending_uploads.create(
         friend_login=friend_login,
         image_path=image_path,
@@ -188,6 +189,18 @@ def _decode_base64(content_base64: str) -> bytes:
             ErrorCode.INVALID_INPUT,
             [{"field": "content_base64", "reason": "base64"}],
         ) from exc
+
+
+def _normalize_title_hint(value: object) -> str | None:
+    """Coerce a caller-supplied title hint to a clean str or None.
+
+    Owned by the service (not the front doors) so the PAT and web routes feed
+    analyze_image identically (KTD2): an empty or whitespace-only hint becomes None.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _extension_for_mime(mime: str) -> str:

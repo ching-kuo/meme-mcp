@@ -30,6 +30,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from meme_mcp.auth.depends import Friend
+from meme_mcp.auth.session import friend_from_request_or_header
 from meme_mcp.envelope import make_success
 from meme_mcp.errors import ErrorCode, MemeMCPError
 from meme_mcp.upload.service import analyze_image, approve_pending
@@ -44,21 +45,11 @@ if TYPE_CHECKING:
 def _session_friend(app: FastAPI, request: Request) -> Friend:
     """Authenticate an allowlisted GitHub session, rejecting any PAT.
 
-    Calls ``_friend_from_request_or_header`` with no Authorization header so a
-    PAT can never authenticate a web route -- the helper only consults the
-    session when ``authorization`` is falsy (KTD3).
+    Calls friend_from_request_or_header with no Authorization header so a PAT can
+    never authenticate a web route -- the helper only consults the session when
+    authorization is falsy (KTD3).
     """
-
-    from meme_mcp.app import _friend_from_request_or_header
-
-    return _friend_from_request_or_header(app, request, None)
-
-
-def _optional_string(value: object) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
+    return friend_from_request_or_header(app, request, None)
 
 
 def register_upload_routes(
@@ -79,7 +70,7 @@ def register_upload_routes(
             content_base64=str(payload.get("content_base64", "")),
             declared_mime=str(payload.get("mime", "")),
             filename=str(payload.get("filename", "upload")),
-            title_hint=_optional_string(payload.get("title_hint")),
+            title_hint=payload.get("title_hint"),
             friend_login=friend.github_login,
             deps=upload_deps(app),
         )

@@ -20,8 +20,14 @@ from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from meme_mcp.auth.allowlist import FileAllowlist
-from meme_mcp.auth.depends import Friend, require_pat, require_write
+from meme_mcp.auth.depends import require_write
 from meme_mcp.auth.pat import SQLitePatStore, expires_at_for_login
+from meme_mcp.auth.session import (
+    friend_from_header,
+    friend_from_request_or_header,
+    has_web_session,
+    session_login,
+)
 from meme_mcp.config import Settings, validate_at_startup
 from meme_mcp.db.engine import sqlite_path
 from meme_mcp.db.migrations import run_migrations
@@ -35,7 +41,7 @@ from meme_mcp.envelope import Envelope, make_error, make_success
 from meme_mcp.errors import ErrorCode, MemeMCPError, status_for_error
 from meme_mcp.limits import WindowedRateLimiter
 from meme_mcp.mcp.server import create_mcp_server, tool_schemas
-from meme_mcp.rendering.image_store import make_image_store
+from meme_mcp.rendering.image_store import make_image_store_from_settings
 from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_meme
 from meme_mcp.upload.dedupe import DuplicateIndex
 from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pending
@@ -203,23 +209,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.pending_uploads = PendingUploadStore(db_path)
         app.state.embedding_meta = EmbeddingMetaStore(db_path)
         validate_embedding_model(app.state.embedding_meta, settings.embedding_model)
-        app.state.image_store = make_image_store(
-            settings.image_store_backend,
-            fs_path=settings.image_store_fs_path,
-            s3_endpoint=settings.s3_endpoint,
-            s3_bucket=settings.s3_bucket,
-            s3_region=settings.s3_region,
-            s3_access_key_id=(
-                settings.s3_access_key_id.get_secret_value()
-                if settings.s3_access_key_id is not None
-                else None
-            ),
-            s3_secret_access_key=(
-                settings.s3_secret_access_key.get_secret_value()
-                if settings.s3_secret_access_key is not None
-                else None
-            ),
-        )
+        app.state.image_store = make_image_store_from_settings(settings)
         app.state.web_allowlist = FileAllowlist(settings.github_allowlist_path)
         app.state.allowlist = app.state.web_allowlist
         app.state.find_limiter = WindowedRateLimiter(settings.rate_find_per_min, 60)
@@ -269,7 +259,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         q: str = "",
         authorization: str | None = Header(default=None),
     ) -> Response:
-        friend = _friend_from_request_or_header(app, request, authorization)
+        friend = friend_from_request_or_header(app, request, authorization)
         app.state.find_limiter.hit(friend.github_login)
         query = q.strip()
         template_rows = _template_rows(app, query)
@@ -281,7 +271,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "templates": template_rows,
                 "friend_login": friend.github_login,
                 "pat_expires_in_days": _pat_expires_in_days(app, friend.github_login),
-                "web_session": _has_web_session(app, request),
+                "web_session": has_web_session(app, request),
             },
         )
 
@@ -292,8 +282,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # allowlisted session reaches the page, which mints the CSRF token the
         # client reads from the meta tag (login clears the session, so the token
         # must be (re)minted here -- KTD4/U2).
-        login = request.session.get("github_login")
-        if not isinstance(login, str) or not app.state.web_allowlist.is_allowlisted(login):
+        login = session_login(app, request)
+        if login is None:
             return RedirectResponse("/auth/login?next=/upload", status_code=303)
         csrf_token = ensure_csrf_token(request.session)
         return templates.TemplateResponse(
@@ -372,7 +362,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/mcp/tools")
     async def mcp_tools(authorization: str | None = Header(default=None)) -> JSONResponse:
-        _friend_from_header(app, authorization)
+        friend_from_header(app, authorization)
         return JSONResponse(make_success({"tools": sorted(tool_schemas())}))
 
     @app.get("/api/templates")
@@ -381,7 +371,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         q: str = "",
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
-        friend = _friend_from_request_or_header(app, request, authorization)
+        friend = friend_from_request_or_header(app, request, authorization)
         app.state.find_limiter.hit(friend.github_login)
         rows = _template_rows(app, q.strip())
         return JSONResponse(make_success({"templates": [_template_payload(row) for row in rows]}))
@@ -393,7 +383,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: dict[str, object],
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
-        _friend_from_request_or_header(app, request, authorization)
+        friend_from_request_or_header(app, request, authorization)
         slot_fills_raw = payload.get("slot_fills", [])
         if not isinstance(slot_fills_raw, list):
             raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "slot_fills", "reason": "list"}])
@@ -408,7 +398,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: dict[str, object],
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
-        friend = _friend_from_header(app, authorization)
+        friend = friend_from_header(app, authorization)
         query = str(payload.get("query", "")).strip()
         if not query:
             raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "query", "reason": "required"}])
@@ -421,7 +411,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: dict[str, object],
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
-        friend = require_write(_friend_from_header(app, authorization))
+        friend = require_write(friend_from_header(app, authorization))
         template_id = str(payload.get("template_id", "")).strip()
         slot_fills_raw = payload.get("slot_fills", [])
         if not template_id or not isinstance(slot_fills_raw, list):
@@ -440,12 +430,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: dict[str, object],
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
-        friend = require_write(_friend_from_header(app, authorization))
+        friend = require_write(friend_from_header(app, authorization))
         result = await analyze_image(
             content_base64=str(payload.get("content_base64", "")),
             declared_mime=str(payload.get("mime", "")),
             filename=str(payload.get("filename", "upload")),
-            title_hint=_optional_string(payload.get("title_hint")),
+            title_hint=payload.get("title_hint"),
             friend_login=friend.github_login,
             deps=_upload_deps(app),
         )
@@ -470,7 +460,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: dict[str, object],
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
-        friend = require_write(_friend_from_header(app, authorization))
+        friend = require_write(friend_from_header(app, authorization))
         try:
             pending = app.state.pending_uploads.get(upload_id, friend.github_login)
         except KeyError as exc:
@@ -496,7 +486,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         filename: str,
         authorization: str | None = Header(default=None),
     ) -> FileResponse:
-        friend = _friend_from_request_or_header(app, request, authorization)
+        friend = friend_from_request_or_header(app, request, authorization)
         rendered_hash = f"{prefix}{Path(filename).stem}"
         if not app.state.receipts.exists_for_friend(rendered_hash, friend.github_login):
             raise MemeMCPError(ErrorCode.NOT_FOUND, [])
@@ -577,42 +567,6 @@ def _pat_expires_in_days(app: FastAPI, login: str) -> int | None:
     return max(0, delta.days)
 
 
-def _has_web_session(app: FastAPI, request: Request) -> bool:
-    """True only for an allowlisted GitHub session (not a PAT-authed request).
-
-    The ``/upload`` nav link is gated on this rather than on ``friend_login``,
-    because ``/browse`` also serves PAT-authenticated callers (who set
-    ``friend_login`` but hold no web session and would be bounced from
-    ``/upload``).
-    """
-    login = request.session.get("github_login")
-    return isinstance(login, str) and app.state.web_allowlist.is_allowlisted(login)
-
-
-def _friend_from_header(app: FastAPI, authorization: str | None) -> Friend:
-    if not hasattr(app.state, "settings"):
-        raise MemeMCPError(ErrorCode.UNAUTHORIZED, [])
-    return require_pat(
-        authorization,
-        app.state.pat_store,
-        app.state.allowlist,
-        app.state.pat_hash_pepper_value,
-    )
-
-
-def _friend_from_request_or_header(
-    app: FastAPI,
-    request: Request,
-    authorization: str | None,
-) -> Friend:
-    if authorization:
-        return _friend_from_header(app, authorization)
-    login = request.session.get("github_login")
-    if isinstance(login, str) and app.state.web_allowlist.is_allowlisted(login):
-        return Friend(login)
-    raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "session", "reason": "missing"}])
-
-
 def _template_spec(app: FastAPI, template_id: str) -> TemplateSpec:
     try:
         template = app.state.templates.get(template_id)
@@ -664,13 +618,6 @@ def _template_payload(row: TemplateRow) -> dict[str, object]:
         "metadata": row.metadata,
         "slot_definitions": row.slot_definitions,
     }
-
-
-def _optional_string(value: object) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
 
 
 def _validate_slot_fills(spec: TemplateSpec, slot_fills: list[str]) -> None:
