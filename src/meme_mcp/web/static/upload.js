@@ -32,6 +32,7 @@
   var csrfToken = csrfMeta ? csrfMeta.getAttribute("content") : "";
 
   var els = {
+    pickStep: root.querySelector('[data-step="pick"]'),
     fileInput: root.querySelector("[data-file-input]"),
     preview: root.querySelector("[data-preview]"),
     previewImg: root.querySelector("[data-preview-img]"),
@@ -230,11 +231,16 @@
   // --- analyze -------------------------------------------------------------
 
   async function onAnalyze() {
-    if (!state.file) {
+    // Snapshot the file once: state.file can change across the awaits below if the
+    // user re-picks mid-flight, which would otherwise send old bytes with the new
+    // file's name/mime.
+    var file = state.file;
+    if (!file) {
       return;
     }
     setMessage(els.analyzeError, "");
     els.analyzeBtn.disabled = true;
+    els.fileInput.disabled = true;
     show(els.spinner);
 
     var controller = new AbortController();
@@ -243,7 +249,7 @@
     }, CLIENT_TIMEOUT_MS);
 
     try {
-      var contentBase64 = await fileToBase64(state.file);
+      var contentBase64 = await fileToBase64(file);
       var response = await fetch("/upload/analyze", {
         method: "POST",
         headers: {
@@ -251,10 +257,10 @@
           "X-CSRF-Token": csrfToken
         },
         body: JSON.stringify({
-          filename: state.file.name,
-          mime: state.file.type,
+          filename: file.name,
+          mime: file.type,
           content_base64: contentBase64,
-          title_hint: state.file.name
+          title_hint: file.name
         }),
         signal: controller.signal
       });
@@ -282,6 +288,7 @@
     } finally {
       window.clearTimeout(timer);
       hide(els.spinner);
+      els.fileInput.disabled = false;
       // Re-enable analyze only if we did not advance to review.
       if (els.reviewStep.hidden) {
         els.analyzeBtn.disabled = !state.file;
@@ -304,6 +311,11 @@
     renderDuplicate(data.duplicate || {});
     renderSuspect(data.suspect_flags || []);
 
+    // Hide the pick controls so a second analyze cannot start (and orphan this
+    // pending row) while a review is open; clear any stale approve/done copy.
+    hide(els.pickStep);
+    setMessage(els.approveError, "");
+    hide(els.doneStep);
     show(els.reviewStep);
   }
 
@@ -385,6 +397,9 @@
     }
     setMessage(els.approveError, "");
     els.approveBtn.disabled = true;
+    // Disable Discard too, so a click during the in-flight approve cannot race the
+    // two server operations on the same pending row.
+    els.discardBtn.disabled = true;
 
     try {
       var metadata = collectMetadata();
@@ -409,12 +424,14 @@
           setMessage(els.approveError, describeError(envelope));
         }
         els.approveBtn.disabled = state.suspectFlags.length ? !els.ackCheckbox.checked : false;
+        els.discardBtn.disabled = false;
         return;
       }
       enterDone(metadata.name);
     } catch (err) {
       setMessage(els.approveError, "Could not reach the server. Try again.");
       els.approveBtn.disabled = state.suspectFlags.length ? !els.ackCheckbox.checked : false;
+      els.discardBtn.disabled = false;
     }
   }
 
