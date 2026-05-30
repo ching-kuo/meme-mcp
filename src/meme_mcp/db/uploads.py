@@ -66,7 +66,9 @@ class PendingUploadStore:
             )
             columns = {row[1] for row in conn.execute("PRAGMA table_info(pending_uploads)")}
             if "expires_at" not in columns:
-                # Migrate pre-TTL DBs: backfill expires_at from created_at + ttl, then NOT NULL.
+                # Migrate pre-TTL DBs: add expires_at and backfill legacy rows with the
+                # current clock (stale rows become immediately expiry-eligible; the
+                # column stays nullable).
                 conn.execute("ALTER TABLE pending_uploads ADD COLUMN expires_at TEXT")
                 conn.execute(
                     "UPDATE pending_uploads SET expires_at = ? WHERE expires_at IS NULL",
@@ -211,6 +213,22 @@ class PendingUploadStore:
             )
             for row in rows
         ]
+
+    def live_image_paths(self) -> set[str]:
+        """Image paths of all live (non-expired) pending rows.
+
+        The gc-uploads sweep unions this into its reference set so a blob shared
+        by a still-valid pending upload is never reclaimed when an expired sibling
+        that shares the same content-addressed blob is swept. Blobs are keyed on
+        content, so two pending rows can legitimately point at one blob.
+        """
+        now_iso = self._clock().isoformat()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT image_path FROM pending_uploads WHERE expires_at > ?",
+                (now_iso,),
+            ).fetchall()
+        return {str(row[0]) for row in rows}
 
     def cleanup_expired(self) -> int:
         now_iso = self._clock().isoformat()

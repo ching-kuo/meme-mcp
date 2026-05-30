@@ -367,6 +367,67 @@ def test_gc_uploads_dry_run_deletes_nothing(tmp_path, capsys) -> None:
     assert "would delete 1 pending row(s), 1 orphaned blob(s)" in out
 
 
+def test_gc_uploads_retains_blob_shared_with_live_pending(tmp_path, capsys) -> None:
+    # Regression: an expired candidate shares a content-addressed blob with a still
+    # valid (non-expired) pending upload. The blob MUST be retained -- the live
+    # sibling depends on it -- while the expired row is deleted. Before the fix the
+    # reference set enumerated only expired rows, so the live sibling's blob was
+    # silently reclaimed and later surfaced as a FileNotFoundError on serve.
+    app_settings = settings(tmp_path)
+    db = tmp_path / "meme.db"
+    store = _store_for(app_settings)
+    path = store.put(b"shared-with-live-pending", "png")
+    expired_at = _now() - DEFAULT_GRACE_WINDOW - timedelta(minutes=5)
+    _make_pending(db, image_path=path, friend_login="alice", expires_at=expired_at)
+    live = _make_pending(db, image_path=path, friend_login="bob", expires_at=_now() + _TTL)
+
+    assert run(["gc-uploads"], app_settings) == 0
+
+    assert _blob_exists(store, path)  # blob retained for the live pending
+    assert PendingUploadStore(db).expired() == []  # the expired row is gone
+    assert PendingUploadStore(db).get(live.upload_id, "bob").upload_id == live.upload_id
+    out = capsys.readouterr().out
+    assert "deleted 1 pending row(s), 0 orphaned blob(s)" in out
+
+
+def test_gc_uploads_dry_run_shared_blob_counts_once(tmp_path, capsys) -> None:
+    # Dry-run accounting must equal the live sweep: two expired pendings sharing one
+    # blob -> "would delete 2 pending row(s), 1 orphaned blob(s)".
+    app_settings = settings(tmp_path)
+    db = tmp_path / "meme.db"
+    store = _store_for(app_settings)
+    path = store.put(b"dry-run-shared", "png")
+    expired_at = _now() - DEFAULT_GRACE_WINDOW - timedelta(minutes=5)
+    _make_pending(db, image_path=path, friend_login="alice", expires_at=expired_at)
+    _make_pending(db, image_path=path, friend_login="bob", expires_at=expired_at)
+
+    assert run(["gc-uploads", "--dry-run"], app_settings) == 0
+
+    assert _blob_exists(store, path)  # dry-run mutates nothing
+    assert len(PendingUploadStore(db).expired()) == 2
+    out = capsys.readouterr().out
+    assert "would delete 2 pending row(s), 1 orphaned blob(s)" in out
+
+
+def test_gc_uploads_dry_run_excludes_template_referenced_blob(tmp_path, capsys) -> None:
+    # Dry-run must exclude a blob a template references -> 0 orphaned blobs, matching
+    # the live sweep's retention.
+    app_settings = settings(tmp_path)
+    db = tmp_path / "meme.db"
+    store = _store_for(app_settings)
+    path = store.put(b"dry-run-template-shared", "png")
+    _seed_template(db, template_id="keeper", image_path=path)
+    expired_at = _now() - DEFAULT_GRACE_WINDOW - timedelta(minutes=5)
+    _make_pending(db, image_path=path, friend_login="alice", expires_at=expired_at)
+
+    assert run(["gc-uploads", "--dry-run"], app_settings) == 0
+
+    assert _blob_exists(store, path)
+    assert len(PendingUploadStore(db).expired()) == 1
+    out = capsys.readouterr().out
+    assert "would delete 1 pending row(s), 0 orphaned blob(s)" in out
+
+
 def test_gc_uploads_s3_backend_deletes_orphaned_blob(tmp_path, capsys) -> None:
     # Guards the make_image_store requirement: the sweep must reclaim blobs on S3,
     # not silently no-op (it would if it instantiated FilesystemImageStore directly).

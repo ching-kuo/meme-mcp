@@ -11,10 +11,12 @@ The sweep is:
   concurrent in-flight `analyze` just put but has not yet recorded.
 - Reference-aware: a content-addressed blob can be shared by two pending rows or
   by an approved template. For each candidate the referenced `image_path` set is
-  recomputed from `templates.list_rows()` and the surviving (not-yet-deleted)
-  pending rows immediately before deletion, and `image_store.delete(path)` is
-  called only for blobs that nothing references. Two expired pendings sharing one
-  blob therefore delete the blob exactly once.
+  recomputed immediately before deletion from `templates.list_rows()`, every live
+  (non-expired) pending row, and the surviving (not-yet-deleted) expired pending
+  rows; `image_store.delete(path)` is called only for blobs that nothing
+  references. Two expired pendings sharing one blob therefore delete the blob
+  exactly once, and a blob a still-valid pending upload shares with an expired
+  sibling is never reclaimed.
 - Backend-agnostic: the image store is built via `make_image_store` with the same
   backend + explicit kwargs `create_app()` uses, so the sweep reclaims blobs on
   both the filesystem and S3 backends. Instantiating `FilesystemImageStore`
@@ -101,7 +103,7 @@ def _gc(
         return 0, 0
 
     if dry_run:
-        blob_count = _orphaned_blob_count(candidates, templates)
+        blob_count = _orphaned_blob_count(pending, candidates, templates)
         return len(candidates), blob_count
 
     deleted_rows = 0
@@ -121,17 +123,26 @@ def _gc(
 
 
 def _orphaned_blob_count(
+    pending: PendingUploadStore,
     candidates: list[ExpiredPending],
     templates: SQLiteTemplateRepository,
 ) -> int:
-    """Count blobs that would be reclaimed if the sweep ran, without acting.
+    """Count blobs the sweep would reclaim, without acting.
 
-    A candidate's blob is orphaned only if no template references it and no OTHER
-    pending row shares the same content. Distinct candidate image paths are counted
-    once (shared-blob candidates collapse to a single reclaim).
+    Mirrors the live sweep's reference set so the dry-run figure equals the real
+    reclaim count: a candidate's blob is orphaned only if nothing else references it
+    -- no template, no live (non-expired) pending row, and no still-present expired
+    pending row that is not itself a candidate. Distinct candidate paths are counted
+    once (shared-blob candidates collapse to a single reclaim, matching the live loop,
+    which deletes such a blob exactly once on the last candidate that holds it).
     """
-    template_paths = {row.image_path for row in templates.list_rows()}
-    distinct = {c.image_path for c in candidates if c.image_path not in template_paths}
+    candidate_ids = {c.upload_id for c in candidates}
+    referenced = {row.image_path for row in templates.list_rows()}
+    referenced |= pending.live_image_paths()
+    for row in pending.expired():
+        if row.upload_id not in candidate_ids:
+            referenced.add(row.image_path)
+    distinct = {c.image_path for c in candidates if c.image_path not in referenced}
     return len(distinct)
 
 
@@ -141,18 +152,22 @@ def _referenced_paths(
     *,
     exclude_upload_id: str,
 ) -> set[str]:
-    """Recompute the set of image paths that must NOT be reclaimed: every template's
-    image plus every still-present expired pending row except the one about to be
+    """Recompute the set of image paths that must NOT be reclaimed while deleting the
+    current candidate: every template's image, every live (non-expired) pending row's
+    image, and every still-present expired pending row except the one about to be
     deleted.
 
-    Querying `pending.expired()` fresh each call lets earlier deletions in the sweep
-    drop out of the reference set (so a blob shared by two expired candidates is
-    deleted exactly once on the second pass) while a not-yet-deleted sibling keeps
-    the blob alive on the first pass. Non-expired (in-flight) pending rows are not
-    enumerated here; the grace window is the cross-backend guard against reclaiming a
-    blob whose owning row has not yet been recorded or has not yet expired (KTD8).
+    Blobs are content-addressed, so a still-valid pending upload can share one blob
+    with an expired candidate; `live_image_paths()` keeps that blob alive. Querying
+    `pending.expired()` fresh each call lets earlier deletions in the sweep drop out of
+    the reference set (so a blob shared by two expired candidates is deleted exactly
+    once on the second pass) while a not-yet-deleted expired sibling keeps the blob
+    alive on the first pass. The grace window is a separate guard for the analyze
+    put-before-row-create window, where the blob exists but its pending row has not
+    been recorded yet, so it appears in neither set (KTD8).
     """
     paths = {row.image_path for row in templates.list_rows()}
+    paths |= pending.live_image_paths()
     for row in pending.expired():
         if row.upload_id != exclude_upload_id:
             paths.add(row.image_path)
