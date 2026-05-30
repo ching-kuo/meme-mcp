@@ -9,14 +9,13 @@ column, and add an ivfflat cosine index. On SQLite (and any other dialect): no-o
 the baseline already created the portable JSON-backed template_vectors table.
 """
 from collections.abc import Sequence
-from typing import Union
 
 from alembic import op
 
 revision: str = "0002_vector_ddl"
-down_revision: Union[str, Sequence[str], None] = "0001_baseline"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "0001_baseline"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def _dialect() -> str:
