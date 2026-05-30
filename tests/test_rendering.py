@@ -24,6 +24,14 @@ def test_filesystem_store_is_content_addressed(tmp_path) -> None:
     assert (tmp_path / first).exists()
 
 
+def test_filesystem_path_for_matches_put(tmp_path) -> None:
+    # analyze records path_for() into the pending row BEFORE put() writes the blob;
+    # the two must agree or the row would reference a path the blob never lands at.
+    store = FilesystemImageStore(tmp_path)
+    content = b"hello content addressing"
+    assert store.path_for(content, "png") == store.put(content, "png")
+
+
 def test_filesystem_delete_removes_blob_and_get_then_raises(tmp_path) -> None:
     store = FilesystemImageStore(tmp_path)
     path = store.put(b"to be deleted", "png")

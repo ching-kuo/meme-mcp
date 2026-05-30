@@ -71,6 +71,11 @@ def test_get_missing_raises_file_not_found(s3_store: S3ImageStore) -> None:
         s3_store.get("dead/beef.png")
 
 
+def test_path_for_matches_put(s3_store: S3ImageStore) -> None:
+    content = b"hello content addressing"
+    assert s3_store.path_for(content, "png") == s3_store.put(content, "png")
+
+
 def test_delete_removes_object_and_get_then_raises(s3_store: S3ImageStore) -> None:
     path = s3_store.put(b"deletable", "png")
     assert s3_store.delete(path) is True

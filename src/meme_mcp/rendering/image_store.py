@@ -13,6 +13,8 @@ from meme_mcp.config import ConfigError, Settings
 class ImageStore(Protocol):
     def put(self, content: bytes, ext: str) -> str: ...
 
+    def path_for(self, content: bytes, ext: str) -> str: ...
+
     def get(self, path: str) -> bytes: ...
 
     def delete(self, path: str) -> bool: ...
@@ -23,14 +25,22 @@ class FilesystemImageStore:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
 
-    def put(self, content: bytes, ext: str) -> str:
+    def path_for(self, content: bytes, ext: str) -> str:
+        """The content-addressed path put() would return, without writing.
+
+        Lets a caller record the image_path (e.g. in a pending row) before the blob
+        is written, so the reference is observable before the bytes land.
+        """
         digest = hashlib.sha256(content).hexdigest()[:16]
-        path = Path(digest[:2]) / f"{digest[2:]}.{ext}"
-        target = self.root / path
+        return (Path(digest[:2]) / f"{digest[2:]}.{ext}").as_posix()
+
+    def put(self, content: bytes, ext: str) -> str:
+        rel = self.path_for(content, ext)
+        target = self.root / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         if not target.exists():
             target.write_bytes(content)
-        return path.as_posix()
+        return rel
 
     def get(self, path: str) -> bytes:
         return (self.root / path).read_bytes()
@@ -123,9 +133,13 @@ class S3ImageStore:
             config=Config(s3={"addressing_style": "path"}),
         )
 
-    def put(self, content: bytes, ext: str) -> str:
+    def path_for(self, content: bytes, ext: str) -> str:
+        """The content-addressed key put() would return, without writing."""
         digest = hashlib.sha256(content).hexdigest()[:16]
-        key = f"{digest[:2]}/{digest[2:]}.{ext}"
+        return f"{digest[:2]}/{digest[2:]}.{ext}"
+
+    def put(self, content: bytes, ext: str) -> str:
+        key = self.path_for(content, ext)
         try:
             self.client.head_object(Bucket=self.bucket, Key=key)
         except self._client_error as exc:

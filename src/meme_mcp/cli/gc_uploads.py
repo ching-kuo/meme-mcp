@@ -5,10 +5,11 @@ row, never the blob -- KTD8).
 The sweep is:
 
 - Grace-windowed: it considers only rows whose `expires_at` is older than
-  `now - grace_window`. The grace window must exceed a worst-case analyze+VLM
-  round-trip, because `analyze` writes the blob (`image_store.put`) BEFORE it
-  creates the pending row; without the window the sweep could delete a blob a
-  concurrent in-flight `analyze` just put but has not yet recorded.
+  `now - grace_window`. `analyze` records the pending row BEFORE writing the blob,
+  so a fresh upload's image_path is observable here (via `live_image_paths()`)
+  before the bytes land; the grace window is a defense-in-depth margin -- it covers
+  clock skew between the app and the sweep -- rather than the sole guard against the
+  put/create ordering.
 - Reference-aware: a content-addressed blob can be shared by two pending rows or
   by an approved template. The protected `image_path` set -- every template image,
   every live (non-expired) pending blob, and every expired-but-within-grace sibling
@@ -85,8 +86,10 @@ def _gc(
     # in expired() yet not a candidate). This set is invariant across the sweep -- the
     # loop only deletes candidate rows -- so it is computed once rather than re-queried
     # per candidate. Blobs are content-addressed, so any of these references keeps a
-    # candidate's shared blob alive; the grace window separately guards the analyze
-    # put-before-row-create window, where the blob exists but its row does not (KTD8).
+    # candidate's shared blob alive. analyze records the pending row before writing
+    # the blob, so a concurrent re-upload's row is in live_image_paths() before its
+    # (idempotent) blob write -- keeping a reused stale-orphan blob alive (KTD8); the
+    # grace window is an added safety margin.
     candidate_ids = {row.upload_id for row in candidates}
     protected = {row.image_path for row in templates.list_rows()}
     protected |= pending.live_image_paths()

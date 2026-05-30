@@ -114,10 +114,15 @@ async def analyze_image(
         metadata = _blank_upload_metadata(hint)
         suspect_flags = [f"vlm_{enrichment.status}"]
     slot_definitions = slot_definitions_for(metadata)
-    # validate_upload already proved detect_mime(content) == declared and returned
-    # it as validated.mime, so that is the content-of-record MIME (R7) -- no need to
-    # re-run the libmagic scan.
-    image_path = deps.image_store.put(sanitized, _extension_for_mime(validated.mime))
+    # Record the pending row BEFORE writing the blob (KTD8). create-then-put makes the
+    # row -- and thus the image_path reference -- observable to the gc sweep's live-
+    # reference check before the content-addressed blob is (re)written, closing the
+    # window where a sweep could reclaim a stale orphan's blob that a re-upload of
+    # identical bytes is about to reuse. validate_upload already proved
+    # detect_mime(content) == declared and returned it as validated.mime, so that is
+    # the content-of-record MIME (R7); image_store.put is idempotent on the path.
+    ext = _extension_for_mime(validated.mime)
+    image_path = deps.image_store.path_for(sanitized, ext)
     pending = deps.pending_uploads.create(
         friend_login=friend_login,
         image_path=image_path,
@@ -129,6 +134,7 @@ async def analyze_image(
         duplicate_template_id=duplicate.template_id,
         suspect_flags=suspect_flags,
     )
+    deps.image_store.put(sanitized, ext)
     return AnalyzeResult(
         pending_upload_id=pending.upload_id,
         metadata=pending.metadata,
