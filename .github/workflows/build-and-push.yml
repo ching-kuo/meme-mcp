@@ -32,11 +32,14 @@ jobs:
         with:
           enable-cache: true
 
-      # --locked fails loudly if uv.lock has drifted from pyproject.toml.
+      # --all-extras so mypy can resolve the optional postgres/s3 imports
+      # (psycopg, pgvector, boto3) used in src; --locked fails loudly if uv.lock
+      # drifted. The postgres/s3 test suites stay skipped (they gate on
+      # MEMEMCP_TEST_* env vars, not on package presence).
       # libmagic is intentionally absent (so is it in deploy/Dockerfile): detect_mime
       # falls back to byte-prefix sniffing, so CI exercises the same path as production.
       - name: Sync dependencies
-        run: uv sync --extra dev --locked
+        run: uv sync --all-extras --locked
 
       - name: Ruff
         run: uv run ruff check
