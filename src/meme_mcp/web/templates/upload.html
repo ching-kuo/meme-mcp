@@ -1,11 +1,14 @@
 {% extends "base.html" %}
+{% block head %}
+  <link rel="stylesheet" href="/static/upload.css">
+{% endblock %}
 {% block body %}
   <meta name="csrf-token" content="{{ csrf_token }}">
-  <main class="upload-page" data-upload-root>
+  <main class="upload-page" data-upload-root data-current="pick">
     <h1>Upload a template</h1>
 
     <noscript>
-      <p class="notice notice-error">
+      <p class="upload-notice upload-notice--error">
         This page needs JavaScript. The upload flow previews your image,
         analyzes it, and lets you edit the proposed metadata entirely in the
         browser, so it cannot run with JavaScript disabled.
@@ -16,87 +19,145 @@
       Accepted formats: PNG, JPEG, or WebP, up to 10 MB. After you analyze,
       describing the image may take several seconds while the model inspects it.
     </p>
-    <p class="helper helper-disclosure">
-      The stored template is EXIF-stripped and re-encoded, so the saved image
-      may differ slightly from the local preview shown here.
-    </p>
+
+    <nav class="upload-steps" aria-label="Progress">
+      <ol>
+        <li class="upload-stepper-item upload-stepper-item--pick" data-key="pick" aria-current="step">
+          <span class="upload-stepper-dot" aria-hidden="true"></span>Pick
+        </li>
+        <li class="upload-stepper-item upload-stepper-item--review" data-key="review">
+          <span class="upload-stepper-dot" aria-hidden="true"></span>Review
+        </li>
+        <li class="upload-stepper-item upload-stepper-item--done" data-key="done">
+          <span class="upload-stepper-dot" aria-hidden="true"></span>Done
+        </li>
+      </ol>
+    </nav>
 
     <section class="upload-step" data-step="pick">
-      <label class="file-field">
-        Choose an image
-        <input type="file" accept="image/png,image/jpeg,image/webp" data-file-input>
+      <label class="upload-dropzone" data-dropzone>
+        <span class="upload-dropzone__icon" aria-hidden="true"></span>
+        <span class="upload-dropzone__title upload-dropzone__title--idle">
+          Drag an image here, or click to choose
+        </span>
+        <span class="upload-dropzone__title upload-dropzone__title--drop">Drop to use this image</span>
+        <span class="upload-dropzone__hint">PNG, JPEG or WebP &mdash; up to 10 MB</span>
+        <input
+          class="upload-dropzone__input"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          data-file-input
+        >
       </label>
-      <div class="preview" data-preview hidden>
-        <img alt="Selected image preview" data-preview-img>
+
+      <p class="upload-notice upload-notice--error" data-pick-error hidden role="alert"></p>
+
+      <div class="upload-filecard" data-filecard hidden>
+        <img class="upload-filecard__thumb" alt="Selected image preview" data-thumb-img>
+        <div class="upload-filecard__meta">
+          <div class="upload-filecard__name" data-file-name></div>
+          <div class="upload-filecard__dims">
+            <span data-file-size></span>
+            <span data-file-dims></span>
+          </div>
+        </div>
       </div>
-      <p class="notice notice-error" data-pick-error hidden></p>
-      <button type="button" data-analyze-btn disabled>Analyze</button>
+
+      <div class="upload-actions">
+        <button type="button" class="upload-btn" data-analyze-btn disabled>Analyze</button>
+      </div>
     </section>
 
-    <div class="spinner" data-spinner hidden role="status">
-      Analyzing the image. This may take several seconds.
+    <div class="upload-analyzing" data-spinner hidden role="status" aria-live="polite">
+      <span class="upload-analyzing__bars" aria-hidden="true"><span></span><span></span><span></span></span>
+      <p class="upload-analyzing__title">Looking at your image&hellip;</p>
+      <p class="upload-analyzing__hint">This usually takes 5&ndash;60 seconds.</p>
+      <p class="upload-analyzing__rm">Analyzing the image. This may take several seconds.</p>
+      <div class="upload-analyzing__sweep" aria-hidden="true"></div>
     </div>
 
-    <p class="notice notice-error" data-analyze-error hidden></p>
+    <p class="upload-notice upload-notice--error" data-analyze-error hidden role="alert"></p>
 
-    <section class="upload-step review" data-step="review" hidden>
-      <h2>Proposed metadata</h2>
+    <section class="upload-step" data-step="review" hidden>
+      <h2 tabindex="-1">Proposed metadata</h2>
 
-      <div class="banner banner-warning" data-duplicate-warning hidden role="status"></div>
+      <form class="upload-form upload-review" data-review-form>
+        <div class="upload-review__preview">
+          <div class="preview"><img alt="Selected image preview" data-preview-img></div>
+          <p class="upload-review__caption helper">
+            <span data-file-name></span>
+            <span data-file-dims></span>
+          </p>
+          <details class="upload-disclosure">
+            <summary>Stored image differs</summary>
+            <p>
+              The stored template is EXIF-stripped and re-encoded, so the saved
+              image may differ slightly from the local preview shown here.
+            </p>
+          </details>
+        </div>
 
-      <form data-review-form>
-        <label>
-          Name
-          <input type="text" name="name" data-field="name" required>
-        </label>
-        <label>
-          Description
-          <textarea name="description" data-field="description" rows="3"></textarea>
-        </label>
-        <label>
-          Emotion
-          <input type="text" name="emotion" data-field="emotion">
-        </label>
-        <label>
-          Usage context
-          <input type="text" name="usage_context" data-field="usage_context">
-        </label>
-        <label>
-          Tags (comma-separated)
-          <input type="text" name="tags" data-field="tags">
-          <span class="helper">Separate tags with commas. Do not put a comma inside a single tag.</span>
-        </label>
+        <div class="upload-review__fields">
+          <label>
+            Name <span class="upload-req" aria-hidden="true">*</span>
+            <input type="text" name="name" data-field="name" required aria-required="true">
+          </label>
+          <label>
+            Description
+            <textarea name="description" data-field="description" rows="3"></textarea>
+          </label>
+          <label>
+            Emotion
+            <input type="text" name="emotion" data-field="emotion">
+          </label>
+          <label>
+            Usage context
+            <input type="text" name="usage_context" data-field="usage_context">
+          </label>
+          <label>
+            Tags (comma-separated)
+            <input type="text" name="tags" data-field="tags">
+            <span class="helper">Separate tags with commas. Do not put a comma inside a single tag.</span>
+          </label>
+        </div>
 
-        <fieldset class="slots" data-slots>
+        <fieldset class="upload-slots">
           <legend>Slots (read-only)</legend>
           <ul data-slot-list></ul>
         </fieldset>
 
-        <label class="ack" data-ack-row hidden>
+        <div class="upload-notice upload-notice--warning" data-duplicate-warning hidden role="status"></div>
+
+        <label class="upload-ack" data-ack-row hidden>
           <input type="checkbox" data-ack-checkbox>
           <span data-ack-label></span>
         </label>
 
-        <p class="notice notice-error" data-approve-error hidden></p>
+        <p class="upload-notice upload-notice--error" data-approve-error hidden role="alert"></p>
 
-        <div class="actions">
-          <button type="submit" data-approve-btn>Approve</button>
-          <button type="button" class="secondary" data-discard-btn>Discard</button>
+        <div class="upload-actions">
+          <button type="submit" class="upload-btn" data-approve-btn>Approve</button>
+          <button type="button" class="upload-btn upload-btn--ghost" data-discard-btn>Discard</button>
         </div>
       </form>
     </section>
 
-    <section class="upload-step done" data-step="done" hidden>
-      <p class="notice notice-success" data-success-message></p>
-      <p><a data-browse-link href="/browse">View it in browse</a></p>
-      <p><a href="/upload">Upload another</a></p>
+    <section class="upload-step" data-step="done" hidden>
+      <p class="upload-notice upload-notice--success" data-success-message tabindex="-1"></p>
+      <p class="upload-done__sub" data-success-sub></p>
+      <div class="upload-done__actions">
+        <a class="upload-btn" data-browse-link href="/browse">View it in browse</a>
+        <a class="upload-btn upload-btn--ghost" href="/upload">Upload another</a>
+      </div>
     </section>
 
-    <div class="resume" data-resume hidden>
-      <p class="notice">
+    <div class="upload-resume" data-resume hidden>
+      <p class="upload-notice upload-notice--info">
         A previous upload was left in review. You can discard it and start over.
       </p>
-      <button type="button" data-resume-discard>Discard and start over</button>
+      <button type="button" class="upload-btn upload-btn--ghost" data-resume-discard>
+        Discard and start over
+      </button>
     </div>
   </main>
 

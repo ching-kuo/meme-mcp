@@ -1,8 +1,10 @@
 // Single-page /upload client (KTD1). Vanilla JS, no framework or build step.
 //
-// Flow: choose file -> local preview + size pre-check -> Analyze (base64 JSON
-// POST with X-CSRF-Token, spinner, AbortController timeout) -> edit proposed
-// metadata (read-only slots, KTD10) -> Approve -> success link to /browse.
+// Flow: choose-or-drop a file -> local preview + size pre-check (shown as a
+// file card) -> Analyze (base64 JSON POST with X-CSRF-Token, animated status,
+// AbortController timeout) -> edit proposed metadata (read-only slots, KTD10)
+// -> Approve -> success link to /browse. A presentational 3-step wayfinder
+// (data-current on the root) tracks pick/review/done.
 //
 // Two distinct warn states are surfaced separately (R9/R12): a near-duplicate
 // (duplicate.action === "warn") is a NON-BLOCKING banner naming the nearest
@@ -33,14 +35,17 @@
 
   var els = {
     pickStep: root.querySelector('[data-step="pick"]'),
+    dropzone: root.querySelector("[data-dropzone]"),
     fileInput: root.querySelector("[data-file-input]"),
-    preview: root.querySelector("[data-preview]"),
+    filecard: root.querySelector("[data-filecard]"),
+    thumbImg: root.querySelector("[data-thumb-img]"),
     previewImg: root.querySelector("[data-preview-img]"),
     pickError: root.querySelector("[data-pick-error]"),
     analyzeBtn: root.querySelector("[data-analyze-btn]"),
     spinner: root.querySelector("[data-spinner]"),
     analyzeError: root.querySelector("[data-analyze-error]"),
     reviewStep: root.querySelector('[data-step="review"]'),
+    reviewHeading: root.querySelector('[data-step="review"] h2'),
     duplicateWarning: root.querySelector("[data-duplicate-warning]"),
     reviewForm: root.querySelector("[data-review-form]"),
     slotList: root.querySelector("[data-slot-list]"),
@@ -52,9 +57,11 @@
     discardBtn: root.querySelector("[data-discard-btn]"),
     doneStep: root.querySelector('[data-step="done"]'),
     successMessage: root.querySelector("[data-success-message]"),
+    successSub: root.querySelector("[data-success-sub]"),
     browseLink: root.querySelector("[data-browse-link]"),
     resume: root.querySelector("[data-resume]"),
-    resumeDiscard: root.querySelector("[data-resume-discard]")
+    resumeDiscard: root.querySelector("[data-resume-discard]"),
+    steps: Array.prototype.slice.call(root.querySelectorAll(".upload-stepper-item"))
   };
 
   var state = {
@@ -92,6 +99,39 @@
 
   function field(name) {
     return els.reviewForm.querySelector('[data-field="' + name + '"]');
+  }
+
+  function setText(selector, text) {
+    var nodes = root.querySelectorAll(selector);
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].textContent = text;
+    }
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) {
+      return bytes + " B";
+    }
+    var kb = bytes / 1024;
+    if (kb < 1024) {
+      return kb.toFixed(kb < 10 ? 1 : 0) + " KB";
+    }
+    return (kb / 1024).toFixed(1) + " MB";
+  }
+
+  // Presentational wayfinder. The root's data-current attribute drives the
+  // step-dot styling in CSS; this also moves aria-current so assistive tech
+  // announces the active step rather than reading the strip as decoration.
+  function setStep(phase) {
+    root.dataset.current = phase;
+    var activeKey = phase === "pick" ? "pick" : phase === "done" ? "done" : "review";
+    els.steps.forEach(function (item) {
+      if (item.getAttribute("data-key") === activeKey) {
+        item.setAttribute("aria-current", "step");
+      } else {
+        item.removeAttribute("aria-current");
+      }
+    });
   }
 
   // --- pending-id bookkeeping ---------------------------------------------
@@ -187,14 +227,17 @@
     }
   }
 
-  function onFileChange() {
+  // Accept a File from either the native input change or a drag-drop, run the
+  // same size pre-check, and build the local preview. The createObjectURL /
+  // revokeObjectURL lifecycle stays single-owner: one URL per selected file,
+  // revoked before the next.
+  function useFile(file) {
     setMessage(els.pickError, "");
     clearPreview();
-    hide(els.preview);
+    hide(els.filecard);
     state.file = null;
     els.analyzeBtn.disabled = true;
 
-    var file = els.fileInput.files && els.fileInput.files[0];
     if (!file) {
       return;
     }
@@ -207,9 +250,78 @@
     }
     state.file = file;
     state.previewUrl = URL.createObjectURL(file);
+    setText("[data-file-name]", file.name);
+    setText("[data-file-size]", formatBytes(file.size));
+    setText("[data-file-dims]", "");
+    // Attach onload before assigning src so a fast/cached decode cannot resolve
+    // before the dimensions handler is registered.
+    els.previewImg.onload = function () {
+      if (els.previewImg.naturalWidth) {
+        setText(
+          "[data-file-dims]",
+          els.previewImg.naturalWidth + " x " + els.previewImg.naturalHeight
+        );
+      }
+    };
+    els.thumbImg.src = state.previewUrl;
     els.previewImg.src = state.previewUrl;
-    show(els.preview);
+    show(els.filecard);
     els.analyzeBtn.disabled = false;
+    setStep("pick");
+  }
+
+  function onFileChange() {
+    useFile(els.fileInput.files && els.fileInput.files[0]);
+  }
+
+  // --- drag and drop -------------------------------------------------------
+
+  function onDragOver(event) {
+    event.preventDefault();
+    els.dropzone.classList.add("is-dragover");
+  }
+
+  function onDragLeave(event) {
+    // dragleave fires when crossing into child nodes too; only clear the armed
+    // state when the pointer actually leaves the dropzone (or the window).
+    if (!els.dropzone.contains(event.relatedTarget)) {
+      els.dropzone.classList.remove("is-dragover");
+    }
+  }
+
+  function onDrop(event) {
+    event.preventDefault();
+    els.dropzone.classList.remove("is-dragover");
+    var transfer = event.dataTransfer;
+    var file = transfer && transfer.files && transfer.files[0];
+    if (file) {
+      useFile(file);
+    }
+  }
+
+  // Swallow stray drops outside the dropzone. Without these the browser
+  // navigates the tab to the dropped file -- abandoning the flow, and mid-review
+  // tripping the beforeunload guard and orphaning the pending row. The dropzone
+  // is also display:none during analyze/review/done, so the whole window would
+  // otherwise be a live (wrong) drop target. Genuine dropzone drops are still
+  // handled by onDrop (the document drop guard skips targets inside the zone).
+  function isFileDrag(event) {
+    var types = event.dataTransfer && event.dataTransfer.types;
+    // Only file drags carry the "Files" type. Text/selection drags must pass
+    // through untouched so they can still be dropped into the review fields.
+    return !!types && Array.prototype.indexOf.call(types, "Files") !== -1;
+  }
+
+  function onDocumentDragOver(event) {
+    if (isFileDrag(event)) {
+      event.preventDefault();
+    }
+  }
+
+  function onDocumentDrop(event) {
+    if (isFileDrag(event) && !els.dropzone.contains(event.target)) {
+      event.preventDefault();
+    }
   }
 
   function fileToBase64(file) {
@@ -241,6 +353,7 @@
     setMessage(els.analyzeError, "");
     els.analyzeBtn.disabled = true;
     els.fileInput.disabled = true;
+    setStep("analyze");
     show(els.spinner);
 
     var controller = new AbortController();
@@ -289,9 +402,11 @@
       window.clearTimeout(timer);
       hide(els.spinner);
       els.fileInput.disabled = false;
-      // Re-enable analyze only if we did not advance to review.
+      // Re-enable analyze only if we did not advance to review, and step the
+      // wayfinder back to pick so the dropzone reappears.
       if (els.reviewStep.hidden) {
         els.analyzeBtn.disabled = !state.file;
+        setStep("pick");
       }
     }
   }
@@ -299,7 +414,6 @@
   // --- review --------------------------------------------------------------
 
   function enterReview(data) {
-    setPendingId(data.pending_upload_id);
     var metadata = data.metadata || {};
     field("name").value = metadata.name || "";
     field("description").value = metadata.description || "";
@@ -317,6 +431,16 @@
     setMessage(els.approveError, "");
     hide(els.doneStep);
     show(els.reviewStep);
+    setStep("review");
+    // Commit the pending id only once the review UI is live: if any render step
+    // above threw on malformed data, the failure surfaces without arming the
+    // beforeunload guard or resume affordance against an invisible review.
+    setPendingId(data.pending_upload_id);
+    // Move focus to the new step's heading; the Analyze button it was on is now
+    // hidden, which would otherwise strand keyboard/screen-reader focus.
+    if (els.reviewHeading) {
+      els.reviewHeading.focus();
+    }
   }
 
   function renderSlots(slots) {
@@ -440,9 +564,21 @@
     // beforeunload guard and resume affordance no longer fire.
     setPendingId(null);
     setMessage(els.successMessage, 'Saved "' + name + '" to the library.');
+    setMessage(els.successSub, '"' + name + '" is now searchable and ready to render.');
     els.browseLink.href = "/browse?q=" + encodeURIComponent(name);
     hide(els.reviewStep);
     show(els.doneStep);
+    setStep("done");
+    // Terminal state: release the last object URL (the preview lives in the
+    // now-hidden review step) so it is not held until the tab closes.
+    els.previewImg.removeAttribute("src");
+    els.thumbImg.removeAttribute("src");
+    clearPreview();
+    // Move focus to the success message; the Approve button it was on is now
+    // hidden. The message carries tabindex="-1" so it can receive focus.
+    if (els.successMessage) {
+      els.successMessage.focus();
+    }
   }
 
   // --- discard -------------------------------------------------------------
@@ -484,7 +620,9 @@
     if (!target) {
       return;
     }
-    target.textContent = "Session expired - log in again. ";
+    target.textContent =
+      "Session expired. Your edits are still here - log in in a new tab, " +
+      "come back, and submit again. ";
     var link = document.createElement("a");
     link.href = "/auth/login?next=/upload";
     link.textContent = "Log in";
@@ -519,6 +657,11 @@
   }
 
   els.fileInput.addEventListener("change", onFileChange);
+  els.dropzone.addEventListener("dragover", onDragOver);
+  els.dropzone.addEventListener("dragleave", onDragLeave);
+  els.dropzone.addEventListener("drop", onDrop);
+  document.addEventListener("dragover", onDocumentDragOver);
+  document.addEventListener("drop", onDocumentDrop);
   els.analyzeBtn.addEventListener("click", onAnalyze);
   els.ackCheckbox.addEventListener("change", onAckChange);
   els.reviewForm.addEventListener("submit", onApprove);

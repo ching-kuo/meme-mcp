@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>meme-mcp</title>
     <link rel="stylesheet" href="/static/styles.css">
+    {% block head %}{% endblock %}
   </head>
   <body>
     {% if pat_expires_in_days is not none and pat_expires_in_days >= 0 and pat_expires_in_days < 7 %}

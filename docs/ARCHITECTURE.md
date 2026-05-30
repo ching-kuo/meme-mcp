@@ -95,7 +95,9 @@ work runs.
 ## Web upload surface
 
 `GET /upload` is a single-page, session-authed screen (`web/templates/upload.html` +
-`web/static/upload.js`, vanilla JS, no build step). An unauthenticated or non-allowlisted
+`web/static/upload.js` + `web/static/upload.css`, vanilla JS, no build step; the page-only
+stylesheet loads through a `{% block head %}` in `base.html`, so `/browse` keeps the
+shared-chrome `styles.css` unchanged). An unauthenticated or non-allowlisted
 visitor is 303-redirected to `/auth/login?next=/upload`; only an allowlisted session reaches
 the page, which mints the per-session CSRF token (`web/csrf.py:ensure_csrf_token`) and renders
 it into a `<meta name="csrf-token">` tag. The client previews the chosen file locally via
@@ -115,6 +117,19 @@ PAT authenticators are shared helpers in `auth/session.py` (a PAT never authenti
 route -- the web endpoints call them with no Authorization header). Approval validation in the
 shared service requires a non-empty, non-placeholder template name, a deliberate tightening
 that applies to the PAT `/api/uploads/{id}/approve` path too.
+
+The presentation is a self-contained design system in `upload.css`: CSS custom-property tokens
+with a `prefers-color-scheme` dark theme and a `prefers-reduced-motion` fallback, WCAG AA
+contrast, and line-art icons drawn with CSS `mask` data-URIs (no fonts, no network). The flow
+is choreographed entirely on the client without touching the contract: a drag-or-click
+dropzone (a visually-hidden but keyboard-focusable `<input type="file">`, fronted by a
+document-level guard that swallows stray file drops so a missed target cannot navigate the tab
+away), a file card showing name / size / client-read pixel dimensions, a three-step wayfinder
+driven by a `data-current` phase attribute on the root, an animated analyzing state, and a
+two-column review at >=720px that places the near-duplicate warn banner and the suspect-ack
+gate directly above Approve/Discard. Inline error notices carry `role="alert"`, and focus
+moves to the new step on each transition so keyboard and screen-reader users are not stranded
+on a now-hidden control.
 
 Pending uploads have a 24h TTL. Discard (and abandonment) deletes only the pending row; the
 blob is reclaimed by the daily `gc-uploads` sweep (`cli/gc_uploads.py`, see

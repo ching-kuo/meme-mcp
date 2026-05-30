@@ -1,0 +1,689 @@
+/* ===========================================================================
+   Quiet Craft -- styles for the /upload page only. Loaded via a per-page
+   <link> (see upload.html), so /browse never downloads or is restyled by any
+   of this. The design tokens below are consumed only by .upload-* rules and
+   the themed page body.
+   =========================================================================== */
+:root {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-base: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+  --fs-2xl: 1.75rem;
+
+  --bg: #fbfaf8;
+  --surface: #ffffff;
+  --surface-sunken: #f4f2ee;
+  --text: #1c1a17;
+  --muted: #5c574f;
+  --border: #e2ddd4;
+  --border-strong: #cfc8bc;
+  --accent: #1f6feb;
+  --on-accent: #ffffff;
+  --link: #1a5fcc;
+  --success-bg: #e7f4ec;
+  --success-text: #18603a;
+  --warning-bg: #fbf1da;
+  --warning-text: #7a5200;
+  --danger-bg: #fceded;
+  --danger-text: #a11616;
+  --danger-border: #e8b4b4;
+  --focus: #1545b8;
+
+  --radius: 0.5rem;
+  --radius-lg: 0.75rem;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06);
+
+  /* Line-art icons, alpha-masked and recolored via currentColor (no network). */
+  --icon-plus: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='2.5'%20stroke-linecap='round'%3E%3Cpath%20d='M12%205v14'/%3E%3Cpath%20d='M5%2012h14'/%3E%3C/svg%3E");
+  --icon-check: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='2.5'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M20%206%209%2017l-5-5'/%3E%3C/svg%3E");
+  --icon-alert: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M10.29%203.86%201.82%2018a2%202%200%200%200%201.71%203h16.94a2%202%200%200%200%201.71-3L13.71%203.86a2%202%200%200%200-3.42%200z'/%3E%3Cpath%20d='M12%209v4'/%3E%3Cpath%20d='M12%2017h.01'/%3E%3C/svg%3E");
+  --icon-info: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Ccircle%20cx='12'%20cy='12'%20r='10'/%3E%3Cpath%20d='M12%2016v-4'/%3E%3Cpath%20d='M12%208h.01'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141310;
+    --surface: #1e1c18;
+    --surface-sunken: #1a1814;
+    --text: #f2efea;
+    --muted: #aba499;
+    --border: #34302a;
+    --border-strong: #46413a;
+    --accent: #5c9bff;
+    --on-accent: #141310;
+    --link: #82b4ff;
+    --success-bg: #16301f;
+    --success-text: #7dd6a2;
+    --warning-bg: #2e2510;
+    --warning-text: #e8c77a;
+    --danger-bg: #321414;
+    --danger-text: #f2a6a6;
+    --danger-border: #5a2a2a;
+    --focus: #82b4ff;
+    --shadow-1: none;
+  }
+}
+
+/* The page body is themed only when an upload page is present, via :has(), so
+   the shared chrome in styles.css is never restyled on other pages. */
+body:has(.upload-page) {
+  background: var(--bg);
+  color: var(--text);
+  color-scheme: light dark;
+}
+
+body:has(.upload-page) .site-nav a {
+  color: var(--link);
+}
+
+.upload-page {
+  max-width: 52rem;
+  margin-inline: auto;
+  font-family: var(--font-sans);
+  line-height: 1.5;
+}
+
+.upload-page h1 {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin: 0 0 0.25rem;
+}
+
+.upload-page h2 {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0 0 0.875rem;
+}
+
+.helper {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  margin: 0.25rem 0;
+}
+
+.upload-step {
+  margin-top: 1.5rem;
+}
+
+/* --- Wayfinder ------------------------------------------------------------ */
+.upload-steps {
+  margin: 1rem 0 1.5rem;
+}
+
+.upload-steps ol {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.upload-stepper-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+.upload-stepper-item:not(:last-child)::after {
+  content: "";
+  width: 1.5rem;
+  height: 1px;
+  margin-left: 0.5rem;
+  background: var(--border-strong);
+}
+
+.upload-stepper-dot {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: var(--surface);
+}
+
+.upload-stepper-item[aria-current="step"] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.upload-stepper-item[aria-current="step"] .upload-stepper-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+/* Completed steps, driven by the page's data-current phase. The completed
+   (phase, step) set lives in one selector list; the dot fill is nested so it
+   stays in lockstep. */
+.upload-page[data-current="analyze"] .upload-stepper-item--pick,
+.upload-page[data-current="review"] .upload-stepper-item--pick,
+.upload-page[data-current="done"] .upload-stepper-item--pick,
+.upload-page[data-current="done"] .upload-stepper-item--review {
+  color: var(--text);
+
+  & .upload-stepper-dot {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+}
+
+/* --- Dropzone ------------------------------------------------------------- */
+.upload-dropzone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2.25rem 1.25rem;
+  text-align: center;
+  color: var(--muted);
+  background: var(--surface-sunken);
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.upload-dropzone__icon {
+  width: 28px;
+  height: 28px;
+  background-color: var(--accent);
+  -webkit-mask: var(--icon-plus) no-repeat center / contain;
+  mask: var(--icon-plus) no-repeat center / contain;
+}
+
+.upload-dropzone__title {
+  color: var(--text);
+  font-weight: 500;
+  font-size: var(--fs-base);
+}
+
+.upload-dropzone__title--drop {
+  display: none;
+}
+
+.upload-dropzone__hint {
+  font-size: var(--fs-xs);
+}
+
+.upload-dropzone__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.upload-dropzone.is-dragover {
+  color: var(--text);
+  background: var(--surface);
+  border-style: solid;
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.upload-dropzone.is-dragover .upload-dropzone__title--idle {
+  display: none;
+}
+
+.upload-dropzone.is-dragover .upload-dropzone__title--drop {
+  display: block;
+}
+
+.upload-dropzone:has(.upload-dropzone__input:focus-visible) {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+
+/* --- File card (carried pick -> analyze) ---------------------------------- */
+.upload-filecard {
+  display: flex;
+  gap: 0.875rem;
+  align-items: center;
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.upload-filecard__thumb {
+  flex: 0 0 auto;
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.upload-filecard__meta {
+  min-width: 0;
+  font-size: var(--fs-sm);
+}
+
+.upload-filecard__name {
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-filecard__dims {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+/* --- Analyzing ------------------------------------------------------------ */
+.upload-analyzing {
+  margin-top: 1rem;
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+  color: var(--muted);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-lg);
+}
+
+.upload-analyzing__title {
+  margin: 0.75rem 0 0.25rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.upload-analyzing__hint,
+.upload-analyzing__rm {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.upload-analyzing__rm {
+  display: none;
+}
+
+.upload-analyzing__bars {
+  display: inline-flex;
+  gap: 4px;
+  align-items: flex-end;
+  height: 22px;
+}
+
+.upload-analyzing__bars span {
+  width: 6px;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transform: scaleY(0.4);
+  transform-origin: bottom;
+  animation: upload-bar 1s ease-in-out infinite;
+}
+
+.upload-analyzing__bars span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.upload-analyzing__bars span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.upload-analyzing__sweep {
+  position: relative;
+  height: 3px;
+  margin-top: 1rem;
+  overflow: hidden;
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.upload-analyzing__sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: var(--accent);
+  border-radius: 999px;
+  animation: upload-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes upload-bar {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes upload-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+/* --- Review --------------------------------------------------------------- */
+.upload-review__preview .preview {
+  margin: 0;
+}
+
+.upload-review__preview .preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 18rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.upload-review__caption {
+  margin: 0.5rem 0 0;
+  font-size: var(--fs-sm);
+}
+
+.upload-disclosure {
+  margin-top: 0.75rem;
+  font-size: var(--fs-sm);
+}
+
+.upload-disclosure summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.upload-disclosure p {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+}
+
+.upload-form label {
+  display: block;
+  margin-bottom: 0.875rem;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.upload-req {
+  color: var(--muted);
+}
+
+.upload-form input[type="text"],
+.upload-form textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.3rem;
+  padding: 0.5rem 0.625rem;
+  font-family: var(--font-sans);
+  font-size: 1rem; /* 16px keeps iOS Safari from zooming on focus */
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.upload-form textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+
+.upload-form input[type="text"]:focus-visible,
+.upload-form textarea:focus-visible {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 28%, transparent);
+}
+
+.upload-slots {
+  margin: 0 0 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.upload-slots legend {
+  padding: 0 0.35rem;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.upload-slots ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.upload-slots li {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+/* --- Notices (one system for every inline message) ------------------------ */
+.upload-notice {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 0.75rem 0;
+  padding: 0.625rem 0.875rem;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+}
+
+.upload-notice::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 1.15em;
+  height: 1.15em;
+  margin-top: 0.08em;
+  background-color: currentColor;
+  -webkit-mask: var(--notice-icon) no-repeat center / contain;
+  mask: var(--notice-icon) no-repeat center / contain;
+}
+
+.upload-notice a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.upload-notice--error {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  --notice-icon: var(--icon-alert);
+}
+
+.upload-notice--success {
+  color: var(--success-text);
+  background: var(--success-bg);
+  --notice-icon: var(--icon-check);
+}
+
+.upload-notice--warning {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  --notice-icon: var(--icon-alert);
+}
+
+.upload-notice--info {
+  color: var(--muted);
+  background: var(--surface-sunken);
+  border-left: 3px solid var(--border-strong);
+  --notice-icon: var(--icon-info);
+}
+
+/* Suspect-ack gate: heavier than the non-blocking warn banner, so it is
+   obvious at a glance which message actually locks Approve. */
+.upload-ack {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 0.75rem 0;
+  padding: 0.75rem 0.875rem;
+  font-size: var(--fs-sm);
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius);
+}
+
+.upload-ack input {
+  margin-top: 0.2rem;
+}
+
+/* --- Buttons -------------------------------------------------------------- */
+.upload-btn {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--on-accent);
+  text-decoration: none;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.upload-btn:hover {
+  filter: brightness(0.96);
+}
+
+.upload-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+
+.upload-btn:disabled {
+  color: var(--muted);
+  background: var(--surface-sunken);
+  border-color: var(--border);
+  cursor: not-allowed;
+  filter: none;
+}
+
+.upload-btn--ghost {
+  color: var(--text);
+  background: transparent;
+  border-color: var(--border-strong);
+}
+
+.upload-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+/* --- Done ----------------------------------------------------------------- */
+.upload-done__sub {
+  margin: 0.25rem 0 1rem;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.upload-done__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* --- Resume --------------------------------------------------------------- */
+.upload-resume {
+  margin-top: 1.5rem;
+}
+
+.upload-resume .upload-btn {
+  margin-top: 0.25rem;
+}
+
+/* --- Phase-driven visibility --------------------------------------------- */
+.upload-page[data-current="analyze"] .upload-dropzone,
+.upload-page[data-current="analyze"] [data-step="pick"] .upload-actions {
+  display: none;
+}
+
+/* --- Two-column review and reachable actions (>= 720px) ------------------- */
+@media (min-width: 720px) {
+  .upload-review {
+    display: grid;
+    grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
+    column-gap: 1.5rem;
+  }
+
+  .upload-review__preview {
+    grid-column: 1;
+    align-self: start;
+    position: sticky;
+    top: 1rem;
+  }
+
+  .upload-review__fields {
+    grid-column: 2;
+  }
+
+  .upload-slots,
+  .upload-review [data-duplicate-warning],
+  .upload-review [data-ack-row],
+  .upload-review [data-approve-error],
+  .upload-actions {
+    grid-column: 1 / -1;
+  }
+
+  .upload-actions {
+    position: sticky;
+    bottom: 0;
+    margin-top: 1.25rem;
+    padding: 0.75rem 0;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* --- Reduced motion: freeze every animation, keep state legible ----------- */
+@media (prefers-reduced-motion: reduce) {
+  .upload-dropzone {
+    transition: none;
+  }
+
+  .upload-analyzing__bars,
+  .upload-analyzing__sweep,
+  .upload-analyzing__title,
+  .upload-analyzing__hint {
+    display: none;
+  }
+
+  .upload-analyzing__rm {
+    display: block;
+  }
+
+  .upload-analyzing__bars span,
+  .upload-analyzing__sweep::after {
+    animation: none;
+  }
+}
