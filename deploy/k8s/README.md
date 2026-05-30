@@ -3,6 +3,15 @@
 Example manifests for the hosted deployment path. Copy `secret.example.yaml` to `secret.yaml`
 locally; `secret.yaml` is gitignored.
 
+## Image
+
+The manifests reference `ghcr.io/ching-kuo/meme-mcp:latest`, published by CI
+(`.github/workflows/build-and-push.yml`) on pushes to `main`, `v*` tags, and manual runs.
+Pin a specific build with the `sha-<short>` or `MAJOR.MINOR.PATCH` tag instead of `latest` for
+reproducible rollouts. The GHCR package is private by default; make it public or add an
+`imagePullSecret` so the cluster can pull it. To use a different registry, override every
+`image:` field (Deployment plus both CronJobs).
+
 ## Storage and database
 
 Two supported topologies:
@@ -114,7 +123,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: seed
-          image: meme-mcp:latest
+          image: ghcr.io/ching-kuo/meme-mcp:latest
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true

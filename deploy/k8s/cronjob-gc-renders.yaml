@@ -16,7 +16,7 @@ spec:
             fsGroup: 10001
           containers:
             - name: gc
-              image: meme-mcp:latest
+              image: ghcr.io/ching-kuo/meme-mcp:latest
               command: ["uv", "run", "meme-mcp", "gc-renders", "--ttl-days", "30"]
               envFrom:
                 - configMapRef:

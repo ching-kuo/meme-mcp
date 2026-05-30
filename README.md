@@ -63,6 +63,23 @@ Useful routes:
 - `POST /api/mcp/record_outcome`
 - `GET /renders/{prefix}/{filename}`
 
+## Container image
+
+CI builds and publishes the image to GitHub Container Registry on every push to `main`, on
+`v*` tags, and on manual `workflow_dispatch` runs. The push is gated on the lint/type-check/test
+job (`.github/workflows/build-and-push.yml`), so a red commit never publishes. Images are
+`linux/amd64`.
+
+```bash
+docker pull ghcr.io/ching-kuo/meme-mcp:latest
+```
+
+Tags: `latest` (tip of `main`), the branch name, `sha-<short>`, and `MAJOR.MINOR.PATCH` /
+`MAJOR.MINOR` on `v*` releases. The manifests under `deploy/k8s/` reference
+`ghcr.io/ching-kuo/meme-mcp:latest`; override the `image:` to pull from a private registry.
+GHCR packages are private by default, so make the package public (or attach an
+`imagePullSecret`) before an unauthenticated cluster can pull it.
+
 ## MCP client snippets
 
 Codex CLI:
