@@ -6,7 +6,7 @@ Private meme retrieval and rendering service with:
 - compatibility JSON routes under `/api/mcp/*`
 - GitHub OAuth browser sessions for friends
 - bearer PAT auth for MCP clients
-- friend upload analysis/review/approval
+- friend upload analysis/review/approval via a browser `/upload` page or the PAT API
 - SQLite + filesystem storage by default
 
 ## Local setup

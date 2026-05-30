@@ -179,6 +179,27 @@ Tune `--ttl-days` or switch to a max-byte LRU budget by editing the `command:` a
 `["uv", "run", "meme-mcp", "gc-renders", "--max-bytes", "5368709120"]` for a 5 GiB cap). Use
 `--dry-run` locally to preview the deletion set before changing the schedule.
 
+## Pending-upload GC
+
+`cronjob-gc-uploads.yaml` schedules a daily sweep over expired pending-upload rows (24h TTL)
+and their orphaned image blobs. Discarding or abandoning an upload deletes only the pending
+row; this sweep is the sole path that reclaims the blob. It is reference-aware -- a blob is
+deleted only when no template row and no surviving pending row (live, or expired-but-within
+the grace window) references it, so a content-addressed blob shared across uploads is never
+removed while anything still needs it. `analyze` records the pending row before writing the
+blob, so a concurrent re-upload's reference is visible to the sweep. Unlike render GC it
+builds the image store via `make_image_store_from_settings`, so it reclaims blobs on both the
+filesystem and S3 backends (a filesystem-only construction would silently no-op on S3).
+
+Apply once per environment:
+
+```bash
+kubectl apply -f deploy/k8s/cronjob-gc-uploads.yaml
+```
+
+Use `meme-mcp gc-uploads --dry-run` locally to preview the row/blob counts before changing the
+schedule.
+
 ## PAT administration
 
 `meme-mcp pat` runs against the same SQLite (or Postgres) database the Deployment uses. Issue and

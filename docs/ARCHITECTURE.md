@@ -110,7 +110,18 @@ the local preview. Analyze bodies are capped by the pre-buffer `BodySizeGuardMid
 client renders the standard JSON error envelope inline (size/type rejection, exact-duplicate
 409, near-duplicate non-blocking warn, VLM-suspect acknowledgment gate, rate-limit, CSRF
 reject, opaque `NOT_FOUND`, and a 401 session-expired prompt that preserves edited fields).
-The `/upload` nav link in `base.html` renders only for an allowlisted session.
+The `/upload` nav link in `base.html` renders only for an allowlisted session. The session and
+PAT authenticators are shared helpers in `auth/session.py` (a PAT never authenticates a web
+route -- the web endpoints call them with no Authorization header). Approval validation in the
+shared service requires a non-empty, non-placeholder template name, a deliberate tightening
+that applies to the PAT `/api/uploads/{id}/approve` path too.
+
+Pending uploads have a 24h TTL. Discard (and abandonment) deletes only the pending row; the
+blob is reclaimed by the daily `gc-uploads` sweep (`cli/gc_uploads.py`, see
+`deploy/k8s/README.md`), which is reference-aware -- it deletes a content-addressed blob only
+when no template and no surviving pending row references it. `analyze_image` records the
+pending row (from `ImageStore.path_for`) before writing the blob, so a re-upload's reference is
+observable to the sweep before the bytes land; the grace window is a defense-in-depth margin.
 
 ## Storage backends
 
