@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 from PIL import Image
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.depends import Friend, require_pat, require_write
@@ -52,12 +52,16 @@ _ANALYZE_PATHS = frozenset({"/api/uploads/analyze", "/upload/analyze"})
 
 
 class BodySizeGuardMiddleware:
-    """Reject oversized analyze POSTs on Content-Length before buffering.
+    """Bound the buffered body of analyze POSTs before the route parses it.
 
     A pure-ASGI middleware (not BaseHTTPMiddleware) so the rejection happens
     before Starlette parses or buffers the request body. It only inspects POSTs
     to the two analyze paths (KTD11/F01); every other request passes through
-    untouched. Returns the standard JSON error envelope rather than a 500.
+    untouched. A present, oversized Content-Length is rejected immediately; for
+    requests with no/understated Content-Length (e.g. Transfer-Encoding: chunked)
+    the body is read here and capped at max_bytes -- rejecting on overflow -- so a
+    chunked client cannot drive request.json() into unbounded buffering. Returns
+    the standard JSON error envelope rather than a 500.
     """
 
     def __init__(self, app: ASGIApp, max_bytes: int) -> None:
@@ -65,21 +69,48 @@ class BodySizeGuardMiddleware:
         self.max_bytes = max_bytes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and scope.get("method") == "POST":
-            path = scope.get("path", "")
-            if path in _ANALYZE_PATHS:
-                content_length = _header_value(scope, b"content-length")
-                if content_length is not None and content_length > self.max_bytes:
-                    response = JSONResponse(
-                        make_error(
-                            ErrorCode.UPLOAD_REJECTED,
-                            [{"field": "file", "reason": "size"}],
-                        ),
-                        status_code=status_for_error(ErrorCode.UPLOAD_REJECTED),
-                    )
-                    await response(scope, receive, send)
+        if (
+            scope["type"] == "http"
+            and scope.get("method") == "POST"
+            and scope.get("path", "") in _ANALYZE_PATHS
+        ):
+            content_length = _header_value(scope, b"content-length")
+            if content_length is not None and content_length > self.max_bytes:
+                await self._reject(scope, receive, send)
+                return
+            body = bytearray()
+            more_body = True
+            while more_body:
+                message = await receive()
+                if message["type"] == "http.disconnect":
                     return
+                if message["type"] != "http.request":
+                    continue
+                body.extend(message.get("body", b""))
+                if len(body) > self.max_bytes:
+                    await self._reject(scope, receive, send)
+                    return
+                more_body = message.get("more_body", False)
+            buffered = bytes(body)
+            delivered = False
+
+            async def replay() -> Message:
+                nonlocal delivered
+                if not delivered:
+                    delivered = True
+                    return {"type": "http.request", "body": buffered, "more_body": False}
+                return {"type": "http.disconnect"}
+
+            await self.app(scope, replay, send)
+            return
         await self.app(scope, receive, send)
+
+    async def _reject(self, scope: Scope, receive: Receive, send: Send) -> None:
+        response = JSONResponse(
+            make_error(ErrorCode.UPLOAD_REJECTED, [{"field": "file", "reason": "size"}]),
+            status_code=status_for_error(ErrorCode.UPLOAD_REJECTED),
+        )
+        await response(scope, receive, send)
 
 
 def _header_value(scope: Scope, name: bytes) -> int | None:
