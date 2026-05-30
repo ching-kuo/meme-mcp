@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block body %}
+  <main class="landing">
+    <h1>meme-mcp</h1>
+    <p class="tagline">A private meme studio for friends &mdash; find the right template, fill it in, and ship it.</p>
+    {% if web_session %}
+      <p>Signed in as <strong>{{ friend_login }}</strong>.</p>
+      <p class="cta-row">
+        <a class="cta cta-primary" href="/browse">Browse templates</a>
+        <a class="cta" href="/upload">Upload a template</a>
+      </p>
+    {% else %}
+      <p>Sign in with GitHub to browse the template library and contribute your own.</p>
+      <p class="cta-row">
+        <a class="cta cta-primary" href="/auth/login?next=/browse">Sign in with GitHub</a>
+      </p>
+    {% endif %}
+    <section class="landing-about">
+      <h2>For MCP clients</h2>
+      <p>Connect an agent to the hosted MCP endpoint at <code>/mcp</code> with a bearer PAT. See the README for client snippets.</p>
+    </section>
+  </main>
+{% endblock %}

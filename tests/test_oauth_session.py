@@ -59,8 +59,10 @@ def test_oauth_callback_rejects_non_allowlisted_user(tmp_path) -> None:
     assert "operator" in response.text
     # The restricted page is HTML, not the JSON error envelope.
     assert "FORBIDDEN_NOT_ALLOWLISTED" not in response.text
-    # No session was created, so a protected page stays unauthorized.
-    assert client.get("/browse").status_code == 401
+    # No session was created, so /browse bounces the visitor to GitHub login.
+    browse = client.get("/browse", follow_redirects=False)
+    assert browse.status_code == 303
+    assert browse.headers["location"] == "/auth/login?next=/browse"
 
 
 def test_oauth_callback_honors_next_through_session_clear(tmp_path) -> None:

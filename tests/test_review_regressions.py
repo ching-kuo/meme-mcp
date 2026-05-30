@@ -81,7 +81,7 @@ def test_app_wires_web_mcp_ready_and_authenticated_renders(tmp_path) -> None:
     client = TestClient(app)
     assert client.get("/readyz").json() == {"ok": True}
     assert PIL.Image.MAX_IMAGE_PIXELS == 40 * 1024 * 1024
-    assert client.get("/browse").status_code == 401
+    assert client.get("/browse", follow_redirects=False).status_code == 303
     assert client.get("/api/mcp/tools").status_code == 401
     authed = {"Authorization": f"Bearer {token}"}
     assert client.get("/api/mcp/tools", headers=authed).json()["data"]["tools"] == [

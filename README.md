@@ -52,9 +52,10 @@ uv run uvicorn meme_mcp.app:create_configured_app --factory --host 127.0.0.1 --p
 
 Useful routes:
 
+- `GET /` (public landing page)
 - `GET /healthz`
 - `GET /readyz`
-- `GET /browse`
+- `GET /browse` (HTML; an anonymous browser is redirected to GitHub login)
 - `GET /api/templates?q=deploy`
 - `POST /api/templates/{template_id}/preview`
 - `GET /api/mcp/tools`
@@ -131,7 +132,7 @@ Implemented:
 - per-friend rate limiting on `find`/`generate`/`record_outcome` across both HTTP and MCP transports
 - embedding model-drift startup guard (refuses to boot if persisted vectors disagree with `EMBEDDING_MODEL`)
 - global `DecompressionBombWarning` escalation
-- web browse/search/preview routes
+- public landing page and web browse/search/preview routes
 - operator CLI for allowlist, PAT issue, seed, and reindex
 - Docker and Kubernetes deployment examples
 

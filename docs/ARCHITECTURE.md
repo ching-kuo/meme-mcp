@@ -74,8 +74,12 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
 
 Two auth surfaces share one tree:
 
-- Web (`/browse`, `/auth/*`, `/api/templates`, `/renders/*` via session) uses GitHub OAuth with
-  PKCE (S256) and a re-validated allowlist on every request. The token exchange targets
+- Web (`/` landing, `/browse`, `/auth/*`, `/api/templates`, `/renders/*` via session) uses GitHub
+  OAuth with PKCE (S256) and a re-validated allowlist on every request. `GET /` is a public
+  landing page (no auth) that points anonymous visitors at GitHub login; an anonymous browser
+  hitting `/browse` (no PAT header and no allowlisted session) is 303-redirected to
+  `/auth/login?next=/browse`, the same pattern as `/upload`, rather than handed a JSON 401. A PAT
+  header still authenticates `/browse` programmatically. The token exchange targets
   `https://github.com/login/oauth/access_token` and the user-profile fetch targets
   `https://api.github.com/user` — two distinct hosts, not a shared `base_url` client.
 - MCP (`/mcp` and `/api/mcp/*`) uses a static PAT in `Authorization: Bearer …`. Verification is

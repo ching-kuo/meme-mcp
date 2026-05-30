@@ -80,15 +80,43 @@ def test_upload_nav_link_renders_for_allowlisted_session(tmp_path) -> None:
     assert 'href="/upload"' in response.text
 
 
-def test_upload_nav_link_absent_for_anonymous_browse(tmp_path) -> None:
+def test_anonymous_browse_redirects_to_login(tmp_path) -> None:
     app = create_app(good_settings(tmp_path))
     client = TestClient(app)
 
-    # Anonymous /browse is unauthorized, so it never renders the nav at all.
-    response = client.get("/browse")
+    # Anonymous /browse is bounced through GitHub login (like /upload), so it
+    # renders no page -- and thus no nav -- at all.
+    response = client.get("/browse", follow_redirects=False)
 
-    assert response.status_code == 401
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login?next=/browse"
+
+
+def test_landing_page_renders_sign_in_for_anonymous(tmp_path) -> None:
+    app = create_app(good_settings(tmp_path))
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    # Anonymous visitor is offered GitHub login, not the app shell.
+    assert 'href="/auth/login?next=/browse"' in response.text
     assert 'href="/upload"' not in response.text
+
+
+def test_landing_page_offers_app_links_for_session(tmp_path) -> None:
+    app = create_app(good_settings(tmp_path))
+    app.state.allowlist.add("friend")
+    client = TestClient(app)
+    client.cookies.set("session", _session_cookie(app, "friend"))
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "friend" in response.text
+    assert 'href="/browse"' in response.text
+    assert 'href="/upload"' in response.text
 
 
 def test_template_api_searches_and_previews_without_persistence(tmp_path) -> None:

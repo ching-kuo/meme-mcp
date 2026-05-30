@@ -245,6 +245,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def not_found_handler(_request: Request, _exc: Exception) -> JSONResponse:
         return JSONResponse(make_error(ErrorCode.NOT_FOUND, []), status_code=404)
 
+    @app.get("/")
+    async def landing(request: Request) -> Response:
+        # Public entry point. The bare domain previously matched no route (a 404
+        # the gateway could stall on); serve a real page that points anonymous
+        # visitors at GitHub login and signed-in friends at the app.
+        login = session_login(app, request) if hasattr(app.state, "settings") else None
+        return templates.TemplateResponse(
+            request,
+            "landing.html",
+            {
+                "web_session": login is not None,
+                "friend_login": login,
+                "pat_expires_in_days": _pat_expires_in_days(app, login) if login else None,
+            },
+        )
+
     @app.get("/healthz")
     async def healthz() -> dict[str, bool]:
         return {"ok": True}
@@ -259,6 +275,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         q: str = "",
         authorization: str | None = Header(default=None),
     ) -> Response:
+        # A browser visitor with neither a PAT header nor a web session is sent
+        # through GitHub login (like /upload), not handed a JSON 401 it cannot
+        # act on. A present-but-invalid PAT still surfaces as 401 below, and the
+        # programmatic equivalent (/api/templates) keeps returning 401. The
+        # settings guard mirrors the landing route so a settings-less test app
+        # never dereferences app.state.web_allowlist here.
+        if authorization is None and (
+            not hasattr(app.state, "settings") or session_login(app, request) is None
+        ):
+            return RedirectResponse("/auth/login?next=/browse", status_code=303)
         friend = friend_from_request_or_header(app, request, authorization)
         app.state.find_limiter.hit(friend.github_login)
         query = q.strip()
