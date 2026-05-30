@@ -21,7 +21,7 @@ from typing import Any
 import itsdangerous
 from fastapi.testclient import TestClient
 
-from meme_mcp.app import MAX_ANALYZE_BODY_BYTES, create_app
+from meme_mcp.app import MAX_ANALYZE_BODY_BYTES, BodySizeGuardMiddleware, create_app
 from meme_mcp.auth.pat import issue_pat
 from meme_mcp.db.templates import TemplateCreate
 from meme_mcp.limits import WindowedRateLimiter
@@ -181,8 +181,10 @@ def test_analyze_rate_limited_stores_nothing(tmp_path) -> None:
 
     assert response.status_code == 429
     assert response.json()["error_code"] == "RATE_LIMITED"
-    # Nothing was persisted.
-    assert app.state.pending_uploads.expired() == []
+    # Nothing was persisted: the limiter fires before the row is created, so no live
+    # pending row exists (expired() can never observe a fresh 24h-TTL row), and no
+    # template.
+    assert app.state.pending_uploads.live_image_paths() == set()
     assert app.state.templates.list_rows() == []
 
 
@@ -298,6 +300,52 @@ def test_analyze_near_duplicate_warns_without_blocking(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Service-error envelopes on the web door (parity with the PAT door)
+# ---------------------------------------------------------------------------
+
+
+def test_analyze_rejects_base64_garbage(tmp_path) -> None:
+    # The shared service raises the INVALID_INPUT base64 envelope; the web door must
+    # surface it identically to the PAT door (the JS error contract maps it).
+    app = _make_app(tmp_path)
+    client = _session_client(app)
+
+    body = {
+        "filename": "deploy.png",
+        "mime": "image/png",
+        "content_base64": "not base64!!",
+        "title_hint": "Deploy Face",
+    }
+    response = client.post("/upload/analyze", headers=_csrf_headers(), json=body)
+
+    assert response.status_code == 400
+    envelope = response.json()
+    assert envelope["error_code"] == "INVALID_INPUT"
+    assert envelope["errors"] == [{"field": "content_base64", "reason": "base64"}]
+    assert app.state.pending_uploads.live_image_paths() == set()
+
+
+def test_analyze_rejects_mime_mismatch(tmp_path) -> None:
+    # PNG bytes declared as JPEG -> detected-vs-declared mismatch through the service.
+    app = _make_app(tmp_path)
+    client = _session_client(app)
+
+    body = {
+        "filename": "deploy.jpg",
+        "mime": "image/jpeg",
+        "content_base64": base64.b64encode(png_bytes()).decode(),
+        "title_hint": "Deploy Face",
+    }
+    response = client.post("/upload/analyze", headers=_csrf_headers(), json=body)
+
+    assert response.status_code == 400
+    envelope = response.json()
+    assert envelope["error_code"] == "UPLOAD_REJECTED"
+    assert envelope["errors"] == [{"field": "file", "reason": "mime_mismatch"}]
+    assert app.state.pending_uploads.live_image_paths() == set()
+
+
+# ---------------------------------------------------------------------------
 # Unauthenticated and PAT-rejection
 # ---------------------------------------------------------------------------
 
@@ -375,6 +423,72 @@ def test_body_guard_ignores_non_analyze_routes(tmp_path) -> None:
         content=b"",
     )
     assert response.status_code == 200
+
+
+async def test_body_guard_rejects_chunked_body_without_content_length() -> None:
+    # A POST to an analyze path with NO Content-Length (e.g. Transfer-Encoding:
+    # chunked) must still be capped: the guard counts bytes as they arrive and
+    # rejects on overflow rather than letting request.json() buffer unbounded.
+    reached = False
+
+    async def inner_app(scope: Any, receive: Any, send: Any) -> None:
+        nonlocal reached
+        reached = True
+
+    guard = BodySizeGuardMiddleware(inner_app, max_bytes=MAX_ANALYZE_BODY_BYTES)
+    scope = {"type": "http", "method": "POST", "path": "/upload/analyze", "headers": []}
+    chunk = b"x" * (1024 * 1024)
+    remaining = {"bytes": MAX_ANALYZE_BODY_BYTES + 2 * len(chunk)}
+
+    async def receive() -> dict[str, Any]:
+        if remaining["bytes"] > 0:
+            remaining["bytes"] -= len(chunk)
+            return {"type": "http.request", "body": chunk, "more_body": remaining["bytes"] > 0}
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    messages: list[dict[str, Any]] = []
+
+    async def send(message: dict[str, Any]) -> None:
+        messages.append(message)
+
+    await guard(scope, receive, send)
+
+    assert reached is False  # inner app (and request.json) never reached
+    start = next(m for m in messages if m["type"] == "http.response.start")
+    assert start["status"] == 400
+    body = b"".join(m.get("body", b"") for m in messages if m["type"] == "http.response.body")
+    assert b"UPLOAD_REJECTED" in body
+
+
+async def test_body_guard_replays_small_chunked_body_to_app() -> None:
+    # A within-limit body with no Content-Length is buffered, then replayed intact to
+    # the downstream app so the analyze route still parses it.
+    received = bytearray()
+
+    async def inner_app(scope: Any, receive: Any, send: Any) -> None:
+        more = True
+        while more:
+            message = await receive()
+            received.extend(message.get("body", b""))
+            more = message.get("more_body", False)
+
+    guard = BodySizeGuardMiddleware(inner_app, max_bytes=MAX_ANALYZE_BODY_BYTES)
+    scope = {"type": "http", "method": "POST", "path": "/upload/analyze", "headers": []}
+    payload = b'{"ok": true}'
+    chunks = [payload[:5], payload[5:]]
+
+    async def receive() -> dict[str, Any]:
+        if chunks:
+            part = chunks.pop(0)
+            return {"type": "http.request", "body": part, "more_body": bool(chunks)}
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict[str, Any]) -> None:
+        pass
+
+    await guard(scope, receive, send)
+
+    assert bytes(received) == payload
 
 
 # ---------------------------------------------------------------------------
