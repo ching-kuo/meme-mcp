@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 import base64
+import json
 
+import itsdangerous
 from fastapi.testclient import TestClient
 
 from meme_mcp.app import create_app
 from meme_mcp.auth.pat import issue_pat
 from meme_mcp.db.templates import TemplateCreate
 from tests.test_upload_flow import good_settings, png_bytes
+
+
+def _session_cookie(app, login: str) -> str:
+    secret = app.state.settings.session_secret.get_secret_value()
+    signer = itsdangerous.TimestampSigner(secret)
+    data = base64.b64encode(json.dumps({"github_login": login}).encode())
+    return signer.sign(data).decode()
 
 
 def authed_client(tmp_path) -> tuple[TestClient, dict[str, str]]:
@@ -46,6 +55,40 @@ def test_browse_renders_authenticated_template_list(tmp_path) -> None:
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "Deploy Face" in response.text
+
+
+def test_upload_nav_link_absent_for_pat_authed_browse(tmp_path) -> None:
+    # A PAT-authenticated /browse caller holds no web session, so the /upload
+    # nav link must not render even though friend_login is set.
+    client, headers = authed_client(tmp_path)
+
+    response = client.get("/browse", headers=headers)
+
+    assert response.status_code == 200
+    assert 'href="/upload"' not in response.text
+
+
+def test_upload_nav_link_renders_for_allowlisted_session(tmp_path) -> None:
+    app = create_app(good_settings(tmp_path))
+    app.state.allowlist.add("friend")
+    client = TestClient(app)
+    client.cookies.set("session", _session_cookie(app, "friend"))
+
+    response = client.get("/browse")
+
+    assert response.status_code == 200
+    assert 'href="/upload"' in response.text
+
+
+def test_upload_nav_link_absent_for_anonymous_browse(tmp_path) -> None:
+    app = create_app(good_settings(tmp_path))
+    client = TestClient(app)
+
+    # Anonymous /browse is unauthorized, so it never renders the nav at all.
+    response = client.get("/browse")
+
+    assert response.status_code == 401
+    assert 'href="/upload"' not in response.text
 
 
 def test_template_api_searches_and_previews_without_persistence(tmp_path) -> None:

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from typing import Any
 
 import itsdangerous
@@ -400,3 +401,93 @@ def test_discard_removes_row_keeps_blob(tmp_path) -> None:
         app.state.pending_uploads.get(upload_id, "friend")
     # The blob remains (reclamation is the grace-windowed gc-uploads sweep).
     assert app.state.image_store.get(image_path)
+
+
+# ---------------------------------------------------------------------------
+# U8: GET /upload page gating and content
+# ---------------------------------------------------------------------------
+
+
+def _csrf_from_page(html: str) -> str:
+    match = re.search(r'<meta name="csrf-token" content="([^"]+)">', html)
+    assert match is not None, "CSRF meta tag missing from /upload page"
+    return match.group(1)
+
+
+def test_get_upload_unauthenticated_redirects_to_login(tmp_path) -> None:
+    app = _make_app(tmp_path)
+    client = TestClient(app)
+
+    response = client.get("/upload", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login?next=/upload"
+
+
+def test_get_upload_authenticated_renders_page(tmp_path) -> None:
+    app = _make_app(tmp_path)
+    # Session without a CSRF token yet; GET /upload must mint one.
+    client = _session_client(app, csrf=None)
+
+    response = client.get("/upload")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    html = response.text
+    # A CSRF token is minted and rendered into the meta tag.
+    token = _csrf_from_page(html)
+    assert token
+    # Helper text covers formats, the 10 MB cap, the slow-VLM note, and the
+    # EXIF/re-encode disclosure.
+    assert "PNG" in html and "JPEG" in html and "WebP" in html
+    assert "10 MB" in html
+    assert "several seconds" in html
+    assert "EXIF" in html and "re-encoded" in html
+    # A <noscript> block states the flow requires JavaScript.
+    assert "<noscript>" in html
+    assert "JavaScript" in html
+
+
+def test_get_upload_renders_nav_link(tmp_path) -> None:
+    app = _make_app(tmp_path)
+    client = _session_client(app, csrf=None)
+
+    response = client.get("/upload")
+
+    assert 'href="/upload"' in response.text
+
+
+# ---------------------------------------------------------------------------
+# U8: browserless integration of the documented client contract
+# ---------------------------------------------------------------------------
+
+
+def test_browserless_analyze_then_approve_round_trip(tmp_path) -> None:
+    app = _make_app(tmp_path)
+    client = _session_client(app, csrf=None)
+
+    # 1. Render the page and read the CSRF token exactly as the client would.
+    page = client.get("/upload")
+    token = _csrf_from_page(page.text)
+    headers = _csrf_headers(token)
+
+    # 2. POST the analyze JSON the client builds (base64 content + declared mime).
+    analyzed = client.post("/upload/analyze", headers=headers, json=_analyze_body())
+    assert analyzed.status_code == 200
+    data = analyzed.json()["data"]
+    pending_id = data["pending_upload_id"]
+    assert pending_id
+
+    # 3. POST the approve JSON with the (edited) metadata the client collects.
+    approved = client.post(
+        f"/upload/approve/{pending_id}",
+        headers=headers,
+        json={"metadata": data["metadata"], "ack_suspect": False},
+    )
+    assert approved.status_code == 200
+    template_id = approved.json()["data"]["template_id"]
+
+    # The round trip produced a friend-sourced template named from the metadata.
+    template = app.state.templates.get(template_id)
+    assert template.source == "friend"
+    assert template.name == "Deploy Face"

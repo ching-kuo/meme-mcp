@@ -40,7 +40,7 @@ from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_
 from meme_mcp.upload.dedupe import DuplicateIndex
 from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pending
 from meme_mcp.vlm.client import VLMClient
-from meme_mcp.web.csrf import require_csrf, safe_next
+from meme_mcp.web.csrf import ensure_csrf_token, require_csrf, safe_next
 from meme_mcp.web.upload_routes import register_upload_routes
 
 # Pre-buffer body-size cap for the analyze endpoints. A 10 MB image base64
@@ -250,6 +250,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "templates": template_rows,
                 "friend_login": friend.github_login,
                 "pat_expires_in_days": _pat_expires_in_days(app, friend.github_login),
+                "web_session": _has_web_session(app, request),
+            },
+        )
+
+    @app.get("/upload")
+    async def upload_page(request: Request) -> Response:
+        # Session-gated: an unauthenticated or non-allowlisted visitor is sent
+        # through login and back to a validated /upload (KTD9/U6). Only an
+        # allowlisted session reaches the page, which mints the CSRF token the
+        # client reads from the meta tag (login clears the session, so the token
+        # must be (re)minted here -- KTD4/U2).
+        login = request.session.get("github_login")
+        if not isinstance(login, str) or not app.state.web_allowlist.is_allowlisted(login):
+            return RedirectResponse("/auth/login?next=/upload", status_code=303)
+        csrf_token = ensure_csrf_token(request.session)
+        return templates.TemplateResponse(
+            request,
+            "upload.html",
+            {
+                "csrf_token": csrf_token,
+                "friend_login": login,
+                "pat_expires_in_days": _pat_expires_in_days(app, login),
+                "web_session": True,
             },
         )
 
@@ -296,6 +319,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "operator_github_login": app.state.settings.operator_github_login,
                     "pat_expires_in_days": None,
                     "friend_login": None,
+                    "web_session": False,
                 },
                 status_code=403,
             )
@@ -520,6 +544,18 @@ def _pat_expires_in_days(app: FastAPI, login: str) -> int | None:
         return None
     delta = expires_at - datetime.now(UTC)
     return max(0, delta.days)
+
+
+def _has_web_session(app: FastAPI, request: Request) -> bool:
+    """True only for an allowlisted GitHub session (not a PAT-authed request).
+
+    The ``/upload`` nav link is gated on this rather than on ``friend_login``,
+    because ``/browse`` also serves PAT-authenticated callers (who set
+    ``friend_login`` but hold no web session and would be bounced from
+    ``/upload``).
+    """
+    login = request.session.get("github_login")
+    return isinstance(login, str) and app.state.web_allowlist.is_allowlisted(login)
 
 
 def _friend_from_header(app: FastAPI, authorization: str | None) -> Friend:

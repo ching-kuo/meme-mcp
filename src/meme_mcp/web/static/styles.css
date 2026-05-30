@@ -15,3 +15,96 @@ body {
   border-radius: 0.75rem;
   padding: 1rem;
 }
+
+.site-nav {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.upload-page {
+  max-width: 40rem;
+}
+
+.helper {
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.helper-disclosure {
+  font-style: italic;
+}
+
+.upload-step {
+  margin-top: 1.5rem;
+}
+
+.file-field,
+.review label {
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.review input[type="text"],
+.review textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.preview img {
+  max-width: 100%;
+  max-height: 18rem;
+  border: 1px solid #ddd;
+  border-radius: 0.5rem;
+}
+
+.spinner {
+  margin-top: 1rem;
+  color: #555;
+}
+
+.slots {
+  border: 1px solid #ddd;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.ack {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+button.secondary {
+  background: transparent;
+  border: 1px solid #999;
+}
+
+.notice {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+}
+
+.notice-error {
+  background: #fdeaea;
+  color: #8a1f1f;
+}
+
+.notice-success {
+  background: #eafaef;
+  color: #1f6a37;
+}
+
+.banner-warning {
+  background: #fff7e6;
+  color: #7a5200;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+}

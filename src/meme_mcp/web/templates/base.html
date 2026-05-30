@@ -13,6 +13,12 @@
         Re-issue via <code>meme-mcp pat issue {{ friend_login }}</code> to avoid losing access.
       </div>
     {% endif %}
+    {% if web_session %}
+      <nav class="site-nav" aria-label="Primary">
+        <a href="/browse">Browse</a>
+        <a href="/upload">Upload</a>
+      </nav>
+    {% endif %}
     {% block body %}{% endblock %}
   </body>
 </html>

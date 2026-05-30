@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block body %}
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <main class="upload-page" data-upload-root>
+    <h1>Upload a template</h1>
+
+    <noscript>
+      <p class="notice notice-error">
+        This page needs JavaScript. The upload flow previews your image,
+        analyzes it, and lets you edit the proposed metadata entirely in the
+        browser, so it cannot run with JavaScript disabled.
+      </p>
+    </noscript>
+
+    <p class="helper">
+      Accepted formats: PNG, JPEG, or WebP, up to 10 MB. After you analyze,
+      describing the image may take several seconds while the model inspects it.
+    </p>
+    <p class="helper helper-disclosure">
+      The stored template is EXIF-stripped and re-encoded, so the saved image
+      may differ slightly from the local preview shown here.
+    </p>
+
+    <section class="upload-step" data-step="pick">
+      <label class="file-field">
+        Choose an image
+        <input type="file" accept="image/png,image/jpeg,image/webp" data-file-input>
+      </label>
+      <div class="preview" data-preview hidden>
+        <img alt="Selected image preview" data-preview-img>
+      </div>
+      <p class="notice notice-error" data-pick-error hidden></p>
+      <button type="button" data-analyze-btn disabled>Analyze</button>
+    </section>
+
+    <div class="spinner" data-spinner hidden role="status">
+      Analyzing the image. This may take several seconds.
+    </div>
+
+    <p class="notice notice-error" data-analyze-error hidden></p>
+
+    <section class="upload-step review" data-step="review" hidden>
+      <h2>Proposed metadata</h2>
+
+      <div class="banner banner-warning" data-duplicate-warning hidden role="status"></div>
+
+      <form data-review-form>
+        <label>
+          Name
+          <input type="text" name="name" data-field="name" required>
+        </label>
+        <label>
+          Description
+          <textarea name="description" data-field="description" rows="3"></textarea>
+        </label>
+        <label>
+          Emotion
+          <input type="text" name="emotion" data-field="emotion">
+        </label>
+        <label>
+          Usage context
+          <input type="text" name="usage_context" data-field="usage_context">
+        </label>
+        <label>
+          Tags (comma-separated)
+          <input type="text" name="tags" data-field="tags">
+          <span class="helper">Separate tags with commas. Do not put a comma inside a single tag.</span>
+        </label>
+
+        <fieldset class="slots" data-slots>
+          <legend>Slots (read-only)</legend>
+          <ul data-slot-list></ul>
+        </fieldset>
+
+        <label class="ack" data-ack-row hidden>
+          <input type="checkbox" data-ack-checkbox>
+          <span data-ack-label></span>
+        </label>
+
+        <p class="notice notice-error" data-approve-error hidden></p>
+
+        <div class="actions">
+          <button type="submit" data-approve-btn>Approve</button>
+          <button type="button" class="secondary" data-discard-btn>Discard</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="upload-step done" data-step="done" hidden>
+      <p class="notice notice-success" data-success-message></p>
+      <p><a data-browse-link href="/browse">View it in browse</a></p>
+      <p><a href="/upload">Upload another</a></p>
+    </section>
+
+    <div class="resume" data-resume hidden>
+      <p class="notice">
+        A previous upload was left in review. You can discard it and start over.
+      </p>
+      <button type="button" data-resume-discard>Discard and start over</button>
+    </div>
+  </main>
+
+  <script src="/static/upload.js" defer></script>
+{% endblock %}

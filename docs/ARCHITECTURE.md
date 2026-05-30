@@ -92,6 +92,26 @@ The MCP tool wrappers derive the rate-limit actor from the validated `AccessToke
 calls without a verified access token raise `UNAUTHORIZED` at the wrapper before any backend
 work runs.
 
+## Web upload surface
+
+`GET /upload` is a single-page, session-authed screen (`web/templates/upload.html` +
+`web/static/upload.js`, vanilla JS, no build step). An unauthenticated or non-allowlisted
+visitor is 303-redirected to `/auth/login?next=/upload`; only an allowlisted session reaches
+the page, which mints the per-session CSRF token (`web/csrf.py:ensure_csrf_token`) and renders
+it into a `<meta name="csrf-token">` tag. The client previews the chosen file locally via
+`URL.createObjectURL` (no server-side pending-image route), base64-encodes it, and POSTs the
+session-authed JSON endpoints `POST /upload/analyze`, `POST /upload/approve/{id}`, and
+`POST /upload/discard/{id}` (`web/upload_routes.py`), each carrying the token as an
+`X-CSRF-Token` header. Those endpoints delegate to the shared `upload/service.py` so the
+browser and PAT (`/api/uploads/*`) front doors cannot drift. The stored image is
+EXIF-stripped and re-encoded, so the page discloses that the saved template may differ from
+the local preview. Analyze bodies are capped by the pre-buffer `BodySizeGuardMiddleware`
+(~14 MB on `Content-Length`) fronting both analyze paths before the body is buffered. The
+client renders the standard JSON error envelope inline (size/type rejection, exact-duplicate
+409, near-duplicate non-blocking warn, VLM-suspect acknowledgment gate, rate-limit, CSRF
+reject, opaque `NOT_FOUND`, and a 401 session-expired prompt that preserves edited fields).
+The `/upload` nav link in `base.html` renders only for an allowlisted session.
+
 ## Storage backends
 
 `PgVectorStore` ships in v1.5 (sync `psycopg` + `pgvector.psycopg.register_vector`); the
