@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import os
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
+
+from alembic import context
 
 config = context.config
 
