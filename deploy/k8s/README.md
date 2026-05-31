@@ -235,3 +235,37 @@ kubectl exec deploy/meme-mcp -- /app/.venv/bin/meme-mcp allowlist remove github-
 
 The allowlist file lives at `GITHUB_ALLOWLIST_PATH` (defaults under `STORAGE_DIR`) and is
 re-validated on every web request, so revocations take effect immediately without a rollout.
+
+### Declarative allowlist (ConfigMap)
+
+Instead of the CLI writing a file on the PVC, you can manage the allowlist in-repo by pointing
+`GITHUB_ALLOWLIST_PATH` at a ConfigMap mounted read-only:
+
+```yaml
+# allowlist ConfigMap (one GitHub login per line; "#" comments allowed)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: meme-mcp-allowlist
+data:
+  allowlist.txt: |
+    friend-one
+    friend-two
+---
+# in the Deployment: set GITHUB_ALLOWLIST_PATH: "/etc/meme-mcp/allowlist.txt" and add
+volumeMounts:
+  - name: allowlist
+    mountPath: /etc/meme-mcp   # whole dir, NOT subPath, so updates propagate
+    readOnly: true
+volumes:
+  - name: allowlist
+    configMap:
+      name: meme-mcp-allowlist
+```
+
+This keeps the allowlist reproducible and review-able, and survives a fresh PVC. Because the
+kubelet hot-updates mounted ConfigMaps and the app re-reads the file per request, editing the
+ConfigMap and running `kubectl apply` changes access with no pod restart. The trade-off: the
+mount is read-only, so `meme-mcp allowlist add/remove` cannot be used -- edit the ConfigMap
+instead. `OPERATOR_GITHUB_LOGIN` is display-only (it names the operator on the restricted page)
+and does not by itself grant access, so the operator's login must also be in the allowlist.
