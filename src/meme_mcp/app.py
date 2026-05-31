@@ -178,6 +178,19 @@ class GitHubOAuthHTTPClient:
         return {"login": str(user.get("login", ""))}
 
 
+# Stored template images keep their original extension (seeds are png; uploads
+# keep their validated mime's extension). The /templates/{id}/image route maps
+# the extension back to an explicit content type so the response stays renderable
+# under X-Content-Type-Options: nosniff.
+_IMAGE_CONTENT_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+    "gif": "image/gif",
+}
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is not None:
         validate_at_startup(settings)
@@ -521,6 +534,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not path.is_relative_to(root) or not path.exists():
             raise MemeMCPError(ErrorCode.NOT_FOUND, [])
         return FileResponse(path, media_type="image/png")
+
+    @app.get("/templates/{template_id}/image")
+    async def template_image(
+        request: Request,
+        template_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> Response:
+        # Serves a template's stored base image for the /browse gallery. Auth-gated
+        # like /browse (friends only): the <img> tags on the browse page carry the
+        # session cookie, so this resolves for the same actors who can see the page.
+        # The content type is derived from the stored extension, not sniffed, so it
+        # stays correct under the gateway's X-Content-Type-Options: nosniff header.
+        friend_from_request_or_header(app, request, authorization)
+        try:
+            template = app.state.templates.get(template_id)
+        except KeyError as exc:
+            raise MemeMCPError(ErrorCode.NOT_FOUND, []) from exc
+        ext = template.image_path.rsplit(".", 1)[-1].lower()
+        media_type = _IMAGE_CONTENT_TYPES.get(ext)
+        if media_type is None:
+            raise MemeMCPError(ErrorCode.NOT_FOUND, [])
+        try:
+            content = app.state.image_store.get(template.image_path)
+        except FileNotFoundError as exc:
+            # Row exists but its backing blob is gone (GC'd, or never landed); a
+            # missing image is a 404, not a 500.
+            raise MemeMCPError(ErrorCode.NOT_FOUND, []) from exc
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={"Cache-Control": "private, max-age=3600"},
+        )
 
     register_upload_routes(app, _upload_deps)
 

@@ -1,23 +1,71 @@
 {% extends "base.html" %}
 {% block body %}
-  <main>
-    <h1>meme-mcp</h1>
-    <form method="get" action="/browse">
-      <label>
-        Search templates
-        <input name="q" value="{{ query }}" placeholder="deploy, ci, reaction">
-      </label>
-      <button type="submit">Search</button>
-    </form>
+  <main class="browse">
+    <header class="masthead">
+      <p class="masthead__eyebrow">Template library</p>
+      <h1>meme-mcp</h1>
+      <p class="masthead__count">
+        {% if query %}
+          {{ templates|length }} match{{ "" if templates|length == 1 else "es" }} for &ldquo;{{ query }}&rdquo;
+        {% else %}
+          {{ templates|length }} template{{ "" if templates|length == 1 else "s" }} ready to render
+        {% endif %}
+      </p>
+      <form class="search" method="get" action="/browse" role="search">
+        <span class="search__field">
+          <input
+            class="search__input"
+            name="q"
+            value="{{ query }}"
+            placeholder="deploy, ci, reaction&hellip;"
+            aria-label="Search templates"
+          >
+        </span>
+        <button class="search__submit" type="submit">Search</button>
+      </form>
+    </header>
+
     <section class="template-grid">
       {% for template in templates %}
         <article class="template-card">
-          <h2>{{ template.name }}</h2>
-          <p>{{ template.metadata.get("description", "") }}</p>
-          <code>{{ template.template_id }}</code>
+          <div class="template-card__frame">
+            <img
+              class="template-card__img"
+              src="/templates/{{ template.template_id }}/image"
+              alt="{{ template.name }} template"
+              loading="lazy"
+              decoding="async"
+            >
+            {% if template.slot_definitions %}
+              <span class="template-card__slots">
+                {{ template.slot_definitions|length }} slot{{ "" if template.slot_definitions|length == 1 else "s" }}
+              </span>
+            {% endif %}
+          </div>
+          <div class="template-card__body">
+            <h2 class="template-card__name">{{ template.name }}</h2>
+            <code class="template-card__id">{{ template.template_id }}</code>
+            {% if template.metadata.get("description") %}
+              <p class="template-card__desc">{{ template.metadata.get("description") }}</p>
+            {% endif %}
+            {% set tags = template.metadata.get("tags") or [] %}
+            {% if tags %}
+              <div class="template-card__tags">
+                {% for tag in tags[:4] %}
+                  <span class="template-card__tag">{{ tag }}</span>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
         </article>
       {% else %}
-        <p>No templates yet.</p>
+        <p class="browse-empty">
+          {% if query %}
+            No templates match &ldquo;{{ query }}&rdquo;. Try a broader search.
+          {% else %}
+            No templates yet.
+          {% endif %}
+        </p>
       {% endfor %}
     </section>
   </main>

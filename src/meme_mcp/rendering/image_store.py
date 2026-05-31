@@ -43,7 +43,12 @@ class FilesystemImageStore:
         return rel
 
     def get(self, path: str) -> bytes:
-        return (self.root / path).read_bytes()
+        # Resolve and refuse anything that escapes the store root (traversal
+        # guard), mirroring delete(); an escaping or absent path is a miss.
+        target = (self.root / path).resolve()
+        if not target.is_relative_to(self.root.resolve()):
+            raise FileNotFoundError(path)
+        return target.read_bytes()
 
     def delete(self, path: str) -> bool:
         """Path-keyed delete, keyed on the `image_path` returned by `put`.

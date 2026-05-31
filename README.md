@@ -55,7 +55,8 @@ Useful routes:
 - `GET /` (public landing page)
 - `GET /healthz`
 - `GET /readyz`
-- `GET /browse` (HTML; an anonymous browser is redirected to GitHub login)
+- `GET /browse` (HTML gallery with template previews; an anonymous browser is redirected to GitHub login)
+- `GET /templates/{template_id}/image` (the gallery's preview image; auth-gated like `/browse`)
 - `GET /api/templates?q=deploy`
 - `POST /api/templates/{template_id}/preview`
 - `GET /api/mcp/tools`

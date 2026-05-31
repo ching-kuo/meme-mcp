@@ -79,7 +79,11 @@ Two auth surfaces share one tree:
   landing page (no auth) that points anonymous visitors at GitHub login; an anonymous browser
   hitting `/browse` (no PAT header and no allowlisted session) is 303-redirected to
   `/auth/login?next=/browse`, the same pattern as `/upload`, rather than handed a JSON 401. A PAT
-  header still authenticates `/browse` programmatically. The token exchange targets
+  header still authenticates `/browse` programmatically. `/browse` renders a gallery whose cards
+  show a real preview served by `GET /templates/{template_id}/image` (auth-gated the same way;
+  content type is taken from the stored file extension, not sniffed, so it renders under the
+  gateway's `X-Content-Type-Options: nosniff`, and a missing template/blob is a 404).
+  The token exchange targets
   `https://github.com/login/oauth/access_token` and the user-profile fetch targets
   `https://api.github.com/user` — two distinct hosts, not a shared `base_url` client.
 - MCP (`/mcp` and `/api/mcp/*`) uses a static PAT in `Authorization: Bearer …`. Verification is
@@ -99,9 +103,15 @@ work runs.
 ## Web upload surface
 
 `GET /upload` is a single-page, session-authed screen (`web/templates/upload.html` +
-`web/static/upload.js` + `web/static/upload.css`, vanilla JS, no build step; the page-only
-stylesheet loads through a `{% block head %}` in `base.html`, so `/browse` keeps the
-shared-chrome `styles.css` unchanged). An unauthenticated or non-allowlisted
+`web/static/upload.js` + `web/static/upload.css`, vanilla JS, no build step). The shared
+`styles.css` (loaded on every page) holds the "Quiet Craft" design system — the `:root` tokens,
+the `prefers-color-scheme` light/dark palette adapted from Apple's HIG (no pure black; surfaces
+lighten with elevation; the accent desaturates in dark mode), the icon variables, and base body
+theming — so `/`, `/browse`, and `/upload` share one look. `upload.css` layers only the
+`.upload-*` component rules on top and loads through a `{% block head %}` in `base.html`. The
+global `[hidden] { display: none !important; }` rule restores the UA `[hidden]` semantics that an
+author `display` (e.g. `.upload-notice { display: flex }`) would otherwise override, which is what
+made hidden notices render as empty bars. An unauthenticated or non-allowlisted
 visitor is 303-redirected to `/auth/login?next=/upload`; only an allowlisted session reaches
 the page, which mints the per-session CSRF token (`web/csrf.py:ensure_csrf_token`) and renders
 it into a `<meta name="csrf-token">` tag. The client previews the chosen file locally via

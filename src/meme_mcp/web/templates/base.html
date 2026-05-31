@@ -15,9 +15,10 @@
       </div>
     {% endif %}
     {% if web_session %}
+      {% set path = request.url.path %}
       <nav class="site-nav" aria-label="Primary">
-        <a href="/browse">Browse</a>
-        <a href="/upload">Upload</a>
+        <a href="/browse"{% if path == "/browse" %} aria-current="page"{% endif %}>Browse</a>
+        <a href="/upload"{% if path == "/upload" %} aria-current="page"{% endif %}>Upload</a>
       </nav>
     {% endif %}
     {% block body %}{% endblock %}

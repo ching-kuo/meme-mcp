@@ -1,86 +1,9 @@
 /* ===========================================================================
-   Quiet Craft -- styles for the /upload page only. Loaded via a per-page
-   <link> (see upload.html), so /browse never downloads or is restyled by any
-   of this. The design tokens below are consumed only by .upload-* rules and
-   the themed page body.
+   Quiet Craft -- component styles for the /upload page. Loaded via a per-page
+   <link> (see upload.html) on top of the shared design system in styles.css,
+   which provides the :root tokens, dark-mode palette, icon variables, and base
+   body theming consumed by the .upload-* rules below.
    =========================================================================== */
-:root {
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-
-  --fs-xs: 0.75rem;
-  --fs-sm: 0.875rem;
-  --fs-base: 1rem;
-  --fs-lg: 1.125rem;
-  --fs-xl: 1.375rem;
-  --fs-2xl: 1.75rem;
-
-  --bg: #fbfaf8;
-  --surface: #ffffff;
-  --surface-sunken: #f4f2ee;
-  --text: #1c1a17;
-  --muted: #5c574f;
-  --border: #e2ddd4;
-  --border-strong: #cfc8bc;
-  --accent: #1f6feb;
-  --on-accent: #ffffff;
-  --link: #1a5fcc;
-  --success-bg: #e7f4ec;
-  --success-text: #18603a;
-  --warning-bg: #fbf1da;
-  --warning-text: #7a5200;
-  --danger-bg: #fceded;
-  --danger-text: #a11616;
-  --danger-border: #e8b4b4;
-  --focus: #1545b8;
-
-  --radius: 0.5rem;
-  --radius-lg: 0.75rem;
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06);
-
-  /* Line-art icons, alpha-masked and recolored via currentColor (no network). */
-  --icon-plus: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='2.5'%20stroke-linecap='round'%3E%3Cpath%20d='M12%205v14'/%3E%3Cpath%20d='M5%2012h14'/%3E%3C/svg%3E");
-  --icon-check: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='2.5'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M20%206%209%2017l-5-5'/%3E%3C/svg%3E");
-  --icon-alert: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M10.29%203.86%201.82%2018a2%202%200%200%200%201.71%203h16.94a2%202%200%200%200%201.71-3L13.71%203.86a2%202%200%200%200-3.42%200z'/%3E%3Cpath%20d='M12%209v4'/%3E%3Cpath%20d='M12%2017h.01'/%3E%3C/svg%3E");
-  --icon-info: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Ccircle%20cx='12'%20cy='12'%20r='10'/%3E%3Cpath%20d='M12%2016v-4'/%3E%3Cpath%20d='M12%208h.01'/%3E%3C/svg%3E");
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141310;
-    --surface: #1e1c18;
-    --surface-sunken: #1a1814;
-    --text: #f2efea;
-    --muted: #aba499;
-    --border: #34302a;
-    --border-strong: #46413a;
-    --accent: #5c9bff;
-    --on-accent: #141310;
-    --link: #82b4ff;
-    --success-bg: #16301f;
-    --success-text: #7dd6a2;
-    --warning-bg: #2e2510;
-    --warning-text: #e8c77a;
-    --danger-bg: #321414;
-    --danger-text: #f2a6a6;
-    --danger-border: #5a2a2a;
-    --focus: #82b4ff;
-    --shadow-1: none;
-  }
-}
-
-/* The page body is themed only when an upload page is present, via :has(), so
-   the shared chrome in styles.css is never restyled on other pages. */
-body:has(.upload-page) {
-  background: var(--bg);
-  color: var(--text);
-  color-scheme: light dark;
-}
-
-body:has(.upload-page) .site-nav a {
-  color: var(--link);
-}
-
 .upload-page {
   max-width: 52rem;
   margin-inline: auto;

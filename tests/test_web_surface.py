@@ -119,6 +119,72 @@ def test_landing_page_offers_app_links_for_session(tmp_path) -> None:
     assert 'href="/upload"' in response.text
 
 
+def test_browse_grid_references_template_preview_image(tmp_path) -> None:
+    client, headers = authed_client(tmp_path)
+
+    response = client.get("/browse", headers=headers)
+
+    assert response.status_code == 200
+    # The gallery card shows a real preview, served by the template-image route.
+    assert "/templates/deploy-face/image" in response.text
+
+
+def test_template_image_served_to_authenticated_caller(tmp_path) -> None:
+    client, headers = authed_client(tmp_path)
+
+    response = client.get("/templates/deploy-face/image", headers=headers)
+
+    assert response.status_code == 200
+    # Explicit content type (not sniffed) so it renders under nosniff.
+    assert response.headers["content-type"] == "image/png"
+    assert response.content.startswith(b"\x89PNG")
+
+
+def test_template_image_requires_auth(tmp_path) -> None:
+    client, _ = authed_client(tmp_path)
+
+    response = client.get("/templates/deploy-face/image")
+
+    assert response.status_code == 401
+
+
+def test_template_image_unknown_template_returns_404(tmp_path) -> None:
+    client, headers = authed_client(tmp_path)
+
+    response = client.get("/templates/does-not-exist/image", headers=headers)
+
+    assert response.status_code == 404
+
+
+def test_template_image_missing_blob_returns_404(tmp_path) -> None:
+    app = create_app(good_settings(tmp_path))
+    token = issue_pat(app.state.pat_store, "friend", app.state.pat_hash_pepper_value)
+    app.state.allowlist.add("friend")
+    image_path = app.state.image_store.put(png_bytes(), "png")
+    app.state.templates.upsert(
+        TemplateCreate(
+            template_id="ghost",
+            slug="ghost",
+            name="Ghost",
+            source="friend",
+            metadata={"name": "Ghost", "format": "static", "tags": []},
+            slot_definitions=[],
+            image_path=image_path,
+            perceptual_hash="0" * 16,
+            exact_hash="b" * 64,
+        )
+    )
+    # Row survives but its backing blob is gone (e.g. GC'd): expect 404, not 500.
+    app.state.image_store.delete(image_path)
+    client = TestClient(app)
+
+    response = client.get(
+        "/templates/ghost/image", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 404
+
+
 def test_template_api_searches_and_previews_without_persistence(tmp_path) -> None:
     client, headers = authed_client(tmp_path)
 
