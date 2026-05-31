@@ -27,7 +27,7 @@
 
     <section class="template-grid">
       {% for template in templates %}
-        <article class="template-card">
+        <a class="template-card" href="/templates/{{ template.template_id }}">
           <div class="template-card__frame">
             <img
               class="template-card__img"
@@ -57,7 +57,7 @@
               </div>
             {% endif %}
           </div>
-        </article>
+        </a>
       {% else %}
         <p class="browse-empty">
           {% if query %}

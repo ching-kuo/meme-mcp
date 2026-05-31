@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block body %}
+  <main class="detail">
+    <a class="detail__back" href="/browse">&larr; Template library</a>
+
+    <article class="detail__hero">
+      <div class="detail__media">
+        <img
+          class="detail__img"
+          src="/templates/{{ template.template_id }}/image"
+          alt="{{ template.name }} template"
+          decoding="async"
+        >
+        {% if template.slot_definitions %}
+          <span class="detail__slot-count">
+            {{ template.slot_definitions|length }} slot{{ "" if template.slot_definitions|length == 1 else "s" }}
+          </span>
+        {% endif %}
+      </div>
+
+      <div class="detail__info">
+        <p class="detail__eyebrow">
+          <span class="detail__source detail__source--{{ template.source }}">{{ template.source }}</span>
+        </p>
+        <h1 class="detail__name">{{ template.name }}</h1>
+        <code class="detail__id">{{ template.template_id }}</code>
+        {% if template.metadata.get("description") %}
+          <p class="detail__desc">{{ template.metadata.get("description") }}</p>
+        {% endif %}
+        {% set tags = template.metadata.get("tags") or [] %}
+        {% if tags %}
+          <div class="detail__tags">
+            {% for tag in tags %}
+              <span class="detail__tag">{{ tag }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </article>
+
+    <section class="detail__panel">
+      <h2 class="detail__panel-title">Attributes</h2>
+      <dl class="detail__attrs">
+        {% if template.metadata.get("emotion") %}
+          <div class="detail__attr">
+            <dt>Emotion</dt>
+            <dd>{{ template.metadata.get("emotion") }}</dd>
+          </div>
+        {% endif %}
+        {% if template.metadata.get("usage_context") %}
+          <div class="detail__attr">
+            <dt>Usage context</dt>
+            <dd>{{ template.metadata.get("usage_context") }}</dd>
+          </div>
+        {% endif %}
+        <div class="detail__attr">
+          <dt>Format</dt>
+          <dd>{{ template.metadata.get("format") or "static" }}</dd>
+        </div>
+        <div class="detail__attr">
+          <dt>Source</dt>
+          <dd>{{ template.source }}</dd>
+        </div>
+        <div class="detail__attr">
+          <dt>Slug</dt>
+          <dd><code>{{ template.slug }}</code></dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="detail__panel">
+      <h2 class="detail__panel-title">
+        Slots
+        <span class="detail__panel-meta">{{ template.slot_definitions|length }}</span>
+      </h2>
+      {% if template.slot_definitions %}
+        <ol class="detail__slots">
+          {% for slot in template.slot_definitions %}
+            <li class="detail__slot">
+              <span class="detail__slot-name">{{ slot.get("name") or slot.get("position") or ("Slot " ~ loop.index) }}</span>
+              {% if slot.get("position") %}
+                <span class="detail__slot-pos">{{ slot.get("position") }}</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <p class="detail__empty">This template has no editable slots.</p>
+      {% endif %}
+    </section>
+
+    <details class="detail__fingerprint">
+      <summary>Fingerprint</summary>
+      <dl class="detail__attrs">
+        <div class="detail__attr">
+          <dt>Exact hash</dt>
+          <dd><code>{{ template.exact_hash }}</code></dd>
+        </div>
+        <div class="detail__attr">
+          <dt>Perceptual hash</dt>
+          <dd><code>{{ template.perceptual_hash }}</code></dd>
+        </div>
+        <div class="detail__attr">
+          <dt>Image path</dt>
+          <dd><code>{{ template.image_path }}</code></dd>
+        </div>
+      </dl>
+    </details>
+  </main>
+{% endblock %}

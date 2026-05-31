@@ -535,6 +535,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise MemeMCPError(ErrorCode.NOT_FOUND, [])
         return FileResponse(path, media_type="image/png")
 
+    @app.get("/templates/{template_id}")
+    async def template_detail(
+        request: Request,
+        template_id: str,
+        authorization: str | None = Header(default=None),
+    ) -> Response:
+        # The full-detail page for one template, reached by clicking a /browse
+        # card. Auth-gated like /browse: an anonymous browser is bounced through
+        # GitHub login with this page as the return target (detail URLs are
+        # shareable), while a present-but-invalid PAT still surfaces as 401. The
+        # settings guard mirrors /browse so a settings-less test app never
+        # dereferences app.state here.
+        if authorization is None and (
+            not hasattr(app.state, "settings") or session_login(app, request) is None
+        ):
+            target = urlencode({"next": f"/templates/{template_id}"})
+            return RedirectResponse(f"/auth/login?{target}", status_code=303)
+        friend = friend_from_request_or_header(app, request, authorization)
+        # Metered like /browse so a friend cannot enumerate every template ID
+        # through the detail route while the gallery and /api/templates stay
+        # rate-limited.
+        app.state.find_limiter.hit(friend.github_login)
+        try:
+            template = app.state.templates.get(template_id)
+        except KeyError as exc:
+            raise MemeMCPError(ErrorCode.NOT_FOUND, []) from exc
+        return templates.TemplateResponse(
+            request,
+            "detail.html",
+            {
+                "template": template,
+                "friend_login": friend.github_login,
+                "pat_expires_in_days": _pat_expires_in_days(app, friend.github_login),
+                "web_session": has_web_session(app, request),
+            },
+        )
+
     @app.get("/templates/{template_id}/image")
     async def template_image(
         request: Request,

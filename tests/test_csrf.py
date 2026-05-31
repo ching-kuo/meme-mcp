@@ -140,6 +140,28 @@ def test_safe_next_allows_allowlisted_paths(raw: str) -> None:
 
 @pytest.mark.parametrize(
     "raw",
+    ["/templates/deploy-face", "/templates/uploaded-meme-ab12cd34"],
+)
+def test_safe_next_allows_template_detail_paths(raw: str) -> None:
+    # Detail pages are shareable, so login returns the friend to the exact one.
+    assert safe_next(raw) == raw
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "/templates/deploy-face/image",  # binary sub-route, not the detail page
+        "/templates/",  # empty id
+        "/templates/..",  # normalizes to a parent path
+        "/templates/.",
+    ],
+)
+def test_safe_next_rejects_non_detail_template_paths(raw: str) -> None:
+    assert safe_next(raw) == DEFAULT_NEXT
+
+
+@pytest.mark.parametrize(
+    "raw",
     [
         "//evil.com",
         "https://evil.com",

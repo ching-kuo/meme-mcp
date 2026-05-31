@@ -82,7 +82,14 @@ Two auth surfaces share one tree:
   header still authenticates `/browse` programmatically. `/browse` renders a gallery whose cards
   show a real preview served by `GET /templates/{template_id}/image` (auth-gated the same way;
   content type is taken from the stored file extension, not sniffed, so it renders under the
-  gateway's `X-Content-Type-Options: nosniff`, and a missing template/blob is a 404).
+  gateway's `X-Content-Type-Options: nosniff`, and a missing template/blob is a 404). Each card
+  links to `GET /templates/{template_id}`, a detail page (`web/templates/detail.html`) that shows
+  the full-size preview plus the template's name, id, source, description, tags, metadata
+  attributes, slot list, and a collapsible fingerprint (hashes + stored path). The detail route is
+  auth-gated and `find_limiter`-metered exactly like `/browse`, so it cannot be used to enumerate
+  template IDs; an anonymous browser is 303-redirected to `/auth/login?next=/templates/<id>` and
+  returned to that page after login (`safe_next` accepts single-segment `/templates/<id>` paths,
+  but not the `/image` sub-route or `.`/`..` segments). An unknown id is a 404.
   The token exchange targets
   `https://github.com/login/oauth/access_token` and the user-profile fetch targets
   `https://api.github.com/user` — two distinct hosts, not a shared `base_url` client.
@@ -106,8 +113,9 @@ work runs.
 `web/static/upload.js` + `web/static/upload.css`, vanilla JS, no build step). The shared
 `styles.css` (loaded on every page) holds the "Quiet Craft" design system — the `:root` tokens,
 the `prefers-color-scheme` light/dark palette adapted from Apple's HIG (no pure black; surfaces
-lighten with elevation; the accent desaturates in dark mode), the icon variables, and base body
-theming — so `/`, `/browse`, and `/upload` share one look. `upload.css` layers only the
+lighten with elevation; the accent desaturates in dark mode), the icon variables, base body
+theming, and the `.browse`/`.template-card`/`.detail__*` gallery and detail-page rules — so `/`,
+`/browse`, `/templates/<id>`, and `/upload` share one look. `upload.css` layers only the
 `.upload-*` component rules on top and loads through a `{% block head %}` in `base.html`. The
 global `[hidden] { display: none !important; }` rule restores the UA `[hidden]` semantics that an
 author `display` (e.g. `.upload-notice { display: flex }`) would otherwise override, which is what

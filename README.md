@@ -55,7 +55,8 @@ Useful routes:
 - `GET /` (public landing page)
 - `GET /healthz`
 - `GET /readyz`
-- `GET /browse` (HTML gallery with template previews; an anonymous browser is redirected to GitHub login)
+- `GET /browse` (HTML gallery with template previews; cards link to the detail page; an anonymous browser is redirected to GitHub login)
+- `GET /templates/{template_id}` (HTML detail page: full preview plus metadata, slots, and fingerprint; auth-gated like `/browse`)
 - `GET /templates/{template_id}/image` (the gallery's preview image; auth-gated like `/browse`)
 - `GET /api/templates?q=deploy`
 - `POST /api/templates/{template_id}/preview`
@@ -133,7 +134,7 @@ Implemented:
 - per-friend rate limiting on `find`/`generate`/`record_outcome` across both HTTP and MCP transports
 - embedding model-drift startup guard (refuses to boot if persisted vectors disagree with `EMBEDDING_MODEL`)
 - global `DecompressionBombWarning` escalation
-- public landing page and web browse/search/preview routes
+- public landing page and web browse/search/detail/preview routes
 - operator CLI for allowlist, PAT issue, seed, and reindex
 - Docker and Kubernetes deployment examples
 

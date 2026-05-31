@@ -129,6 +129,68 @@ def test_browse_grid_references_template_preview_image(tmp_path) -> None:
     assert "/templates/deploy-face/image" in response.text
 
 
+def test_browse_card_links_to_detail_page(tmp_path) -> None:
+    client, headers = authed_client(tmp_path)
+
+    response = client.get("/browse", headers=headers)
+
+    assert response.status_code == 200
+    # Each gallery card is a link into the template's detail page.
+    assert 'href="/templates/deploy-face"' in response.text
+
+
+def test_template_detail_renders_all_fields(tmp_path) -> None:
+    client, headers = authed_client(tmp_path)
+
+    response = client.get("/templates/deploy-face", headers=headers)
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    body = response.text
+    # Name, id, description, metadata fields, tags, slot, and source all render.
+    assert "Deploy Face" in body
+    assert "deploy-face" in body
+    assert "deploy relief" in body  # description
+    assert "relief" in body  # emotion
+    assert "green CI" in body  # usage_context
+    assert "friend" in body  # source
+    for tag in ("deploy", "ci"):
+        assert tag in body
+    assert "top" in body  # slot name/position
+    # The detail page embeds the full-size preview from the image route.
+    assert "/templates/deploy-face/image" in body
+
+
+def test_template_detail_redirects_anonymous_browser_to_login(tmp_path) -> None:
+    app = create_app(good_settings(tmp_path))
+    client = TestClient(app)
+
+    # An anonymous browser is bounced through GitHub login (like /browse), with
+    # the shareable detail URL preserved as the post-login return target.
+    response = client.get("/templates/deploy-face", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/login?next=%2Ftemplates%2Fdeploy-face"
+
+
+def test_template_detail_invalid_pat_returns_401(tmp_path) -> None:
+    client, _ = authed_client(tmp_path)
+
+    response = client.get(
+        "/templates/deploy-face", headers={"Authorization": "Bearer nope"}
+    )
+
+    assert response.status_code == 401
+
+
+def test_template_detail_unknown_template_returns_404(tmp_path) -> None:
+    client, headers = authed_client(tmp_path)
+
+    response = client.get("/templates/does-not-exist", headers=headers)
+
+    assert response.status_code == 404
+
+
 def test_template_image_served_to_authenticated_caller(tmp_path) -> None:
     client, headers = authed_client(tmp_path)
 

@@ -31,6 +31,25 @@ CSRF_HEADER_NAME = "X-CSRF-Token"
 
 DEFAULT_NEXT = "/browse"
 ALLOWED_NEXT_PATHS = frozenset({"/upload", "/browse"})
+TEMPLATE_DETAIL_PREFIX = "/templates/"
+
+
+def _is_template_detail(path: str) -> bool:
+    """True for a single-segment template detail path (``/templates/<id>``).
+
+    Detail pages are shareable, so a friend who opens one while signed out
+    should return to it after GitHub login rather than the generic gallery.
+    Only a single trailing segment is accepted: an embedded slash never matches
+    (so the ``/templates/<id>/image`` sub-route is excluded), and a bare ``.``
+    or ``..`` segment that a browser would normalize to a parent path is
+    rejected. Open-redirect safety is already guaranteed by the scheme/netloc
+    checks in :func:`safe_next`; this is an in-origin allowlist only.
+    """
+
+    if not path.startswith(TEMPLATE_DETAIL_PREFIX):
+        return False
+    rest = path[len(TEMPLATE_DETAIL_PREFIX) :]
+    return bool(rest) and "/" not in rest and rest not in {".", ".."}
 
 
 def ensure_csrf_token(session: dict[str, object]) -> str:
@@ -73,9 +92,9 @@ def safe_next(raw: object) -> str:
     scheme or netloc. Rejects protocol-relative (``//``) and backslash
     (``/\\``) prefixes, leading control characters, and any absolute or
     scheme-bearing URL. The accepted path must additionally be on the
-    :data:`ALLOWED_NEXT_PATHS` allowlist. Anything else falls back to
-    :data:`DEFAULT_NEXT`. Mirrors Django's
-    ``url_has_allowed_host_and_scheme`` logic.
+    :data:`ALLOWED_NEXT_PATHS` allowlist or be a template detail path
+    (``/templates/<id>``). Anything else falls back to :data:`DEFAULT_NEXT`.
+    Mirrors Django's ``url_has_allowed_host_and_scheme`` logic.
     """
 
     if not isinstance(raw, str) or not raw:
@@ -93,6 +112,6 @@ def safe_next(raw: object) -> str:
     parts = urlsplit(raw)
     if parts.scheme or parts.netloc:
         return DEFAULT_NEXT
-    if parts.path not in ALLOWED_NEXT_PATHS:
+    if parts.path not in ALLOWED_NEXT_PATHS and not _is_template_detail(parts.path):
         return DEFAULT_NEXT
     return parts.path
