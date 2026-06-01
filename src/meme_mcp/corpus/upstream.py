@@ -13,6 +13,7 @@ import yaml
 from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate
 from meme_mcp.rendering.image_store import FilesystemImageStore
 from meme_mcp.upload.validation import compute_hashes
+from meme_mcp.vlm.sanitize import hard_sanitize_metadata, sanitize_url
 
 CANONICAL_POSITIONS = frozenset(
     {
@@ -143,21 +144,98 @@ def slot_definitions(template: UpstreamTemplate) -> list[dict[str, Any]]:
     return definitions
 
 
+def _upgrade_to_https(url: str) -> str:
+    """Upgrade an http source link to https before the https-only URL gate.
+
+    Upstream `source` values are a mix of http/https (e.g. knowyourmeme is http,
+    imgflip is https). The reference hosts all serve https, so normalizing the
+    scheme lets the existing https-only `sanitize_url` (store) and
+    `origin_source_url_safe` (render) accept every source instead of silently
+    dropping the http ones.
+    """
+    stripped = url.strip()
+    if stripped.lower().startswith("http://"):
+        return "https://" + stripped[len("http://") :]
+    return stripped
+
+
+def _load_enrichment(path: Path | None) -> dict[str, dict[str, Any]]:
+    """Load slug -> enriched fields from the committed enrichment file.
+
+    Absent file or absent slug entry degrades to relocation-only (empty prose).
+    The top-level `_meta` provenance header and any non-dict entry are skipped.
+    """
+    if path is None or not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        # A corrupt/half-written/non-UTF-8 enrichment file degrades to
+        # relocation-only rather than aborting the whole 209-row seed (KTD4).
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {
+        key: value
+        for key, value in data.items()
+        if not key.startswith("_") and isinstance(value, dict)
+    }
+
+
+def _build_metadata(
+    upstream: UpstreamTemplate, enriched: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Assemble + sanitize one template's metadata: relocate URL, merge enrichment.
+
+    The `source` URL moves into a provenance-only `origin` block (no name/status,
+    so it never earns the find alias bonus) and out of `usage_context`, which
+    stops it polluting the keyword index and embedding. Enriched prose overlays
+    the empty defaults. The whole dict passes through `hard_sanitize_metadata`
+    so authored prose can never reach the find/MCP sink unsanitized.
+    """
+    tags = list(upstream.keywords)
+    tags += [tag for tag in (enriched.get("extra_tags") or []) if isinstance(tag, str)]
+    metadata: dict[str, Any] = {
+        "name": upstream.name,
+        "description": str(enriched.get("description", "")),
+        "emotion": str(enriched.get("emotion", "")),
+        "usage_context": str(enriched.get("usage_context", "")),
+        "tags": tags,
+        "format": "static",
+    }
+    source_url = sanitize_url(_upgrade_to_https(upstream.source_url))
+    if source_url:
+        metadata["origin"] = {"source_url": source_url}
+    metadata = hard_sanitize_metadata(metadata)
+    # De-duplicate and drop empties on the SANITIZED tag value: markup-laden input
+    # can collapse onto an existing tag after cleaning (e.g. "<b>ten</b>" -> "ten"),
+    # which the pre-sanitization union would not have caught.
+    deduped: list[str] = []
+    for tag in metadata["tags"]:
+        if tag and tag not in deduped:
+            deduped.append(tag)
+    metadata["tags"] = deduped
+    return metadata
+
+
 def import_upstream_corpus(
     upstream_root: Path,
     repository: SQLiteTemplateRepository,
     image_store: FilesystemImageStore,
     upstream_commit_sha: str,
+    enrichment_path: Path | None = None,
 ) -> tuple[int, dict[str, str]]:
     """Walk upstream/templates/*, persist templates, return (count, manifest).
 
     The manifest maps slug -> SHA-256 of the imported image bytes. Pinning the
     upstream commit + per-template hashes is what makes seed-memegen reproducible
-    across machines.
+    across machines. `enrichment_path` points at the committed web-grounded
+    enrichment file (optional; absence degrades to relocation-only).
     """
     templates_dir = upstream_root / "templates"
     if not templates_dir.is_dir():
         raise FileNotFoundError(f"no templates/ under {upstream_root}")
+    enrichment = _load_enrichment(enrichment_path)
     manifest: dict[str, str] = {"_upstream_commit": upstream_commit_sha}
     count = 0
     for entry in sorted(templates_dir.iterdir()):
@@ -176,14 +254,7 @@ def import_upstream_corpus(
                 slug=upstream.slug,
                 name=upstream.name,
                 source="memegen",
-                metadata={
-                    "name": upstream.name,
-                    "description": "",
-                    "emotion": "",
-                    "usage_context": upstream.source_url,
-                    "tags": list(upstream.keywords),
-                    "format": "static",
-                },
+                metadata=_build_metadata(upstream, enrichment.get(upstream.slug, {})),
                 slot_definitions=slot_definitions(upstream),
                 image_path=stored_path,
                 perceptual_hash=perceptual_hash,

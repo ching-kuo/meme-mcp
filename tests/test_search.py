@@ -80,6 +80,16 @@ def test_source_url_tokens_do_not_contribute_to_term_scoring() -> None:
     assert not found
 
 
+def test_provenance_only_origin_is_not_a_search_alias() -> None:
+    # The memegen relocation shape: origin holds only a source_url (no name/status).
+    record = _record({"source_url": "https://knowyourmeme.com/memes/10-guy"})
+    # The host token lives only in source_url, which _flatten excludes -> no match.
+    assert not search([record], "knowyourmeme")
+    # Descriptive fields still match, and a name-less origin earns no alias bonus.
+    found = search([record], "anime")
+    assert found and "origin_name_match" not in found[0].matched_fields
+
+
 # ---------------------------------------------------------------------------
 # AE5: the origin_name_match tag survives serialization to the find envelope
 # ---------------------------------------------------------------------------
