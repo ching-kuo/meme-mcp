@@ -133,6 +133,9 @@ spec:
             - |
               set -e
               git clone https://github.com/jacebrowning/memegen.git /tmp/memegen
+              # Pin the checkout so re-seeds reproduce the corpus the in-tree
+              # manifest was generated from -- cloning bare HEAD drifts the corpus.
+              git -C /tmp/memegen checkout 3e1cdd13a2e914d51b96fc5916b507904fb74d5a
               /app/.venv/bin/meme-mcp seed-memegen \
                 --upstream-path /tmp/memegen \
                 --manifest-path /data/memegen-seed-manifest.json
