@@ -1,0 +1,45 @@
+# Prune old GHCR image versions to keep the package tidy. Storage is FREE for this
+# public package, so this is housekeeping, not cost control. Keeps the 5 most recent
+# versions and hard-protects the digests the live cluster pins by SHA.
+#
+# Prerequisites:
+#   1. A classic PAT with `delete:packages` + `read:packages`, stored as the
+#      `GHCR_CLEANUP_TOKEN` repo secret. GITHUB_TOKEN cannot delete user-owned
+#      packages, so the action needs a PAT.
+#   2. Scheduled (`on: schedule`) runs only fire from the repo's DEFAULT branch.
+#      The default is currently `feat/web-upload-ui`, not `main` -- set the default
+#      to `main` (or copy this file there) for the weekly run to trigger.
+#      `workflow_dispatch` works from any branch regardless.
+name: GHCR retention
+
+on:
+  schedule:
+    - cron: "0 4 * * 0" # Sundays 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Preview deletions only (no deletes)"
+        type: boolean
+        default: true
+
+jobs:
+  prune:
+    name: Prune old image versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: snok/container-retention-policy@d3bdcf5ce9b05f685154e4a16c39233b245e3d53 # v3.1.0
+        with:
+          # "user" (literal) for a personal account; the org name for an org.
+          account: user
+          token: ${{ secrets.GHCR_CLEANUP_TOKEN }}
+          image-names: meme-mcp
+          tag-selection: both
+          # Always keep the 5 newest versions; only consider older ones for deletion.
+          keep-n-most-recent: 5
+          cut-off: 1d
+          # Never delete a digest the live cluster pins. UPDATE this list whenever
+          # prod is re-pinned to a new digest (deployment.yaml + cronjob-gc-renders.yaml
+          # in the k8s-infra repo). Current: Deployment + gc-renders.
+          skip-shas: sha256:5b1a98f6de405f4e99aeb1ec64efb645f6341546f2f1de8be6557f651f0072a8,sha256:630f63fcd4b240146e26dd3094a13edc57ad95047996b17ffaafdb63bb354e6b
+          # Manual runs default to a safe preview; the scheduled run deletes for real.
+          dry-run: ${{ inputs.dry-run || false }}
