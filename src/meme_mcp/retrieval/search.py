@@ -32,7 +32,12 @@ class Candidate:
 
 def _flatten(metadata: dict[str, Any]) -> str:
     parts: list[str] = []
-    for value in metadata.values():
+    for key, value in metadata.items():
+        # The origin block is provenance, not descriptive text: its name surfaces
+        # only via the confidence-gated alias below, and source_url is a URL, not
+        # a search term -- so neither pollutes term scoring (U7/KTD9).
+        if key == "origin":
+            continue
         if isinstance(value, dict):
             parts.append(_flatten(value))
         elif isinstance(value, list):
@@ -60,6 +65,25 @@ def _name_match(query: str, record: TemplateRecord) -> bool:
     )
 
 
+def _origin_name_match(query: str, record: TemplateRecord) -> bool:
+    """Match the web-recovered origin name, gated on persisted high confidence.
+
+    Only a high-confidence (or friend-confirmed) origin earns the alias bonus
+    (KTD9): a low-confidence, unreviewed origin name must not become a
+    high-weight retrieval alias. ``origin.status`` is read from the stored blob
+    because the runtime ``WebDetectionResult.status`` does not survive to query
+    time.
+    """
+    if _get_dotted(record.metadata, "origin.status") != "high":
+        return False
+    origin_name = _get_dotted(record.metadata, "origin.name")
+    if not isinstance(origin_name, str) or not origin_name.strip():
+        return False
+    needle = query.lower()
+    value = origin_name.lower()
+    return needle in value or SequenceMatcher(None, needle, value).ratio() >= 0.72
+
+
 def search(
     records: list[TemplateRecord],
     query: str,
@@ -80,6 +104,9 @@ def search(
         if _name_match(query, record):
             score += 10.0
             matched_fields.append("name_match")
+        if _origin_name_match(query, record):
+            score += 10.0
+            matched_fields.append("origin_name_match")
         if outcome_lookup is not None:
             recent = outcome_lookup(record.template_id)
             if recent > 0:
