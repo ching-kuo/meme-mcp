@@ -195,7 +195,10 @@ CSRF token into a `<meta name="csrf-token">` tag, and the two state-changing end
 (`web/pat_routes.py`) authenticate session-only via `_session_friend` (a PAT header can never
 drive them — they call `friend_from_request_or_header` with no Authorization) and require the
 `X-CSRF-Token` header. The `/account` nav link in `base.html` renders only for an allowlisted
-session (`has_web_session`).
+session (`has_web_session`). Like `upload.css`, `account.css` layers only its own component
+rules on top of the shared `styles.css` and drives every color off the `:root` design tokens, so
+the page tracks the `prefers-color-scheme` light/dark palette (an earlier version hardcoded
+white panels with inherited text and went unreadable in dark mode).
 
 - `POST /account/token` generates (when none active) or regenerates (when active — the existing
   one-active-token model means `issue_pat` auto-revokes the prior row). `POST /account/token/revoke`

@@ -1,3 +1,7 @@
+/* Account / PAT management. Colors are driven entirely by the shared design
+   tokens in styles.css so the page tracks light and dark schemes -- earlier this
+   sheet hardcoded white panels and relied on inherited text color, which went
+   invisible once the body switched to light-on-dark text in dark mode. */
 .account {
   max-width: 920px;
   margin: 0 auto;
@@ -11,26 +15,29 @@
 .account__header h1 {
   margin: 0;
   font-size: 2rem;
+  color: var(--text);
 }
 
 .account__lede {
-  color: #5a6678;
+  color: var(--muted);
   margin: 8px 0 0;
 }
 
 .token-panel,
 .token-reveal {
-  border: 1px solid #d9dee8;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   padding: 20px;
   margin-top: 18px;
-  background: #fff;
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 
 .token-panel h2,
 .token-reveal h2 {
   margin: 0 0 14px;
   font-size: 1.15rem;
+  color: var(--text);
 }
 
 .token-panel__status {
@@ -49,19 +56,19 @@
 }
 
 .token-badge--active {
-  background: #ddf7e8;
-  color: #17633a;
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .token-badge--expired,
 .token-badge--revoked {
-  background: #fff0d8;
-  color: #8a4b00;
+  background: var(--warning-bg);
+  color: var(--warning-text);
 }
 
 .token-badge--none {
-  background: #edf1f7;
-  color: #445165;
+  background: var(--surface-sunken);
+  color: var(--muted);
 }
 
 .token-facts {
@@ -76,13 +83,14 @@
 }
 
 .token-facts dt {
-  color: #667085;
+  color: var(--muted);
   font-size: 0.85rem;
   margin-bottom: 4px;
 }
 
 .token-facts dd {
   margin: 0;
+  color: var(--text);
   overflow-wrap: anywhere;
 }
 
@@ -97,7 +105,7 @@
   display: grid;
   gap: 6px;
   min-width: 180px;
-  color: #344054;
+  color: var(--text);
   font-size: 0.9rem;
 }
 
@@ -106,27 +114,51 @@
 .token-panel--danger button,
 .token-copy-row button {
   min-height: 40px;
-  border-radius: 6px;
-  border: 1px solid #b8c0cc;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
   padding: 0 12px;
+}
+
+.token-form select {
+  color: var(--text);
+  background: var(--surface);
 }
 
 .token-form button,
 .token-copy-row button {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
-  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
   font-weight: 700;
+  cursor: pointer;
+}
+
+.token-form button:hover,
+.token-copy-row button:hover,
+.token-panel--danger button:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.token-form button:focus-visible,
+.token-copy-row button:focus-visible,
+.token-panel--danger button:focus-visible,
+.token-form select:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .token-note {
-  color: #8a4b00;
+  color: var(--warning-text);
   margin-bottom: 0;
 }
 
 .token-reveal {
-  border-color: #8bb5ff;
-  background: #f7fbff;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.token-reveal p {
+  color: var(--muted);
 }
 
 .token-copy-row {
@@ -138,21 +170,27 @@
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
-  border: 1px solid #ccd6e5;
-  border-radius: 6px;
-  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
   padding: 10px;
 }
 
 .token-panel--danger {
-  border-color: #f0c5c5;
+  border-color: var(--danger-border);
+}
+
+.token-panel--danger p {
+  color: var(--muted);
 }
 
 .token-panel--danger button {
-  background: #b42318;
-  border-color: #b42318;
-  color: #fff;
+  background: var(--danger-text);
+  border-color: var(--danger-text);
+  color: var(--on-accent);
   font-weight: 700;
+  cursor: pointer;
 }
 
 button:disabled {
