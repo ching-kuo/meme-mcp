@@ -2,6 +2,2950 @@
   "_meta": {
     "memegen_commit": "3e1cdd13a2e914d51b96fc5916b507904fb74d5a",
     "model": "sonnet",
-    "note": "slug -> {description, emotion, usage_context, extra_tags}. Populated by the deferred web-grounded authoring pass (plan 2026-06-01-002). Until a slug has an entry, its prose fields stay empty and the import degrades to relocation-only (KTD4)."
+    "authored": "2026-06-01",
+    "note": "slug -> {description, emotion, usage_context, extra_tags}. Web-grounded authoring pass per plan 2026-06-01-002 (each slug researched against its pinned-commit config.yml name/source). Prose is sanitized at import by hard_sanitize_metadata. Missing slug entries degrade to relocation-only (KTD4)."
+  },
+  "3hd": {
+    "description": "Fan art of King Ghidorah from the 2019 film Godzilla: King of the Monsters, depicting two menacing dragon heads and one visibly dopey head, used as an object-labeling meme to compare three versions or aspects of something. The two fierce heads represent competent or normal variants while the goofy head represents an inferior or embarrassing one.",
+    "emotion": "playful mockery",
+    "usage_context": "Used when comparing three iterations of a franchise, platform, or concept where one is noticeably worse or more absurd than the others.",
+    "extra_tags": [
+      "king-ghidorah",
+      "godzilla",
+      "three-heads",
+      "comparison",
+      "object-labeling",
+      "kaiju",
+      "tier-list"
+    ]
+  },
+  "aag": {
+    "description": "A photograph of Giorgio A. Tsoukalos, host of the History Channel series Ancient Aliens, typically shown with arms gesturing outward, paired with the phrase 'I'm not saying it was aliens, but... aliens.' The meme parodies the show's tendency to attribute any historical mystery to extraterrestrial intervention.",
+    "emotion": "absurdist sarcasm",
+    "usage_context": "Posted when something is inexplicable or when someone jokingly proposes an outlandish explanation for an ordinary problem or mystery.",
+    "extra_tags": [
+      "aliens",
+      "conspiracy",
+      "history-channel",
+      "extraterrestrial",
+      "ancient-astronaut",
+      "pseudoscience",
+      "tsoukalos"
+    ]
+  },
+  "ackbar": {
+    "description": "A screenshot of Admiral Ackbar, the Mon Calamari character from Star Wars: Return of the Jedi, with the caption 'It's a trap!' referencing his warning cry during the Battle of Endor. The meme is a reaction image signaling that something is deceptive, suspicious, or too good to be true.",
+    "emotion": "alarmed suspicion",
+    "usage_context": "Used to warn others about a bait-and-switch, an obvious trick, or any situation where the setup seems designed to lure someone into a bad outcome.",
+    "extra_tags": [
+      "star-wars",
+      "return-of-the-jedi",
+      "trap",
+      "warning",
+      "deception",
+      "mon-calamari",
+      "reaction"
+    ]
+  },
+  "afraid": {
+    "description": "A still of Andy Dwyer, played by Chris Pratt in Parks and Recreation, overlaid with text expressing ignorance about something and the admission of being too embarrassed to ask. The meme originated on Reddit in 2014 and captures the relatable anxiety of being the only one who does not understand a concept everyone else takes for granted.",
+    "emotion": "self-deprecating embarrassment",
+    "usage_context": "Used when admitting you have no idea what a trending topic, internet phenomenon, or widely known reference means, but are too socially anxious to ask.",
+    "extra_tags": [
+      "parks-and-recreation",
+      "chris-pratt",
+      "confession",
+      "ignorance",
+      "social-anxiety",
+      "too-late-to-ask",
+      "relatable"
+    ]
+  },
+  "agnes": {
+    "description": "A frame of Kathryn Hahn as Agnes Harkness giving an exaggerated wink in the Marvel Disney+ series WandaVision, used as a reaction image to signal knowing complicity about an open secret or obvious lie. The wink implies 'we both know what is really going on here' without saying it outright.",
+    "emotion": "conspiratorial complicity",
+    "usage_context": "Posted to acknowledge an obvious truth that someone is pretending not to know, or to signal that the speaker is in on a joke everyone else is already aware of.",
+    "extra_tags": [
+      "wandavision",
+      "marvel",
+      "agatha-harkness",
+      "wink",
+      "open-secret",
+      "knowing",
+      "kathryn-hahn"
+    ]
+  },
+  "aint-got-time": {
+    "description": "An image of Kimberly 'Sweet Brown' Wilkins, a woman who became an internet celebrity after a local news interview about a 2012 apartment fire in Oklahoma City in which she delivered the phrase 'Ain't nobody got time for that.' The meme is used to humorously dismiss anything tedious, inconvenient, or not worth the effort.",
+    "emotion": "exasperated dismissal",
+    "usage_context": "Used to express refusal or reluctance toward a tedious task, unnecessary process, or anything deemed too bothersome to deal with.",
+    "extra_tags": [
+      "sweet-brown",
+      "catchphrase",
+      "dismissal",
+      "viral-interview",
+      "no-time",
+      "refusal",
+      "oklahoma"
+    ]
+  },
+  "ams": {
+    "description": "The Awkward Moment Seal is an advice animal image macro featuring a Northern elephant seal with a wide-eyed, uncomfortable expression against a white background, used to humorously describe socially awkward or cringe-worthy situations. It functions similarly to Socially Awkward Penguin as a vehicle for relatable social embarrassment.",
+    "emotion": "cringing embarrassment",
+    "usage_context": "Used to describe a specific socially uncomfortable moment, such as accidentally waving back at someone who was waving at the person behind you, or being caught in an unavoidable awkward encounter.",
+    "extra_tags": [
+      "advice-animal",
+      "elephant-seal",
+      "cringe",
+      "social-embarrassment",
+      "relatable",
+      "uncomfortable",
+      "reddit"
+    ]
+  },
+  "ants": {
+    "description": "A screenshot of Malory Archer from the animated TV series Archer scolding her son with the rhetorical warning 'Do you want ants? Because that's how you get ants,' taken from the pilot episode. The meme is used as a cause-and-effect warning template, implying that a careless action will inevitably produce an unwanted consequence.",
+    "emotion": "exasperated disapproval",
+    "usage_context": "Used to mock a poor decision by pointing out the obvious, predictable bad consequence it will cause, framing the criticism as a rhetorical question.",
+    "extra_tags": [
+      "archer",
+      "malory-archer",
+      "cause-and-effect",
+      "consequence",
+      "warning",
+      "snowclone",
+      "fx-network"
+    ]
+  },
+  "apcr": {
+    "description": "An image of Zach Downey, a man with a mullet hairstyle standing next to a red pickup truck, originally a Halloween costume photograph from 2003 that became an advice animal meme. Captions depict him as earnest and well-meaning but inadvertently revealing an unconscious prejudice in the same breath as a progressive statement.",
+    "emotion": "ironic obliviousness",
+    "usage_context": "Used to satirize someone who makes a statement intended to sound inclusive or progressive but simultaneously undermines it with a contradictory bias.",
+    "extra_tags": [
+      "mullet",
+      "advice-animal",
+      "irony",
+      "unconscious-bias",
+      "satire",
+      "redneck-stereotype",
+      "reddit"
+    ]
+  },
+  "astronaut": {
+    "description": "A two-panel exploitable image of two astronauts in space, where one looks at Earth and asks 'Wait, it's all X?' and the second responds 'Always has been' while pointing a gun, originating from a 2016 MS Paint drawing and popularized with Ohio jokes in 2019. The meme conveys mock shock at a mundane or absurd revelation treated as a long-known secret.",
+    "emotion": "mock revelation",
+    "usage_context": "Used when humorously framing an obvious or ridiculous fact as a surprising discovery that was actually always true, typically by substituting a target concept for the subject of the astronaut's question.",
+    "extra_tags": [
+      "always-has-been",
+      "ohio",
+      "space",
+      "two-panel",
+      "exploitable",
+      "gun",
+      "flat-earth"
+    ]
+  },
+  "atis": {
+    "description": "A stock photograph of people laughing together, captioned with 'And then I said' followed by an obviously false or absurd claim, originating from a 2011 Reddit post showing Ronald Reagan and George H.W. Bush laughing in the Oval Office. The meme satirizes powerful figures or anyone making promises that are transparently untrue.",
+    "emotion": "cynical mockery",
+    "usage_context": "Used to mock a broken promise, absurd claim, or obvious falsehood by framing it as something that was said with a straight face, inviting the audience to laugh at the speaker's expense.",
+    "extra_tags": [
+      "laughing",
+      "broken-promise",
+      "satire",
+      "politics",
+      "irony",
+      "stock-photo",
+      "reagan"
+    ]
+  },
+  "away": {
+    "description": "A scene from the 1993 film Jurassic Park in which Dr. Ian Malcolm, played by Jeff Goldblum, delivers the line 'Life, uh... finds a way,' used online both earnestly and as a parody template where any noun 'finds a way.' The quote has become a philosophical meme about nature, resilience, and the limits of human control.",
+    "emotion": "wry inevitability",
+    "usage_context": "Used when something persists or adapts despite every attempt to prevent it, either as genuine philosophical commentary or as a parody by substituting a humorous subject into the 'X finds a way' template.",
+    "extra_tags": [
+      "jurassic-park",
+      "jeff-goldblum",
+      "ian-malcolm",
+      "resilience",
+      "nature",
+      "chaos-theory",
+      "finds-a-way"
+    ]
+  },
+  "awesome": {
+    "description": "The Socially Awesome Penguin is an advice animal image macro featuring an Adelie penguin facing right against a red background, the inverse of the Socially Awkward Penguin, used to celebrate moments of unexpected social success or charisma. Captions describe situations where everything goes surprisingly and triumphantly well.",
+    "emotion": "smug triumph",
+    "usage_context": "Used to humorously recount a moment when a social interaction went unexpectedly perfectly, such as a mistake accidentally becoming a charming inside joke or an awkward situation turning into a win.",
+    "extra_tags": [
+      "advice-animal",
+      "penguin",
+      "social-success",
+      "confidence",
+      "charm",
+      "adelie",
+      "red-background"
+    ]
+  },
+  "awesome-awkward": {
+    "description": "The Socially Awesome Awkward Penguin is a split-image advice animal combining the red Socially Awesome Penguin on top and the blue Socially Awkward Penguin on the bottom, used to describe a situation that starts impressively but ends in embarrassment. The top caption sets up a confident or cool action; the bottom reveals the cringe-worthy way it unravels.",
+    "emotion": "bittersweet humiliation",
+    "usage_context": "Used to describe a moment that began as a social win but immediately crashed into an awkward failure, capturing the relatable experience of almost pulling something off.",
+    "extra_tags": [
+      "advice-animal",
+      "split-image",
+      "penguin",
+      "social-anxiety",
+      "almost-nailed-it",
+      "hybrid",
+      "early-2010s"
+    ]
+  },
+  "awkward": {
+    "description": "The Socially Awkward Penguin is an advice animal image macro featuring an Adelie penguin facing left against a blue background, one of the earliest and most popular advice animal formats, used to describe universally relatable moments of social discomfort and interpersonal clumsiness. Captions depict the small, cringe-worthy situations that everyone experiences but rarely admits.",
+    "emotion": "squirming embarrassment",
+    "usage_context": "Used to confess or commiserate about a specific socially clumsy moment, such as accidentally waving at a stranger or laughing too hard at your own joke.",
+    "extra_tags": [
+      "advice-animal",
+      "penguin",
+      "social-anxiety",
+      "cringe",
+      "adelie",
+      "blue-background",
+      "4chan"
+    ]
+  },
+  "awkward-awesome": {
+    "description": "The Socially Awkward Awesome Penguin is a split-image advice animal combining the blue Socially Awkward Penguin on top and the red Socially Awesome Penguin on the bottom, describing a situation that starts with a cringe-worthy mistake but somehow turns into an unexpected social win. It is the inverse narrative arc of the Awesome Awkward variant.",
+    "emotion": "surprised relief",
+    "usage_context": "Used to describe a situation where something began as an embarrassing blunder but accidentally resolved into a positive or impressive outcome, capturing the pleasant surprise of failure turning to success.",
+    "extra_tags": [
+      "advice-animal",
+      "split-image",
+      "penguin",
+      "redemption",
+      "unexpected-win",
+      "hybrid",
+      "social-recovery"
+    ]
+  },
+  "bad": {
+    "description": "An image of Dr. Zoidberg from the animated series Futurama, dressed in a tuxedo, delivering the line 'Your music's bad and you should feel bad,' taken from the 2003 episode 'The Devil's Hands Are Idle Playthings.' The meme functions as a humorous, exaggerated criticism template where any subject can be substituted for 'music.'",
+    "emotion": "mock severity",
+    "usage_context": "Used to humorously declare that something is of poor quality and that the person responsible should feel appropriately ashamed, typically in a lighthearted rather than genuinely harsh tone.",
+    "extra_tags": [
+      "futurama",
+      "zoidberg",
+      "criticism",
+      "snowclone",
+      "you-should-feel-bad",
+      "cartoon",
+      "comedy-central"
+    ]
+  },
+  "badchoice": {
+    "description": "A scene from the 2004 comedy film Anchorman: The Legend of Ron Burgundy in which Ron Burgundy, played by Will Ferrell, drinks milk on a scorching hot day and immediately regrets it, declaring 'Milk was a bad choice.' The improvised line became a widely shared reaction GIF and meme for expressing obvious, hindsight regret about a poor decision.",
+    "emotion": "dramatic regret",
+    "usage_context": "Used to humorously express that a decision someone just made -- or is making -- was clearly a mistake, especially when the bad outcome was entirely predictable.",
+    "extra_tags": [
+      "anchorman",
+      "ron-burgundy",
+      "will-ferrell",
+      "regret",
+      "hindsight",
+      "bad-decision",
+      "improvised"
+    ]
+  },
+  "balloon": {
+    "description": "A simple two-panel webcomic created by artist Superlmer in 2017, depicting a grey figure chasing a yellow balloon while a pink figure holds them back, originally labeled with 'opportunities' and 'shyness.' The meme is used to illustrate how an internal or external obstacle prevents someone from reaching a desirable goal.",
+    "emotion": "resigned frustration",
+    "usage_context": "Used to describe any situation where something desirable keeps slipping away because an obstacle -- such as anxiety, bad timing, or circumstance -- keeps pulling you back from it.",
+    "extra_tags": [
+      "webcomic",
+      "superlmer",
+      "opportunity",
+      "obstacle",
+      "anxiety",
+      "self-sabotage",
+      "two-panel"
+    ]
+  },
+  "bd": {
+    "description": "Butthurt Dweller, also known as Gordo Granudo, is an image macro featuring a photo of a young man with a ponytail and glasses who became a symbol of the smug, self-righteous internet gamer or basement dweller archetype. It originated on Finnish imageboards around 2010 and spread to 4chan and meme generators, used to mock or embody someone who is simultaneously condescending and easily offended.",
+    "emotion": "smug indignation",
+    "usage_context": "Used when depicting or mocking someone who acts superior about trivial hobbies while simultaneously being oversensitive to any criticism.",
+    "extra_tags": [
+      "basement-dweller",
+      "gamer",
+      "neckbeard",
+      "advice-animal",
+      "ponytail",
+      "elitist",
+      "rage-face"
+    ]
+  },
+  "because": {
+    "description": "A still from Men in Black 3 (2012) in which Agent J (Will Smith) lectures two police officers for racial profiling while ironically admitting he did steal the car, just not because of his race. The meme is used to acknowledge a stereotype-confirming action while insisting the motivation was entirely unrelated.",
+    "emotion": "ironic self-awareness",
+    "usage_context": "Used when someone admits to doing something that looks stereotypical or hypocritical, but wants to clarify their actual motive had nothing to do with the obvious implication.",
+    "extra_tags": [
+      "will-smith",
+      "agent-j",
+      "racial-profiling",
+      "irony",
+      "coincidence",
+      "men-in-black-3",
+      "confession"
+    ]
+  },
+  "bender": {
+    "description": "Bender from the animated series Futurama declares he will build his own rival version of something, complete with \"blackjack and hookers,\" after being ejected or excluded. The quote originated in the 1999 episode \"The Series Has Landed\" and became one of the most widely adapted internet snowclone templates expressing defiant one-upmanship.",
+    "emotion": "defiant bravado",
+    "usage_context": "Used when someone is fed up with an existing system, group, or product and humorously vows to create a superior alternative from scratch.",
+    "extra_tags": [
+      "futurama",
+      "robot",
+      "snowclone",
+      "rebellion",
+      "blackjack",
+      "hookers",
+      "one-upmanship"
+    ]
+  },
+  "bihw": {
+    "description": "A photograph of Ohio farmer David Brandt looking contentedly at his field, captioned with \"It ain't much, but it's honest work.\" The image originated from a 2014 USDA article and became a Reddit meme in 2018 expressing humble pride in modest, unglamorous accomplishments.",
+    "emotion": "humble pride",
+    "usage_context": "Used to caption any small, unimpressive, or unglamorous achievement that the poster is nonetheless genuinely satisfied with.",
+    "extra_tags": [
+      "farmer",
+      "dave-brandt",
+      "ohio",
+      "usda",
+      "modest",
+      "wholesome",
+      "labor"
+    ]
+  },
+  "bilbo": {
+    "description": "A still of Bilbo Baggins from The Lord of the Rings: The Fellowship of the Ring (2001) in which he rationalizes keeping a borrowed object by asking \"After all, why not? Why shouldn't I keep it?\" The meme applies this moment of self-justifying temptation to everyday situations like keeping a borrowed pen.",
+    "emotion": "self-justifying temptation",
+    "usage_context": "Used to humorously caption the moment someone rationalizes keeping something they were only supposed to borrow.",
+    "extra_tags": [
+      "lord-of-the-rings",
+      "hobbit",
+      "one-ring",
+      "ian-holm",
+      "rationalization",
+      "borrowing",
+      "tolkien"
+    ]
+  },
+  "biw": {
+    "description": "Baby Insanity Wolf features a photograph of a howling wolf cub paired with captions describing trivially small acts of defiance presented as though they were wildly rebellious. It is a comedic spin-off of the original Insanity Wolf advice animal, dialing the extremity way down to mock how mundane \"edgy\" behavior can be.",
+    "emotion": "mock toughness",
+    "usage_context": "Used to humorously exaggerate a tiny, inconsequential act of rule-bending as if it were a major act of rebellion.",
+    "extra_tags": [
+      "advice-animal",
+      "wolf-cub",
+      "insanity-wolf",
+      "irony",
+      "small-rebellion",
+      "thug-life"
+    ]
+  },
+  "blb": {
+    "description": "Bad Luck Brian is an advice animal image macro featuring the deliberately awkward school photo of Kyle Craven, a teenager in a plaid vest with braces and an exaggerated grin, captioned with extreme scenarios of misfortune and embarrassment. It originated on Reddit in January 2012 and became one of the defining early internet memes.",
+    "emotion": "resigned misfortune",
+    "usage_context": "Used to describe a cascading series of unfortunate events where everything that could go wrong does, typically in the worst possible way.",
+    "extra_tags": [
+      "advice-animal",
+      "kyle-craven",
+      "yearbook",
+      "misfortune",
+      "embarrassment",
+      "bad-luck",
+      "braces"
+    ]
+  },
+  "boat": {
+    "description": "\"I Should Buy a Boat Cat\" features a cat from Bjork's 2005 music video dressed in a shirt and sitting at a table with a newspaper, captioned with sudden, whimsical epiphanies following the snowclone \"I should buy a [X].\" It became popular on Reddit in February 2012 as a vehicle for expressing impulsive and absurd desires with deadpan sophistication.",
+    "emotion": "whimsical spontaneity",
+    "usage_context": "Used when someone humorously describes a random, grand, or impractical impulse that struck them out of nowhere.",
+    "extra_tags": [
+      "sophisticated-cat",
+      "fancy-cat",
+      "advice-animal",
+      "snowclone",
+      "impulse",
+      "whimsy",
+      "reddit-2012"
+    ]
+  },
+  "bongo": {
+    "description": "Bongo Cat is an animated drawing of a simple white cat that appears to play bongos by tapping its paws, originally posted to Twitter in September 2018. The animation became an endlessly remixable meme format in which the cat is edited to appear to play different instruments in sync with various songs.",
+    "emotion": "cheerful playfulness",
+    "usage_context": "Used to create or share a musical meme in which the cat is animated to play along with a recognizable song, often as a joyful or whimsical tribute.",
+    "extra_tags": [
+      "animation",
+      "cat",
+      "music",
+      "twitter",
+      "drums",
+      "remix",
+      "adorable"
+    ]
+  },
+  "both": {
+    "description": "\"Why Not Both?\" features a young girl from an Old El Paso taco commercial who, when asked to choose between hard and soft taco shells, shrugs and asks \"Why don't we have both?\" The commercial aired in the mid-2000s and the moment became a widespread reaction meme resolving false binary choices.",
+    "emotion": "cheerful pragmatism",
+    "usage_context": "Used as a reaction to any false either/or dilemma to suggest that choosing both options simultaneously is obviously the correct answer.",
+    "extra_tags": [
+      "old-el-paso",
+      "taco",
+      "commercial",
+      "girl",
+      "binary-choice",
+      "por-que-no-los-dos",
+      "reaction"
+    ]
+  },
+  "box": {
+    "description": "A still from David Fincher's 1995 thriller Se7en depicting Brad Pitt as Detective Mills at the film's climactic desert ending, associated with his anguished cry of \"What's in the box?!\" The scene, in which the box contains his wife's severed head, became one of cinema's most shocking endings and a perennial internet meme about suspense and mystery.",
+    "emotion": "desperate suspense",
+    "usage_context": "Used to express frantic curiosity or dramatic suspense about unknown contents, often applied ironically to mundane unboxings or surprise reveals.",
+    "extra_tags": [
+      "se7en",
+      "david-fincher",
+      "brad-pitt",
+      "thriller",
+      "unboxing",
+      "seven-deadly-sins",
+      "climax"
+    ]
+  },
+  "bs": {
+    "description": "\"This is Bull, Shark\" is a photo of a person holding a small shark on a beach, whose name is a visual pun: \"bull shark\" sounds like \"bullshit,\" making it a template for deadpan reactions to something absurd or unbelievable. The example captions position it as a resigned caught-red-handed format.",
+    "emotion": "deadpan resignation",
+    "usage_context": "Used to react to something obviously ridiculous or to humorously play on the word \"bullshit\" in a plausibly deniable, image-based way.",
+    "extra_tags": [
+      "wordplay",
+      "shark",
+      "pun",
+      "fishing",
+      "caught",
+      "absurdist",
+      "beach"
+    ]
+  },
+  "bus": {
+    "description": "Two Guys on a Bus is a cartoon by Brazilian illustrator Genildo Ronchi (2013) depicting two passengers on a bus: one sees only a dull rock wall while the other sees a beautiful view, illustrating that perspective and attitude determine one's experience. As a meme it became a flexible contrast template where the two sides are labeled with opposing choices or mindsets.",
+    "emotion": "optimistic contrast",
+    "usage_context": "Used to contrast two opposing mindsets, choices, or attitudes by labeling which side leads to a positive versus a negative experience.",
+    "extra_tags": [
+      "perspective",
+      "attitude",
+      "contrast",
+      "genildo-ronchi",
+      "brazil",
+      "inspirational",
+      "two-panel"
+    ]
+  },
+  "buzz": {
+    "description": "\"X, X Everywhere\" is an image macro of Buzz Lightyear and Woody from Toy Story, captioned with \"[X]... [X] Everywhere\" to humorously point out the sudden ubiquity of a trend, topic, or thing. The format originated on 420chan in 2007 and exploded in popularity around the 2010 release of Toy Story 3.",
+    "emotion": "exasperated observation",
+    "usage_context": "Used to call out the overwhelming and seemingly sudden omnipresence of a particular trend, phrase, person, or thing.",
+    "extra_tags": [
+      "toy-story",
+      "pixar",
+      "woody",
+      "trend",
+      "ubiquity",
+      "everywhere",
+      "advice-animal"
+    ]
+  },
+  "cake": {
+    "description": "Office Space Milton features the character Milton Waddams (played by Stephen Root) from the 1999 Mike Judge comedy, who is perpetually overlooked and promises himself cake at the office party only to be denied it again. The \"I was told there would be cake\" caption became a meme for expressing betrayed expectations and unmet workplace promises.",
+    "emotion": "passive disappointment",
+    "usage_context": "Used when someone was explicitly promised a reward or benefit that never materialized, especially in a workplace or bureaucratic setting.",
+    "extra_tags": [
+      "office-space",
+      "mike-judge",
+      "milton-waddams",
+      "stapler",
+      "workplace",
+      "reward",
+      "unmet-expectations"
+    ]
+  },
+  "captain": {
+    "description": "\"Look at me, I am the captain now\" is a quote from the 2013 film Captain Phillips, delivered by Somali pirate Muse as he seizes control of a cargo ship from its American captain. The line became a reaction meme representing any sudden, assertive takeover of authority or control.",
+    "emotion": "assertive dominance",
+    "usage_context": "Used to humorously announce or depict a dramatic power shift in which someone new abruptly takes charge of a situation.",
+    "extra_tags": [
+      "captain-phillips",
+      "somali-pirate",
+      "muse",
+      "tom-hanks",
+      "takeover",
+      "power",
+      "reaction"
+    ]
+  },
+  "captain-america": {
+    "description": "Captain America Elevator Fight Dad Joke is a four-panel image macro combining screenshots from Captain America: The Winter Soldier (2014) and Avengers: Endgame (2019), where Cap's whispered secret to defuse the elevator fight is replaced with a groan-worthy dad joke punchline. The format went viral on Reddit in February 2020.",
+    "emotion": "playful groan",
+    "usage_context": "Used to deliver a dad joke by setting it up in a tense action context where the punchline is whispered as a dramatic secret.",
+    "extra_tags": [
+      "marvel",
+      "chris-evans",
+      "avengers",
+      "winter-soldier",
+      "endgame",
+      "dad-joke",
+      "pun"
+    ]
+  },
+  "cb": {
+    "description": "Confession Bear features a photograph of a Malayan sun bear leaning against a log, captioned with personal confessions about taboo behaviors, guilty pleasures, or controversial opinions the poster is too embarrassed to share openly. It originated on Reddit in June 2012 and became one of the most popular advice animal formats for anonymous confession humor.",
+    "emotion": "guilty confession",
+    "usage_context": "Used to anonymously admit an embarrassing, taboo, or socially unacceptable secret in a humorous advice-animal format.",
+    "extra_tags": [
+      "advice-animal",
+      "malayan-sun-bear",
+      "reddit",
+      "anonymous",
+      "guilty-pleasure",
+      "taboo",
+      "dark-humor"
+    ]
+  },
+  "cbb": {
+    "description": "Communist Bugs Bunny features the Looney Tunes character Bugs Bunny overlaid with a red filter and the Soviet hammer-and-sickle symbol, used in captions where the subject claims ownership of something by replacing \"my\" or \"your\" with \"our.\" The meme gained popularity in June 2020, humorously applying collectivist ideology to everyday possessions and relationships.",
+    "emotion": "smug collectivism",
+    "usage_context": "Used to humorously claim communal ownership of something another person considers exclusively theirs, playing on Soviet-era \"everything belongs to everyone\" ideology.",
+    "extra_tags": [
+      "looney-tunes",
+      "soviet",
+      "communism",
+      "hammer-and-sickle",
+      "collectivist",
+      "ours",
+      "bugs-bunny"
+    ]
+  },
+  "cbg": {
+    "description": "Comic Book Guy is an obese, pompous comic book store owner from The Simpsons whose catchphrase 'Worst. Episode. Ever.' became a template for hyperbolic, self-righteous criticism delivered with supreme confidence. The meme is used to mock overcritical fans and anyone who treats minor disappointments as catastrophic failures deserving public condemnation.",
+    "emotion": "smug contempt",
+    "usage_context": "Used when someone wants to dismiss something as the worst of its kind in an exaggerated, performatively outraged way.",
+    "extra_tags": [
+      "worst-ever",
+      "simpsons",
+      "hyperbolic-criticism",
+      "fan-entitlement",
+      "jeffrey-albertson",
+      "hank-azaria",
+      "snob"
+    ]
+  },
+  "center": {
+    "description": "Derek Zoolander from the 2001 film Zoolander shouts at a tiny scale model, demanding to know 'What is this, a center for ants?!' because it is too small for children to fit inside. Online, the snowclone 'What is this, a X for ants?' mocks anything comically undersized, low-resolution, or miniature.",
+    "emotion": "indignant disbelief",
+    "usage_context": "Used to mock an image, object, or piece of content that is absurdly small or low-resolution.",
+    "extra_tags": [
+      "zoolander",
+      "ben-stiller",
+      "snowclone",
+      "tiny",
+      "small",
+      "ants",
+      "size-complaint"
+    ]
+  },
+  "ch": {
+    "description": "Captain Hindsight is a parody superhero from South Park whose only power is explaining what should have been done to prevent a disaster after it has already happened. The meme calls out people who offer useless after-the-fact criticism with no constructive value in the present.",
+    "emotion": "smug uselessness",
+    "usage_context": "Used to call out someone who offers obvious 'should have done X' advice only after a mistake or disaster has already occurred.",
+    "extra_tags": [
+      "south-park",
+      "hindsight-bias",
+      "monday-morning-quarterback",
+      "too-late",
+      "obvious-advice",
+      "jack-brolin",
+      "retroactive"
+    ]
+  },
+  "chair": {
+    "description": "A multi-panel exploitable image from a heated father-son argument on the Discovery Channel reality show American Chopper, used to dramatize escalating back-and-forth debates. The format represents two people passionately arguing opposing sides of a question, with each panel showing a new volley in the exchange.",
+    "emotion": "escalating outrage",
+    "usage_context": "Used to illustrate any heated two-sided debate or internal conflict, labeling each panel with the competing arguments.",
+    "extra_tags": [
+      "paul-teutul",
+      "american-chopper",
+      "debate",
+      "argument",
+      "discovery-channel",
+      "multi-panel",
+      "dialogic"
+    ]
+  },
+  "cheems": {
+    "description": "Cheems is a Shiba Inu named Balltze from Hong Kong who became an internet meme character known for inserting extra 'M' letters into words, especially 'cheemsburger' instead of cheeseburger. In the 'Swole Doge vs. Cheems' format he represents a diminished or weaker present-day version of something compared to a stronger past version.",
+    "emotion": "gentle inadequacy",
+    "usage_context": "Used to represent something or someone as a weaker, more pathetic version of a past ideal, or as a vehicle for humorous phonetic misspelling.",
+    "extra_tags": [
+      "balltze",
+      "shiba-inu",
+      "cheemsburger",
+      "swole-doge",
+      "bonk",
+      "hong-kong",
+      "misspelling"
+    ]
+  },
+  "chosen": {
+    "description": "A still from Star Wars Episode III: Revenge of the Sith showing Obi-Wan Kenobi delivering the anguished line 'You were the chosen one!' to Anakin Skywalker after his betrayal and fall to the dark side. The meme expresses deep disappointment in someone or something that had great potential but failed spectacularly.",
+    "emotion": "anguished betrayal",
+    "usage_context": "Used to dramatically call out a person, product, or institution that was highly anticipated but ultimately let everyone down.",
+    "extra_tags": [
+      "star-wars",
+      "obi-wan",
+      "anakin",
+      "prequel-memes",
+      "darth-vader",
+      "prophecy",
+      "letdown"
+    ]
+  },
+  "cmm": {
+    "description": "A photo of conservative commentator Steven Crowder sitting at a folding table on a university campus with a sign reading 'Male privilege is a myth / Change my mind,' turned into an exploitable template where any bold or provocative opinion replaces the sign text. The meme conveys a confident, debate-ready assertion daring others to argue against it.",
+    "emotion": "provocative confidence",
+    "usage_context": "Used to humorously assert a bold or controversial opinion while inviting others to dispute it.",
+    "extra_tags": [
+      "steven-crowder",
+      "louder-with-crowder",
+      "debate",
+      "sign",
+      "campus",
+      "controversial-opinion",
+      "photoshop"
+    ]
+  },
+  "country": {
+    "description": "Dr. Nick Riviera, the bumbling quack physician from The Simpsons, delivers the line 'Inflammable means flammable? What a country!' upon learning an absurd but true fact. The meme captures baffled wonder at something counterintuitive or surprisingly absurd.",
+    "emotion": "baffled amazement",
+    "usage_context": "Used to react to a fact, rule, or situation that seems nonsensical or hilariously counterintuitive.",
+    "extra_tags": [
+      "dr-nick",
+      "simpsons",
+      "hi-everybody",
+      "inflammable",
+      "absurdity",
+      "counterintuitive"
+    ]
+  },
+  "crazypills": {
+    "description": "Jacobim Mugatu, played by Will Ferrell in the 2001 film Zoolander, erupts in frustration screaming that he feels like he is taking crazy pills because no one else notices the obvious truth that Derek Zoolander only has one look. The meme is used when someone feels they are the only person perceiving something that should be obvious to everyone.",
+    "emotion": "frustrated disbelief",
+    "usage_context": "Used when the poster feels they are the only one who can see an obvious truth while everyone else seems oblivious.",
+    "extra_tags": [
+      "zoolander",
+      "mugatu",
+      "will-ferrell",
+      "gaslit",
+      "obvious",
+      "frustrated-rant",
+      "fashion"
+    ]
+  },
+  "crow": {
+    "description": "A four-panel webcomic from the series False Knees by Josh Barkman depicting a crow performing stand-up comedy with only 'caw caw caw' as material, getting heckled with 'Get better material!', and then checking its notes to find only more 'caw caw caw.' The meme is used when someone's output is repetitive or one-note.",
+    "emotion": "awkward embarrassment",
+    "usage_context": "Used to mock someone whose creative output, argument, or repertoire is laughably thin and repetitive.",
+    "extra_tags": [
+      "false-knees",
+      "webcomic",
+      "josh-barkman",
+      "heckler",
+      "stand-up",
+      "bird",
+      "caw"
+    ]
+  },
+  "crowd": {
+    "description": "A video of English football fans in a bar erupting in wild celebration when England scores against Wales at Euro 2016, repurposed in parodies where the footage they are watching is replaced with mundane or absurd clips. The meme conveys disproportionately ecstatic joy over something trivial.",
+    "emotion": "over-the-top ecstasy",
+    "usage_context": "Used to humorously portray an extreme, over-the-top reaction to something small or mundane.",
+    "extra_tags": [
+      "football",
+      "euro-2016",
+      "england",
+      "celebration",
+      "happiness-simple-things",
+      "bar",
+      "reaction"
+    ]
+  },
+  "cryingfloor": {
+    "description": "A stick-figure cartoon lying on the floor crying in a pool of tears, originally shared as a fan reaction to the devastating 'Hold the Door' / Hodor death scene in Game of Thrones Season 6. The meme represents overwhelming emotional devastation, particularly from fictional or unexpected loss.",
+    "emotion": "overwhelming grief",
+    "usage_context": "Used to express being completely emotionally wrecked by a piece of media, news, or an event.",
+    "extra_tags": [
+      "game-of-thrones",
+      "hodor",
+      "hold-the-door",
+      "spoiler",
+      "devastated",
+      "emotional-damage",
+      "got"
+    ]
+  },
+  "db": {
+    "description": "A 2015 stock photo by Antonio Guillem showing a man ogling a passing woman while his girlfriend looks on in disbelief, used as an object-labeling meme where the three figures are captioned to represent abandoning one thing for a tempting alternative. It became one of the defining meme formats of 2017.",
+    "emotion": "tempted distraction",
+    "usage_context": "Used to illustrate choosing or being distracted by something new and appealing while neglecting an existing commitment or option.",
+    "extra_tags": [
+      "antonio-guillem",
+      "stock-photo",
+      "object-labeling",
+      "infidelity",
+      "temptation",
+      "girlfriend",
+      "man-looking"
+    ]
+  },
+  "dbg": {
+    "description": "A variant of the Distracted Boyfriend stock photo that foregrounds the disapproving girlfriend's perspective, labeling her as the thing being neglected while the boyfriend turns away. It flips the framing to emphasize the abandoned party rather than the one doing the abandoning.",
+    "emotion": "jealous indignation",
+    "usage_context": "Used to represent the perspective of the thing being neglected or overlooked when attention shifts to something new.",
+    "extra_tags": [
+      "antonio-guillem",
+      "stock-photo",
+      "object-labeling",
+      "neglected",
+      "girlfriend-reaction",
+      "jealousy",
+      "role-reversal"
+    ]
+  },
+  "dg": {
+    "description": "A four-panel Tumblr image macro by Ted Dorfeuille showing his face cycling from eager anticipation to flat disappointment, originally created in 2011 as a joke about receiving an unwanted response. It anchors the broader 'Expectation vs. Reality' meme format contrasting an excited hope against a let-down outcome.",
+    "emotion": "deflated disappointment",
+    "usage_context": "Used to contrast an idealized expectation with a disappointing reality, particularly when something hyped fails to deliver.",
+    "extra_tags": [
+      "ted-dorfeuille",
+      "tumblr",
+      "four-panel",
+      "expectation-vs-reality",
+      "letdown",
+      "anticipation",
+      "reaction"
+    ]
+  },
+  "disastergirl": {
+    "description": "A photograph of four-year-old Zoe Roth in 2005 wearing a mischievous smirk while a house burns behind her during a controlled fire training exercise; the expression suggests she caused the disaster. Users Photoshop her into scenes of historical and fictional catastrophes to imply gleeful culpability.",
+    "emotion": "gleeful malevolence",
+    "usage_context": "Used to claim smug, secret responsibility for a disaster or chaotic situation, often humorously applied to real-world events.",
+    "extra_tags": [
+      "zoe-roth",
+      "fire",
+      "smirk",
+      "photoshop",
+      "nft",
+      "just-as-planned",
+      "advice-animal"
+    ]
+  },
+  "dodgson": {
+    "description": "A scene from the 1993 film Jurassic Park in which Dennis Nedry loudly announces the name of the disguised Lewis Dodgson in public, then gestures around saying 'See? Nobody cares,' to show that no one noticed or reacted. Online it is used as a dismissive reaction image conveying complete indifference to someone seeking attention.",
+    "emotion": "dismissive indifference",
+    "usage_context": "Used to shut down someone who is making a scene, bragging, or seeking unwarranted attention by pointing out that nobody is impressed.",
+    "extra_tags": [
+      "jurassic-park",
+      "dennis-nedry",
+      "lewis-dodgson",
+      "wayne-knight",
+      "nobody-cares",
+      "reaction",
+      "1993-film"
+    ]
+  },
+  "doge": {
+    "description": "Doge features a Shiba Inu named Kabosu photographed on a couch with raised eyebrows and a sidelong glance, overlaid with broken-English phrases like 'such wow' and 'very skill' in Comic Sans. It is one of the most iconic internet memes of the 2010s and spawned the Dogecoin cryptocurrency.",
+    "emotion": "absurd wonder",
+    "usage_context": "Used to express exaggerated awe, amusement, or commentary on a topic using the signature 'such X, very Y, wow' grammatical pattern.",
+    "extra_tags": [
+      "kabosu",
+      "shiba-inu",
+      "such-wow",
+      "very",
+      "comic-sans",
+      "dogecoin",
+      "broken-english"
+    ]
+  },
+  "dragon": {
+    "description": "A four-panel webcomic by artist Dami Lee based on a viral Tumblr post, in which a character wishes for a dragon and is earnestly asked follow-up gift questions like 'What color do you want your dragon?' The meme is used to play along with an absurd or fantastical wish as though it were a perfectly reasonable request.",
+    "emotion": "earnest whimsy",
+    "usage_context": "Used to roleplay treating an impossible or fantastical desire as a normal, accommodatable wish, often inviting the poster to specify details.",
+    "extra_tags": [
+      "dami-lee",
+      "webcomic",
+      "tumblr",
+      "fantasy",
+      "wish-fulfillment",
+      "christmas",
+      "exploitable"
+    ]
+  },
+  "drake": {
+    "description": "A two-panel image macro from Drake's 2015 'Hotline Bling' music video, showing Drake dismissing something with a raised hand in the top panel and approving something else with a thumbs-up gesture in the bottom panel. It became one of the internet's most versatile preference-comparison templates, used to contrast a rejected option against a preferred one.",
+    "emotion": "smug preference",
+    "usage_context": "Posted when someone wants to humorously highlight that they reject one thing in favor of another, whether the comparison is trivial, ironic, or hypocritical.",
+    "extra_tags": [
+      "hotline-bling",
+      "comparison",
+      "preference",
+      "approval",
+      "rejection",
+      "two-panel",
+      "drakeposting"
+    ]
+  },
+  "drowning": {
+    "description": "A comic by Russian artist Gudim showing a hand reaching out of water in distress while another hand extends down and gives it a high five instead of pulling it to safety. It satirizes unhelpful or tone-deaf responses to someone in genuine trouble.",
+    "emotion": "dark mockery",
+    "usage_context": "Used when someone receives a useless, dismissive, or bizarrely inappropriate response to a serious problem or plea for help.",
+    "extra_tags": [
+      "gudim",
+      "high-five",
+      "unhelpful",
+      "bystander",
+      "dark-humor",
+      "comic",
+      "object-labeling"
+    ]
+  },
+  "drunk": {
+    "description": "An image of an infant posed next to a pint of beer, captioned with slurred, rambling text mimicking a drunk adult telling bar stories. The humor comes from mapping inebriated adult behavior onto an innocent baby, highlighting how similar the two states actually are.",
+    "emotion": "tipsy absurdity",
+    "usage_context": "Used to set up a joke where the punchline reframes a typical baby behavior as something a drunk person would do, or vice versa.",
+    "extra_tags": [
+      "baby",
+      "infant",
+      "bar",
+      "alcohol",
+      "slurred-speech",
+      "advice-animal",
+      "relatable"
+    ]
+  },
+  "ds": {
+    "description": "An illustrated cartoon of a sweating, panicking person standing between two large red buttons, unable to choose between them. Created by Jake Clark in 2014, it represents the anxiety of facing two mutually exclusive or contradictory desires simultaneously.",
+    "emotion": "anxious indecision",
+    "usage_context": "Posted to illustrate a personal dilemma where two competing impulses, values, or obligations are equally compelling and impossible to satisfy at once.",
+    "extra_tags": [
+      "sweating",
+      "buttons",
+      "dilemma",
+      "choice",
+      "two-buttons",
+      "contradiction",
+      "hypocrite",
+      "jake-clark"
+    ]
+  },
+  "dsm": {
+    "description": "An image macro featuring a dimly lit, bearded man whose menacing appearance sets up a bait-and-switch joke: the top caption implies something sinister or violent, while the bottom caption reveals a wholesome or innocent reality. It satirizes the anxiety around meeting strangers from online dating profiles.",
+    "emotion": "relieved absurdism",
+    "usage_context": "Used to subvert a threatening or ominous setup with a sweet, harmless punchline, playing on the gap between a creepy first impression and benign actual intent.",
+    "extra_tags": [
+      "bait-and-switch",
+      "online-dating",
+      "creepy",
+      "wholesome",
+      "subversion",
+      "reddit",
+      "first-impressions"
+    ]
+  },
+  "dwight": {
+    "description": "An image macro of Dwight Schrute from the TV series The Office, formatted with a statement followed by the word FALSE and a pedantic, literal rebuttal. It captures Dwight's character trait of correcting common idioms and platitudes with deadpan, overly literal facts.",
+    "emotion": "pedantic smugness",
+    "usage_context": "Used to humorously debunk a cliche, inspirational quote, or common saying by countering it with an absurdly literal or darkly factual correction.",
+    "extra_tags": [
+      "the-office",
+      "schrute",
+      "false",
+      "know-it-all",
+      "literal",
+      "tv",
+      "nbc",
+      "facts"
+    ]
+  },
+  "elf": {
+    "description": "A screenshot of Will Ferrell as Buddy the Elf confronting a mall Santa in the 2003 film Elf, delivering the accusatory line 'You sit on a throne of lies' with an expression of righteous indignation. The phrase became a catchphrase for calling out deception or false claims.",
+    "emotion": "righteous indignation",
+    "usage_context": "Posted in response to discovering that someone has been lying, exaggerating, or presenting a false front, ranging from minor dishonesty to full-scale hypocrisy.",
+    "extra_tags": [
+      "buddy",
+      "will-ferrell",
+      "christmas",
+      "santa",
+      "throne-of-lies",
+      "movie-quote",
+      "holiday",
+      "accusation"
+    ]
+  },
+  "elmo": {
+    "description": "A two-panel image macro featuring Sesame Street's Elmo standing between healthy fruit and a pile of white powder in the first panel, then face-down in the powder in the second. It uses dark humor and the absurdity of an innocent children's character to represent gleefully choosing a harmful or irresponsible option.",
+    "emotion": "gleeful self-destruction",
+    "usage_context": "Used to humorously admit choosing a bad, unhealthy, or irresponsible option over a sensible one, with exaggerated enthusiasm for the worse choice.",
+    "extra_tags": [
+      "sesame-street",
+      "cocaine",
+      "bad-choice",
+      "temptation",
+      "two-panel",
+      "dark-humor",
+      "kids-show"
+    ]
+  },
+  "ermg": {
+    "description": "A photograph of Maggie Goldenberger holding Goosebumps books with an expression of extreme, open-mouthed excitement, captioned with intentionally misspelled phonetic text mimicking a retainer lisp. It originated on Reddit in 2012 and became a template for expressing overwhelming, exaggerated enthusiasm.",
+    "emotion": "exaggerated excitement",
+    "usage_context": "Used to express intense, over-the-top enthusiasm or nostalgia for something, particularly childhood favorites or unexpected delights.",
+    "extra_tags": [
+      "oh-my-god",
+      "goosebumps",
+      "retainer",
+      "lisp",
+      "phonetic",
+      "excitement",
+      "reddit-2012",
+      "maggie"
+    ]
+  },
+  "exit": {
+    "description": "A photograph of a car dramatically veering off a highway at an exit ramp, with labels on the highway and exit sign representing two contrasting options. It illustrates the moment of actively choosing a preferred path over the expected or responsible one.",
+    "emotion": "impulsive swerve",
+    "usage_context": "Used to show that someone is abandoning the expected or sensible option and enthusiastically taking a different, often less responsible route.",
+    "extra_tags": [
+      "highway",
+      "off-ramp",
+      "car",
+      "choice",
+      "object-labeling",
+      "decision",
+      "preference",
+      "left-exit-12"
+    ]
+  },
+  "fa": {
+    "description": "A rage comic character with a sad, melancholic face that has become the iconic symbol of loneliness and romantic failure on the internet. Originating on FunnyJunk around 2010, the Forever Alone character is used self-deprecatingly to express social isolation and the absence of companionship.",
+    "emotion": "lonely self-pity",
+    "usage_context": "Used to humorously or sadly acknowledge being single, socially excluded, or left out while everyone else seems to have companions or success.",
+    "extra_tags": [
+      "forever-alone",
+      "lonely",
+      "single",
+      "rage-comic",
+      "valentine",
+      "rejection",
+      "advice-animal",
+      "isolation"
+    ]
+  },
+  "facepalm": {
+    "description": "An image of Captain Jean-Luc Picard from Star Trek: The Next Generation pressing his palm to his face in a gesture of exasperated disappointment, from the 1990 episode 'Deja Q'. It has become the definitive internet shorthand for reacting to stupidity, poor decisions, or embarrassing behavior.",
+    "emotion": "exasperated disbelief",
+    "usage_context": "Posted in response to something strikingly stupid, illogical, or embarrassing that causes secondhand shame or profound frustration.",
+    "extra_tags": [
+      "picard",
+      "star-trek",
+      "tng",
+      "patrick-stewart",
+      "embarrassment",
+      "disappointment",
+      "reaction",
+      "headdesk"
+    ]
+  },
+  "fbf": {
+    "description": "An advice animal image macro featuring a frog's face on a colorful wheel background, captioned with confessions of lazy, unhygienic, or questionable bachelor habits that most single men would be embarrassed to admit publicly. Originating on Meme Generator in 2009, it became one of the most-generated Advice Animals formats.",
+    "emotion": "shameless self-awareness",
+    "usage_context": "Used to humorously confess a gross, lazy, or socially unacceptable personal habit that is relatable to people living alone or without oversight.",
+    "extra_tags": [
+      "frog",
+      "advice-animal",
+      "bachelor",
+      "lazy",
+      "hygiene",
+      "gross",
+      "single-life",
+      "confession"
+    ]
+  },
+  "feelsgood": {
+    "description": "An image macro of a man touching his face with both hands in an expression of deep, contented satisfaction, originating from stock photography and adopted on 4chan around 2011. It is used to convey genuine or ironic pleasure and smug self-satisfaction in response to events or statements.",
+    "emotion": "smug satisfaction",
+    "usage_context": "Posted to express contentment or self-satisfied pleasure about a situation, outcome, or sensory experience, sometimes sincerely and sometimes ironically.",
+    "extra_tags": [
+      "satisfaction",
+      "content",
+      "pleasure",
+      "4chan",
+      "reaction",
+      "touching-face",
+      "self-satisfied"
+    ]
+  },
+  "fetch": {
+    "description": "A screenshot of Regina George from the 2004 film Mean Girls dismissively telling her friend to stop trying to make 'fetch' happen because it is never going to happen. The quote became a versatile template for mocking failed trends, products, or ideas that someone is pushing unsuccessfully.",
+    "emotion": "dismissive finality",
+    "usage_context": "Posted to declare that a particular trend, product, word, or initiative is doomed to fail and that everyone should stop attempting to make it a thing.",
+    "extra_tags": [
+      "mean-girls",
+      "regina-george",
+      "rachel-mcadams",
+      "trend",
+      "slang",
+      "movie-quote",
+      "pop-culture",
+      "2004"
+    ]
+  },
+  "fine": {
+    "description": "A two-panel webcomic by KC Green from January 2013 showing an anthropomorphic dog sitting calmly in a room engulfed in flames, telling itself 'This is fine.' It has become the defining internet image for denial, helpless acceptance, or forced composure in the face of obvious catastrophe.",
+    "emotion": "resigned denial",
+    "usage_context": "Used to react to a situation that is clearly going wrong or falling apart while projecting an unconvincing calm, often applied to personal crises, political disasters, or workplace chaos.",
+    "extra_tags": [
+      "this-is-fine",
+      "dog",
+      "fire",
+      "kc-green",
+      "gunshow",
+      "webcomic",
+      "denial",
+      "disaster",
+      "calm"
+    ]
+  },
+  "firsttry": {
+    "description": "A reference to a scene from The Lego Movie (2014) in which Batman triumphantly yells 'First try!' after a prolonged, clearly multi-attempt event. It is used ironically to celebrate finally succeeding at something after many failed attempts, or sarcastically to claim a messy success was effortless.",
+    "emotion": "ironic triumph",
+    "usage_context": "Used after finally completing a difficult or repeatedly failed task to sarcastically claim it was achieved on the first try, celebrating success while self-deprecatingly acknowledging the struggle.",
+    "extra_tags": [
+      "lego-movie",
+      "batman",
+      "success",
+      "sarcasm",
+      "irony",
+      "skateboarding",
+      "gaming",
+      "celebration"
+    ]
+  },
+  "fmr": {
+    "description": "An image macro of Jonah Hill from the 2007 film Superbad wearing a sarcastic, resigned expression, captioned with an unpopular opinion or socially awkward behavior followed by the phrase 'Fuck me, right?' It conveys sardonic self-pity and ironic acceptance of being judged for an unconventional stance.",
+    "emotion": "sardonic resignation",
+    "usage_context": "Used to humorously acknowledge holding an unpopular opinion or doing something socially awkward, accepting the inevitable judgment with exaggerated self-pity.",
+    "extra_tags": [
+      "jonah-hill",
+      "superbad",
+      "unpopular-opinion",
+      "sarcasm",
+      "self-deprecating",
+      "movie",
+      "irony",
+      "judgment"
+    ]
+  },
+  "friends": {
+    "description": "An object-labeling image macro from a Star Trek: Voyager scene in which one character asks 'Are you two friends?' and the two labeled subjects give contradictory yes and no answers. It highlights absurd, ironic, or hypocritical relationships between two things that claim alignment but fundamentally oppose each other.",
+    "emotion": "sardonic contradiction",
+    "usage_context": "Used to expose the irony or contradiction when two groups, concepts, or people claim to be aligned or compatible but are clearly at odds with each other.",
+    "extra_tags": [
+      "star-trek",
+      "voyager",
+      "object-labeling",
+      "contradiction",
+      "irony",
+      "two-panel",
+      "political",
+      "incompatibility"
+    ]
+  },
+  "fry": {
+    "description": "Philip J. Fry from the animated series Futurama is shown squinting with a skeptical expression, originating from Season 2, Episode 6. The meme follows the format 'Not sure if X / or just Y' and is used to express internal uncertainty or suspicion between two possible interpretations of a situation.",
+    "emotion": "skeptical uncertainty",
+    "usage_context": "Used when someone wants to humorously express that they cannot decide between two equally plausible (often unflattering) explanations for something.",
+    "extra_tags": [
+      "squinting",
+      "suspicion",
+      "indecision",
+      "advice-animal",
+      "not-sure-if",
+      "futurama",
+      "philip-fry"
+    ]
+  },
+  "fwp": {
+    "description": "A stock photo of a woman crying dramatically into her hands, used as the face of the First World Problems advice animal series. The meme satirizes trivial inconveniences experienced only by people in wealthy, privileged circumstances, contrasting them with genuine hardship.",
+    "emotion": "mock distress",
+    "usage_context": "Used when someone wants to self-deprecatingly acknowledge that their complaint is petty and only possible because of their privileged circumstances.",
+    "extra_tags": [
+      "privilege",
+      "trivial-complaint",
+      "silvia-bottini",
+      "advice-animal",
+      "white-whine",
+      "wealthy-problems",
+      "crying"
+    ]
+  },
+  "gandalf": {
+    "description": "A screenshot of Gandalf the Grey from The Lord of the Rings looking around with a puzzled, bewildered expression, originating from a Reddit post in 2011 captioned 'I have no memory of this place.' The meme is used to represent confusion or forgetfulness upon returning to a familiar context.",
+    "emotion": "bewildered confusion",
+    "usage_context": "Used when someone returns to something after a long absence and finds it unfamiliar, or when encountering a flood of posts about a topic they missed.",
+    "extra_tags": [
+      "lord-of-the-rings",
+      "lotr",
+      "forgetfulness",
+      "tolkien",
+      "no-memory",
+      "wizard",
+      "advice-animal"
+    ]
+  },
+  "gb": {
+    "description": "A multi-panel image macro featuring progressively glowing and expanding brain illustrations alongside a left-hand column of text, originating from the 'Whomst' meme on Reddit in early 2017. The format ironically presents increasingly absurd or ridiculous ideas as the most enlightened, big-brained conclusions.",
+    "emotion": "ironic self-superiority",
+    "usage_context": "Used to mock convoluted or counterintuitive reasoning by presenting the most absurd take as if it were the most intellectually advanced position.",
+    "extra_tags": [
+      "expanding-brain",
+      "big-brain",
+      "irony",
+      "four-panel",
+      "whomst",
+      "enlightened",
+      "exploitable"
+    ]
+  },
+  "gears": {
+    "description": "Peter Griffin from the animated series Family Guy is shown at a local-access news desk hosting a segment called 'You Know What Really Grinds My Gears,' originating from the 2005 direct-to-DVD film Family Guy Presents: Stewie Griffin: The Untold Story. The meme is used to introduce comedic rants about personal pet peeves.",
+    "emotion": "indignant annoyance",
+    "usage_context": "Used when someone wants to humorously introduce a complaint or grievance about a minor irritant.",
+    "extra_tags": [
+      "peter-griffin",
+      "family-guy",
+      "pet-peeve",
+      "rant",
+      "complaint",
+      "advice-animal",
+      "animated"
+    ]
+  },
+  "genie": {
+    "description": "An image from Disney's 1992 animated film Aladdin showing the Genie referencing his famous line about having phenomenal cosmic powers but being confined to an itty bitty living space. The meme is used as a comedic contrast format highlighting situations where enormous potential or capability is severely constrained.",
+    "emotion": "wry irony",
+    "usage_context": "Used to humorously describe any situation where great power, talent, or potential is trapped or undermined by tight limitations or circumstances.",
+    "extra_tags": [
+      "aladdin",
+      "disney",
+      "robin-williams",
+      "contrast",
+      "potential",
+      "constraint",
+      "magic-lamp"
+    ]
+  },
+  "ggg": {
+    "description": "An advice animal image macro series featuring a square-jawed man smiling with a marijuana cigarette in his mouth, designed as the antithesis of the Scumbag Steve meme. Good Guy Greg depicts a genuinely considerate, generous, and selfless person whose actions benefit those around him.",
+    "emotion": "wholesome generosity",
+    "usage_context": "Used to highlight or celebrate an unusually considerate, selfless, or genuinely kind action that goes beyond what is expected.",
+    "extra_tags": [
+      "advice-animal",
+      "scumbag-steve-opposite",
+      "kindness",
+      "considerate",
+      "stoner",
+      "wholesome",
+      "positive"
+    ]
+  },
+  "glasses": {
+    "description": "A multi-panel exploitable image macro from the 2002 film Spider-Man in which Peter Parker puts on or removes his glasses, causing the subject of an image to transform dramatically between the two panels. The meme plays on the contrast between a naive or surface-level perception and a revealed, often satirical truth.",
+    "emotion": "sudden revelation",
+    "usage_context": "Used to present a humorous or satirical contrast between how something appears at first glance versus what it supposedly really is upon closer inspection.",
+    "extra_tags": [
+      "spider-man",
+      "peter-parker",
+      "tobey-maguire",
+      "perception-vs-reality",
+      "before-after",
+      "exploitable",
+      "2002-film"
+    ]
+  },
+  "gone": {
+    "description": "A still from the South Park episode 'Margaritaville' (2009) featuring a bank teller who informs customers their money has been instantly lost, popularized as a meme starting in 2012. The format is used to humorously describe anything that disappears quickly or unexpectedly.",
+    "emotion": "resigned helplessness",
+    "usage_context": "Used when something desirable, hopeful, or valuable disappears or is lost almost immediately after appearing.",
+    "extra_tags": [
+      "south-park",
+      "margaritaville",
+      "bank",
+      "financial-crisis",
+      "aaand",
+      "advice-animal",
+      "loss"
+    ]
+  },
+  "grave": {
+    "description": "A photograph of actor Grant Gustin (The Flash) kneeling cheerfully next to the in-universe grave of Oliver Queen (Green Arrow) from the CW Arrowverse, which went viral in January 2020. It became an object-labeling template used to show one entity cheerfully outlasting or triumphing over a fallen rival.",
+    "emotion": "gleeful triumph",
+    "usage_context": "Used to humorously depict one thing surviving, winning, or thriving while something else it competed with has been defeated, discontinued, or replaced.",
+    "extra_tags": [
+      "arrowverse",
+      "dc",
+      "cw",
+      "flash",
+      "green-arrow",
+      "object-labeling",
+      "rivalry",
+      "celebration"
+    ]
+  },
+  "gru": {
+    "description": "A four-panel exploitable comic based on a scene from the 2010 animated film Despicable Me, in which the villain Gru presents a plan on a flipboard. The punchline arrives in the third panel where the plan takes an absurd or self-defeating turn, with the fourth panel showing Gru staring back at it in disbelief.",
+    "emotion": "dawning horror",
+    "usage_context": "Used to depict a plan or course of action that sounds reasonable until an ironic, contradictory, or self-defeating consequence is revealed in the final step.",
+    "extra_tags": [
+      "despicable-me",
+      "four-panel",
+      "self-defeating",
+      "plan-gone-wrong",
+      "exploitable",
+      "animated-film",
+      "irony"
+    ]
+  },
+  "grumpycat": {
+    "description": "Grumpy Cat is the nickname for Tardar Sauce, a snowshoe cat with a permanently displeased facial expression caused by feline dwarfism, whose photos went viral on Reddit in September 2012. The meme typically pairs her dour face with captions expressing blunt negativity, refusal, or pessimism.",
+    "emotion": "blunt displeasure",
+    "usage_context": "Used to express a firm, unapologetic 'no' or to humorously voice cynicism, pessimism, or complete indifference to something others find positive.",
+    "extra_tags": [
+      "tardar-sauce",
+      "cat",
+      "pessimism",
+      "negativity",
+      "internet-celebrity",
+      "no",
+      "advice-animal"
+    ]
+  },
+  "hagrid": {
+    "description": "An image or clip of Rubeus Hagrid from the Harry Potter series reacting with immediate regret after accidentally revealing a secret, based on his recurring character trait of being unable to keep confidential information. The meme captures the universal feeling of blurting something out and instantly wishing you could take it back.",
+    "emotion": "instant regret",
+    "usage_context": "Used when someone has just accidentally revealed information they should have kept secret, or said something they immediately wish they could unsay.",
+    "extra_tags": [
+      "harry-potter",
+      "robbie-coltrane",
+      "secret-revealed",
+      "oversharing",
+      "blunder",
+      "loose-lips",
+      "wizarding-world"
+    ]
+  },
+  "handshake": {
+    "description": "A watercolor painting depicting the iconic arm-wrestling handshake between Arnold Schwarzenegger and Carl Weathers from the 1987 sci-fi action film Predator, used as an object-labeling meme. Labels on each arm and the clasped hands in the middle identify two groups or ideas that unexpectedly agree on something.",
+    "emotion": "shared solidarity",
+    "usage_context": "Used to show that two seemingly different or opposing groups, ideologies, or types of people are united by a common trait, preference, or behavior.",
+    "extra_tags": [
+      "predator",
+      "arnold-schwarzenegger",
+      "carl-weathers",
+      "object-labeling",
+      "agreement",
+      "unity",
+      "1987-film"
+    ]
+  },
+  "happening": {
+    "description": "An animated GIF or image of Ron Paul appearing visibly excited at a CNN debate, originally part of the 'Doom Paul' meme that began on 4chan around 2009. The 'It's Happening' format is used to express breathless excitement that a long-anticipated, often chaotic or world-changing event is finally coming to pass.",
+    "emotion": "frantic excitement",
+    "usage_context": "Used when someone believes a long-awaited event, however dramatic or absurd, is finally starting to unfold.",
+    "extra_tags": [
+      "ron-paul",
+      "doom-paul",
+      "4chan",
+      "politics",
+      "anticipation",
+      "apocalyptic",
+      "gif"
+    ]
+  },
+  "harold": {
+    "description": "Hide the Pain Harold features stock photos of Hungarian retired engineer Andras Arato, whose forced smile masks what appears to be deep suppressed discomfort, first noted in meme communities around 2011. The meme is used to represent putting on a brave or cheerful face while secretly suffering or feeling deeply unhappy.",
+    "emotion": "forced cheerfulness",
+    "usage_context": "Used to depict someone smiling outwardly while clearly experiencing pain, stress, or unhappiness beneath the surface.",
+    "extra_tags": [
+      "andras-arato",
+      "stock-photo",
+      "forced-smile",
+      "suppressed-pain",
+      "relatable",
+      "senior",
+      "hungarian"
+    ]
+  },
+  "headaches": {
+    "description": "A diagram of a human head divided into regions, originally from a health article about headache types, repurposed as a meme where the labeled zones are replaced with things that cause the poster frustration or stress. The format became popular in gaming communities on Instagram in late 2017 before spreading broadly.",
+    "emotion": "exasperated frustration",
+    "usage_context": "Used to humorously catalog specific things that cause annoyance or frustration, displayed as if they were literal sources of head pain.",
+    "extra_tags": [
+      "diagram",
+      "exploitable",
+      "frustration",
+      "annoyance",
+      "head-diagram",
+      "relatable",
+      "complaint"
+    ]
+  },
+  "hipster": {
+    "description": "Hipster Barista is an advice animal image macro featuring a tattooed, bespectacled man in a black v-neck and scarf, identified as Atlanta barista Dustin Mattson, which first appeared on Quickmeme in August 2011. The format satirizes the pretentious and self-contradictory attitudes associated with hipster coffee culture.",
+    "emotion": "smug pretension",
+    "usage_context": "Used to mock the hypocrisy and snobbishness of people who adopt contrarian or artisanal tastes while being unaware of their own contradictions.",
+    "extra_tags": [
+      "advice-animal",
+      "coffee-snob",
+      "ironic",
+      "dustin-mattson",
+      "pretentious",
+      "subculture",
+      "2011"
+    ]
+  },
+  "home": {
+    "description": "A multi-panel meme depicting the familiar childhood exchange of asking a parent for fast food and being told 'we have food at home,' followed by an image showing the disappointing reality of what that food actually is. Originating from Twitter jokes dating back to 2009, it became a widely shared format capturing relatable parental frugality.",
+    "emotion": "disappointed resignation",
+    "usage_context": "Used to humorously contrast an exciting expectation with a let-down reality, especially when a cheaper or inferior substitute is offered instead of what was wanted.",
+    "extra_tags": [
+      "parenting",
+      "mcdonalds",
+      "fast-food",
+      "childhood",
+      "snowclone",
+      "relatable",
+      "substitution"
+    ]
+  },
+  "icanhas": {
+    "description": "A British Shorthair cat with a wide-eyed, pleased expression captioned 'I can has cheezburger?' in deliberately broken English, originating from a 2007 image macro that launched the I Can Has Cheezburger website and the broader lolcat phenomenon. It represents the earliest mainstream wave of internet cat memes and the lolspeak dialect where cats express desires in charmingly ungrammatical terms.",
+    "emotion": "innocent desire",
+    "usage_context": "Posted when humorously voicing a simple, earnest want for something -- food, approval, or any modest request -- using the lolcat broken-English register.",
+    "extra_tags": [
+      "lolcat",
+      "lolspeak",
+      "cheezburger",
+      "cat",
+      "caturday",
+      "image-macro",
+      "early-internet"
+    ]
+  },
+  "imsorry": {
+    "description": "A still or animated image of Randy Marsh from South Park being arrested while shouting his indignant catchphrase, originating from the Season 9 episode 'The Losing Edge' (2005). Online it is used as a sarcastic excuse for any behavior that someone refuses to apologize for by invoking American freedom.",
+    "emotion": "indignant entitlement",
+    "usage_context": "Deployed sarcastically after describing behavior someone refuses to apologize for, framing it as an inalienable right or freedom that cannot be questioned.",
+    "extra_tags": [
+      "south-park",
+      "randy-marsh",
+      "america",
+      "arrested",
+      "freedom",
+      "sarcasm",
+      "excuse"
+    ]
+  },
+  "inigo": {
+    "description": "An image macro featuring Inigo Montoya (Mandy Patinkin) from the 1987 film The Princess Bride, overlaid with his line correcting Vizzini's repeated misuse of the word 'inconceivable.' It became an internet staple for calling out someone who uses a word incorrectly or misunderstands a concept.",
+    "emotion": "patient exasperation",
+    "usage_context": "Used to correct someone who is repeatedly misusing a term, concept, or label in an online discussion.",
+    "extra_tags": [
+      "princess-bride",
+      "inconceivable",
+      "word-misuse",
+      "correction",
+      "pedantic",
+      "film-quote",
+      "mandy-patinkin"
+    ]
+  },
+  "interesting": {
+    "description": "An image macro featuring Jonathan Goldsmith as the suave, grey-bearded Dos Equis spokesman, captioned with the phrasal template 'I don't always [X], but when I do, [Y],' drawn from a Havas/Dos Equis beer ad campaign that began in 2006. Online it evolved into a vehicle for humble-brags, ironic self-deprecation, or any statement of selective but exaggerated preference.",
+    "emotion": "smug confidence",
+    "usage_context": "Used to humorously express that you rarely do something but when you do, you do it in an over-the-top or notably specific way.",
+    "extra_tags": [
+      "dos-equis",
+      "stay-thirsty",
+      "beer",
+      "jonathan-goldsmith",
+      "i-dont-always",
+      "template",
+      "humble-brag"
+    ]
+  },
+  "ive": {
+    "description": "A meme format referencing Apple's former Chief Design Officer Jony Ive, satirizing his signature minimalist design philosophy and Apple's marketing cadence of presenting radically stripped-down redesigns with reverent confidence. It originated from a 2013 Tumblr parody blog that reimagined everyday objects redesigned in iOS 7's flat, colorful aesthetic.",
+    "emotion": "smug minimalism",
+    "usage_context": "Used to mock excessive minimalism, over-engineered simplicity, or corporate design speak that frames obvious or reductive changes as groundbreaking innovations.",
+    "extra_tags": [
+      "apple",
+      "design",
+      "minimalism",
+      "ios7",
+      "parody",
+      "tumblr",
+      "corporate-speak"
+    ]
+  },
+  "iw": {
+    "description": "An Advice Animal image macro featuring a snarling wolf against a colored background, positioned as the violently unhinged dark counterpart to Courage Wolf. Emerging around 2009, captions offer absurdly extreme, often violent responses to ordinary problems as a form of shock-value dark humor.",
+    "emotion": "unhinged aggression",
+    "usage_context": "Used to express an over-the-top, darkly absurdist reaction to a mundane annoyance or frustration, playing the response for shock-comedy effect.",
+    "extra_tags": [
+      "advice-animal",
+      "wolf",
+      "dark-humor",
+      "shock-comedy",
+      "courage-wolf",
+      "rage",
+      "extreme"
+    ]
+  },
+  "jd": {
+    "description": "An image macro using Joseph Ducreux's 1793 self-portrait, in which the 18th-century French painter grins and points at the viewer, overlaid with modern rap or pop lyrics rewritten in mock-archaic English. The meme originated on 4chan around 2009 and invites viewers to decode the pompous paraphrase back into the original lyric.",
+    "emotion": "pompous amusement",
+    "usage_context": "Used to present a well-known song lyric or internet phrase reworded in faux-archaic, verbose language, challenging viewers to recognize the source.",
+    "extra_tags": [
+      "archaic-rap",
+      "french-painting",
+      "portrait",
+      "hip-hop",
+      "lyrics",
+      "4chan",
+      "decode"
+    ]
+  },
+  "jetpack": {
+    "description": "A rage-comic character who escapes awkward or undesirable situations by flying away with a jetpack, captioned 'nothing to do here,' created on the Spanish site Cuanto Cabron in April 2011. It became a universal symbol for comedically abandoning a situation rather than dealing with it.",
+    "emotion": "breezy avoidance",
+    "usage_context": "Posted when humorously depicting the desire to immediately flee an awkward, embarrassing, or impossible situation rather than address it.",
+    "extra_tags": [
+      "rage-comic",
+      "escape",
+      "avoidance",
+      "flee",
+      "awkward",
+      "nope",
+      "9gag"
+    ]
+  },
+  "jim": {
+    "description": "A two-panel image macro from The Office (US) featuring Jim Halpert pointing confidently at a whiteboard, taken from the Season 5 episode 'Baby Shower.' The first panel states a premise and the second uses Jim's pointing gesture to endorse or validate it, serving as an enthusiastic 'exactly!' reaction.",
+    "emotion": "enthusiastic validation",
+    "usage_context": "Used to humorously confirm or endorse a statement, observation, or argument that seems obvious or satisfying once laid out.",
+    "extra_tags": [
+      "the-office",
+      "jim-halpert",
+      "whiteboard",
+      "john-krasinski",
+      "tv-show",
+      "confirmation",
+      "reaction"
+    ]
+  },
+  "joker": {
+    "description": "An image macro featuring Heath Ledger's Joker from Christopher Nolan's The Dark Knight (2008), captioned with the line 'It's simple, we, uh, kill the Batman' -- the Joker's deadpan answer to how to solve Gotham's problem. Online it became a template for presenting any comically blunt or villainous-sounding solution as if it were obvious.",
+    "emotion": "cold simplicity",
+    "usage_context": "Used to frame any drastic, ruthless, or comically obvious 'solution' to a problem in the Joker's menacing but matter-of-fact tone.",
+    "extra_tags": [
+      "dark-knight",
+      "heath-ledger",
+      "batman",
+      "villain",
+      "gotham",
+      "christopher-nolan",
+      "solution"
+    ]
+  },
+  "jw": {
+    "description": "A two-panel image macro derived from the official Jurassic World (2015) trailer, showing the exchange where someone notes 'you just went and made a new dinosaur' and the response is 'probably not a good idea.' It is used to humorously flag any reckless decision that is obviously misguided.",
+    "emotion": "resigned disapproval",
+    "usage_context": "Used to react to a plan or action that is clearly a bad idea, delivering understated but obvious caution in the voice of the Jurassic World trailer.",
+    "extra_tags": [
+      "jurassic-world",
+      "dinosaur",
+      "bad-idea",
+      "chris-pratt",
+      "trailer",
+      "reckless",
+      "warning"
+    ]
+  },
+  "keanu": {
+    "description": "An Advice Animal image macro featuring a wide-eyed, alarmed still of Keanu Reeves as Ted from Bill and Ted's Excellent Adventure (1989), set against a colored background and captioned with paranoid, conspiratorial, or pseudo-philosophical 'what if' questions. It rose to popularity on Fark in 2010 and spread widely through 2011.",
+    "emotion": "paranoid wonder",
+    "usage_context": "Used to pose a seemingly mind-blowing conspiracy theory, philosophical puzzle, or absurdist 'what if' that sounds profound but is probably nonsense.",
+    "extra_tags": [
+      "bill-and-ted",
+      "conspiracy",
+      "paranoia",
+      "what-if",
+      "advice-animal",
+      "philosophy",
+      "matrix"
+    ]
+  },
+  "kermit": {
+    "description": "An image macro featuring Kermit the Frog sipping Lipton tea, taken from a 2014 Lipton advertisement and repurposed by Black comedians on Tumblr with the closing phrase 'but that's none of my business.' The meme became a vehicle for delivering a pointed observation or passive-aggressive critique while feigning indifference.",
+    "emotion": "sly detachment",
+    "usage_context": "Used to deliver a sarcastic jab or knowing observation about someone's behavior, then retreat behind the disclaimer that it's 'none of my business.'",
+    "extra_tags": [
+      "kermit",
+      "tea",
+      "gossip",
+      "sipping-tea",
+      "muppets",
+      "passive-aggressive",
+      "lipton"
+    ]
+  },
+  "khaby-lame": {
+    "description": "A multi-panel image macro derived from a 2021 TikTok by Senegalese-Italian creator Khaby Lame, in which he silently demonstrates a simpler alternative to an overcomplicated 'life hack,' then shrugs with an open-palmed gesture. It became one of TikTok's most recognized formats for mocking unnecessary complexity.",
+    "emotion": "deadpan exasperation",
+    "usage_context": "Used to mock an overly complicated approach or solution by contrasting it with the obvious, simple alternative.",
+    "extra_tags": [
+      "tiktok",
+      "life-hack",
+      "shrug",
+      "simplicity",
+      "silent",
+      "italian",
+      "obvious"
+    ]
+  },
+  "kk": {
+    "description": "An Advice Animal image macro featuring a composite photo of a young man whose head is digitally enlarged over his body, captioned with over-the-top violent acts he supposedly performs in response to being bullied. Originating from Facebook in February 2011, it belongs to the Advice Animals lineage alongside Courage Wolf and Insanity Wolf.",
+    "emotion": "disproportionate vengeance",
+    "usage_context": "Used to humorously describe an absurdly extreme retaliatory response to a minor slight or act of bullying.",
+    "extra_tags": [
+      "advice-animal",
+      "bullying",
+      "revenge",
+      "martial-arts",
+      "overreaction",
+      "dark-humor",
+      "2011"
+    ]
+  },
+  "kombucha": {
+    "description": "A multi-panel reaction image macro drawn from a 2019 TikTok by Brittany Tomlinson (Brittany Broski), in which she tastes kombucha for the first time and cycles rapidly through expressions of disgust and reluctant enjoyment. It became a widely used template for depicting ambivalence or flip-flopping between two opinions.",
+    "emotion": "conflicted ambivalence",
+    "usage_context": "Used to express a mixed or rapidly changing reaction to something -- first hating it, then grudgingly enjoying it, or vice versa.",
+    "extra_tags": [
+      "tiktok",
+      "brittany-broski",
+      "reaction",
+      "taste-test",
+      "indecision",
+      "flip-flop",
+      "2019"
+    ]
+  },
+  "kramer": {
+    "description": "An exploitable image macro from Seinfeld Season 8 episode 'The Chicken Roaster' (1996), in which Jerry asks Kramer what the eerie colored light emanating from his apartment is. Online, meme creators swap the color of the light and add text to suggest that the glow is being caused by some fandom, subculture, or cultural phenomenon, playing on Jerry's bewildered expression.",
+    "emotion": "bewildered curiosity",
+    "usage_context": "Used to humorously attribute a mysterious or intense atmosphere to a particular fandom, trend, or niche community by changing the color of Kramer's apartment light.",
+    "extra_tags": [
+      "seinfeld",
+      "jerry",
+      "michael-richards",
+      "apartment",
+      "colored-light",
+      "fandom",
+      "exploitable"
+    ]
+  },
+  "leo": {
+    "description": "A Photoshop exploitable featuring actor Leonardo DiCaprio walking cheerfully toward the camera on the set of Inception (2010), typically superimposed into absurd, dangerous, or incongruous settings to comedic effect. The meme's humor derives from DiCaprio's unbothered, carefree stride clashing with its surroundings.",
+    "emotion": "carefree confidence",
+    "usage_context": "Used to insert a visually iconic 'unbothered' figure into chaotic or inappropriate situations, implying complete indifference to the surrounding mayhem.",
+    "extra_tags": [
+      "leonardo-dicaprio",
+      "inception",
+      "photoshop",
+      "strutting",
+      "exploitable",
+      "haters-gonna-hate",
+      "greenscreen"
+    ]
+  },
+  "light": {
+    "description": "An image macro referencing the scene from Disney's The Lion King (1994) where Mufasa shows young Simba the Pride Lands and says 'Everything the light touches is our kingdom,' followed by Simba asking about the shadowy place he must never go. Online it is used as a gatekeeping or territory template where one region is claimed as good and the other is declared forbidden.",
+    "emotion": "grandiose ownership",
+    "usage_context": "Used to humorously claim ownership over a community, fandom, or domain while warning others to stay away from the 'shadowy' bad part.",
+    "extra_tags": [
+      "lion-king",
+      "mufasa",
+      "simba",
+      "disney",
+      "pridelands",
+      "gatekeeping",
+      "nostalgia"
+    ]
+  },
+  "live": {
+    "description": "A still from leaked behind-the-scenes footage of TV host Bill O'Reilly having an on-set meltdown after struggling with his teleprompter, during which he yells 'We'll do it live!' and decides to wing the segment. The meme became a catchphrase for throwing caution to the wind and improvising under pressure.",
+    "emotion": "frustrated recklessness",
+    "usage_context": "Posted when someone abandons careful planning and just charges ahead impulsively, often in frustration or out of sheer stubbornness.",
+    "extra_tags": [
+      "bill-oreilly",
+      "rant",
+      "improv",
+      "teleprompter",
+      "screw-it",
+      "outburst",
+      "going-rogue"
+    ]
+  },
+  "ll": {
+    "description": "A photo of a horned lizard with a captioned interior monologue reading 'hhhehehe,' giving the impression the lizard is sniggering at something silly or lowbrow. It originated on Tumblr in 2011 and spread as a reaction image signaling amused, slightly devious laughter.",
+    "emotion": "sneaky amusement",
+    "usage_context": "Used as a reaction image when something silly, lowbrow, or mildly mischievous strikes the poster as funny.",
+    "extra_tags": [
+      "hhhehehe",
+      "horned-lizard",
+      "snicker",
+      "reaction",
+      "tumblr",
+      "interior-monologue",
+      "giggle"
+    ]
+  },
+  "lrv": {
+    "description": "An advice animal image macro featuring a man wading through a flooded laundry room after Hurricane Irene in 2011, captioned with the 'X, they said. Y, they said.' format. It satirizes overly optimistic promises that turn out to be wildly inaccurate in practice.",
+    "emotion": "sarcastic disappointment",
+    "usage_context": "Used to mock situations where something was sold as easy or fun but turned out to be a disaster, following the 'they said it would be fun' template.",
+    "extra_tags": [
+      "they-said",
+      "advice-animal",
+      "hurricane",
+      "flooded",
+      "overpromised",
+      "sarcasm",
+      "expectation-vs-reality"
+    ]
+  },
+  "made": {
+    "description": "A three-panel comic originally by cartoonist Anthony Clark (Nedroid) depicting a character claiming credit for something they did not create, then insisting again after being questioned. The meme satirizes content theft and credit-stealing on the internet, and went viral partly because it was itself reposted without attribution.",
+    "emotion": "indignant entitlement",
+    "usage_context": "Used to call out plagiarism, credit-stealing, or anyone who claims ownership of something they did not actually make.",
+    "extra_tags": [
+      "credit-stealing",
+      "plagiarism",
+      "attribution",
+      "nedroid",
+      "content-theft",
+      "i-made-this",
+      "ownership"
+    ]
+  },
+  "mb": {
+    "description": "Animated talking purple berries from the South Park Season 20 premiere that compel whoever eats them to reminisce about nostalgic pop culture while also longing for socially regressive times. The meme became a vehicle for satirizing nostalgia culture and the 'Make America Great Again' sentiment.",
+    "emotion": "bittersweet nostalgia",
+    "usage_context": "Posted to reference or mock nostalgia for a simpler past, especially when that nostalgia slides into rose-tinted or reactionary territory.",
+    "extra_tags": [
+      "south-park",
+      "member-berries",
+      "nostalgia",
+      "randy-marsh",
+      "member",
+      "regression",
+      "maga-parody"
+    ]
+  },
+  "michael-scott": {
+    "description": "A still from The Office depicting regional manager Michael Scott falling to his knees and screaming 'No, God! No, God, please no!' upon learning that Ryan got a corporate job above him. The image is used to express extreme, melodramatic rejection of bad news.",
+    "emotion": "melodramatic despair",
+    "usage_context": "Posted in response to deeply unwanted news or outcomes, especially when the reaction is intentionally over-the-top and theatrical.",
+    "extra_tags": [
+      "the-office",
+      "michael-scott",
+      "steve-carell",
+      "screaming",
+      "no-god",
+      "ryan-howard",
+      "rejection"
+    ]
+  },
+  "midwit": {
+    "description": "An IQ bell curve diagram populated with Wojak characters, where the low-IQ figure and the high-IQ sage agree on a simple answer while the middle 'midwit' offers an overcomplicated, confidently wrong analysis. The format satirizes the phenomenon of people with average intelligence overcomplicating things that both the naive and the truly wise understand intuitively.",
+    "emotion": "smug condescension",
+    "usage_context": "Used to argue that a simple, instinctive take and an enlightened take agree, while the supposedly sophisticated middle view is just noise.",
+    "extra_tags": [
+      "wojak",
+      "bell-curve",
+      "iq",
+      "horseshoe-theory",
+      "overthinking",
+      "dunning-kruger",
+      "4chan"
+    ]
+  },
+  "millers": {
+    "description": "A four-panel image macro from the 2013 comedy film We're the Millers, in which character Kenny Rossmore (played by Will Poulter) discovers with wide-eyed shock that the other members of the fake family were being paid while he was not. The meme expresses genuine surprise at discovering a benefit or arrangement you were excluded from.",
+    "emotion": "shocked disbelief",
+    "usage_context": "Posted when someone finds out that others were receiving something -- pay, perks, information -- that they were completely unaware of.",
+    "extra_tags": [
+      "will-poulter",
+      "kenny-rossmore",
+      "we-re-the-millers",
+      "payment",
+      "oblivious",
+      "left-out",
+      "surprise"
+    ]
+  },
+  "mini-keanu": {
+    "description": "An edited still from the E3 2019 Cyberpunk 2077 presentation that shrinks Keanu Reeves to a comically tiny, pocket-sized figure, creating a surreal contrast with his action-hero persona. The absurdity of the edit made it a widely circulated blursed image and exploitable template.",
+    "emotion": "delighted absurdity",
+    "usage_context": "Used for humor derived from the surreal contrast of making an iconic, tough figure appear hilariously small and harmless.",
+    "extra_tags": [
+      "keanu-reeves",
+      "cyberpunk-2077",
+      "e3-2019",
+      "tiny",
+      "blursed",
+      "photoshop",
+      "pocket-sized"
+    ]
+  },
+  "mmm": {
+    "description": "An advice animal image macro series featuring a photo of a young boy who accidentally burned his ramen noodles in a microwave, captioned with relatable, minor everyday mistakes. The series launched on Reddit in October 2014 and resonated because of its universally recognizable small-scale blunders.",
+    "emotion": "sheepish embarrassment",
+    "usage_context": "Posted to share a small, relatable everyday mistake that is not catastrophic but is just embarrassing enough to be funny.",
+    "extra_tags": [
+      "advice-animal",
+      "mistake",
+      "relatable",
+      "reddit",
+      "minor-mistake-marvin",
+      "oops",
+      "everyday-fail"
+    ]
+  },
+  "money": {
+    "description": "A screen capture of Fry from the animated series Futurama holding up dollar bills and shouting 'Shut up and take my money!' at a store clerk, from a 2010 episode parodying Apple's iPhone launch. The image macro became a universal expression of enthusiastic consumer desire for a product or idea.",
+    "emotion": "enthusiastic desire",
+    "usage_context": "Posted in response to a product, feature, or idea that someone finds so appealing they are ready to pay for it immediately without hesitation.",
+    "extra_tags": [
+      "futurama",
+      "fry",
+      "philip-j-fry",
+      "consumer",
+      "buy-it",
+      "shut-up",
+      "eyephone"
+    ]
+  },
+  "mordor": {
+    "description": "A still of Boromir from the Lord of the Rings film trilogy, arms spread wide in a characteristic gesture, captioned with his line 'One does not simply walk into Mordor.' The image became one of the earliest and most widely recognized exploitable meme templates, used to mock the naivety of treating a difficult task as easy.",
+    "emotion": "grave seriousness",
+    "usage_context": "Posted to warn that a task, problem, or situation is far more complex or dangerous than someone is assuming, often humorously.",
+    "extra_tags": [
+      "boromir",
+      "lord-of-the-rings",
+      "lotr",
+      "sean-bean",
+      "fellowship",
+      "one-does-not-simply",
+      "difficulty"
+    ]
+  },
+  "morpheus": {
+    "description": "A stylized still of Morpheus from The Matrix film, posed with fingers together in a knowing, philosophical manner, paired with the 'What if I told you...' caption format. The image macro is used to deliver a supposedly mind-blowing revelation, often sarcastically revealing something obvious.",
+    "emotion": "mock enlightenment",
+    "usage_context": "Posted to introduce a supposedly revelatory statement -- ranging from genuinely insightful to deliberately obvious -- in a portentous, philosophical tone.",
+    "extra_tags": [
+      "matrix",
+      "the-matrix",
+      "laurence-fishburne",
+      "what-if-i-told-you",
+      "red-pill",
+      "revelation",
+      "philosophy"
+    ]
+  },
+  "mouth": {
+    "description": "A photograph of a woman physically holding a dog's mouth shut while an excited-looking dog watches nearby, used as a three-panel object-labeling template. The meme depicts the tension of someone wanting to blurt out an awkward, controversial, or unwelcome truth while someone (or something) is trying to keep them quiet.",
+    "emotion": "suppressed urgency",
+    "usage_context": "Used to show the conflict between an uncomfortable truth or blunt opinion and the social pressure to stay quiet about it in front of others.",
+    "extra_tags": [
+      "dog",
+      "hold-your-tongue",
+      "awkward-truth",
+      "object-labeling",
+      "shut-up",
+      "uncomfortable",
+      "three-panel"
+    ]
+  },
+  "mw": {
+    "description": "An image macro featuring George Zimmer, founder of Men's Wearhouse, whose TV commercials always ended with the confident tagline 'You're gonna like the way you look -- I guarantee it.' The meme format adapted his self-assured delivery into a vehicle for making absurd or tongue-in-cheek guarantees.",
+    "emotion": "confident assurance",
+    "usage_context": "Posted when someone wants to deliver a promise or guarantee with exaggerated confidence and self-assurance, often sarcastically.",
+    "extra_tags": [
+      "george-zimmer",
+      "mens-wearhouse",
+      "guarantee",
+      "tagline",
+      "commercial",
+      "confidence",
+      "catchphrase"
+    ]
+  },
+  "nails": {
+    "description": "A photograph of a person hammering nails into beach sand -- a completely pointless act -- used as a three-panel labeling template where two things are labeled and a third panel represents the absurd byproduct or combination of the two. It is also used to depict performative busyness or futile effort.",
+    "emotion": "futile determination",
+    "usage_context": "Used to label two inputs and the absurd result that emerges when they combine, or to mock situations involving obviously pointless, performative effort.",
+    "extra_tags": [
+      "beach",
+      "hammer",
+      "pointless",
+      "futile",
+      "busy-work",
+      "three-panel",
+      "combination"
+    ]
+  },
+  "nice": {
+    "description": "A screen capture of Bill Murray as the loopy groundskeeper Carl Spackler from the 1980 film Caddyshack, captioned with his line about finding a small silver lining after a terrible ordeal and concluding 'so I got that goin' for me, which is nice.' The meme format pairs a litany of misfortunes with a tiny, anticlimactic positive spin.",
+    "emotion": "sardonic optimism",
+    "usage_context": "Posted to humorously acknowledge a bad situation while pointing out a trivial silver lining, delivered with deliberately understated deadpan satisfaction.",
+    "extra_tags": [
+      "bill-murray",
+      "caddyshack",
+      "carl-spackler",
+      "silver-lining",
+      "deadpan",
+      "optimism",
+      "consolation"
+    ]
+  },
+  "noah": {
+    "description": "A still from the Family Guy episode 'You May Now Kiss the Guy Who Receives,' in which the biblical Noah reacts with disgust to a hybrid elephant-penguin child, asking 'What the hell is this?' The scene became a popular object-labeling exploitable where the two parent animals are labeled as two things and their hybrid offspring represents an absurd combination of both.",
+    "emotion": "baffled disgust",
+    "usage_context": "Used to label two source things and then mock the strange, unexpected, or unwanted hybrid result that comes from combining them.",
+    "extra_tags": [
+      "family-guy",
+      "object-labeling",
+      "hybrid",
+      "combination",
+      "noah",
+      "elephant-penguin",
+      "crossover"
+    ]
+  },
+  "noidea": {
+    "description": "An image macro featuring a Golden Retriever posing at a camera or laboratory equipment with a look of blank confidence, captioned 'I have no idea what I'm doing.' Originating on Tumblr in 2011, it became a widely shared reaction image for anyone feeling completely out of their depth.",
+    "emotion": "clueless confidence",
+    "usage_context": "Posted to admit being completely out of one's depth while somehow still going through the motions, often used self-deprecatingly in professional or technical contexts.",
+    "extra_tags": [
+      "dog",
+      "golden-retriever",
+      "out-of-depth",
+      "clueless",
+      "imposter-syndrome",
+      "science-dog",
+      "tumblr"
+    ]
+  },
+  "ntot": {
+    "description": "A three-panel webcomic featuring a dog that demands its owner throw a toy but refuses to let go when they try to take it, insisting 'No take. Only throw.' Originally posted to Tumblr in 2015 by user cupcakelogic, the format became an exploitable template for mocking entities that make contradictory or self-serving demands.",
+    "emotion": "amused exasperation",
+    "usage_context": "Used to satirize any person, institution, or system that wants the benefits of something while refusing the corresponding prerequisite, such as employers demanding output without providing resources.",
+    "extra_tags": [
+      "dog",
+      "hypocritical",
+      "impossible-demands",
+      "contradiction",
+      "webcomic",
+      "tumblr",
+      "self-serving"
+    ]
+  },
+  "oag": {
+    "description": "An advice animal image macro featuring a webcam photo of YouTuber Laina Morris with a wide-eyed, unsettling stare, paired with captions depicting extreme jealousy, possessiveness, and stalker-like behavior. The meme originated in June 2012 after Morris posted a parody of Justin Bieber's 'Boyfriend' with obsessive lyrics.",
+    "emotion": "creepy possessiveness",
+    "usage_context": "Used to joke about clingy, jealous, or controlling behavior in romantic relationships, often by exaggerating surveillance or obsessive tendencies for comedic effect.",
+    "extra_tags": [
+      "girlfriend",
+      "clingy",
+      "stalker",
+      "jealousy",
+      "relationship",
+      "laina-morris",
+      "advice-animal"
+    ]
+  },
+  "officespace": {
+    "description": "An image macro featuring Bill Lumbergh, the passive-aggressive corporate manager from the 1999 film Office Space played by Gary Cole, accompanied by captions mimicking his famous 'Yeah, if you could just... that'd be great' verbal pattern. The meme spread on Reddit starting in 2011 and is used to articulate soft but pointed workplace criticism.",
+    "emotion": "passive-aggressive frustration",
+    "usage_context": "Used to humorously frame polite but pointed requests or complaints, particularly about annoying workplace norms, bureaucratic absurdities, or social behavior someone wants to stop.",
+    "extra_tags": [
+      "bill-lumbergh",
+      "office-space",
+      "corporate",
+      "workplace",
+      "manager",
+      "yeah-if-you-could",
+      "thatd-be-great"
+    ]
+  },
+  "older": {
+    "description": "A reaction image referencing a scene from Star Wars: Return of the Jedi where Admiral Piett tells Darth Vader 'It's an older code, sir, but it checks out.' Internet users repurposed the phrase starting in 2012 to validate old or obscure meme references that still hold up, adapting it to 'It's an older meme, sir, but it checks out.'",
+    "emotion": "tolerant nostalgia",
+    "usage_context": "Used to good-naturedly acknowledge when someone references a very old or obscure internet joke, signaling that the reference is recognized and still acceptable despite its age.",
+    "extra_tags": [
+      "star-wars",
+      "admiral-piett",
+      "return-of-the-jedi",
+      "vintage-meme",
+      "nostalgia",
+      "validation",
+      "checks-out"
+    ]
+  },
+  "oprah": {
+    "description": "A reaction image from Oprah Winfrey's famous 2004 television giveaway episode where she surprised her entire studio audience with free cars, shouting 'You get a car! You get a car! Everybody gets a car!' The clip became a widespread meme format representing indiscriminate, enthusiastic mass generosity.",
+    "emotion": "infectious generosity",
+    "usage_context": "Used to humorously describe or celebrate situations where something is given out to everyone without limit, often ironically applied to things nobody actually wants or to poking fun at over-broad distributions.",
+    "extra_tags": [
+      "oprah-winfrey",
+      "you-get-a-car",
+      "everybody-gets",
+      "giveaway",
+      "talk-show",
+      "generosity",
+      "abundance"
+    ]
+  },
+  "panik-kalm-panik": {
+    "description": "A three-panel meme featuring Meme Man in alternating states of panic and calm, where an initial alarming situation is briefly resolved only to reveal a worse underlying problem. The format originated on Reddit in February 2020 and builds comedic tension through ironic emotional whiplash.",
+    "emotion": "escalating anxiety",
+    "usage_context": "Used to depict situations where apparent relief turns out to make things worse, capturing the feeling of solving one problem only to discover it created or revealed a bigger one.",
+    "extra_tags": [
+      "meme-man",
+      "three-panel",
+      "escalation",
+      "relief",
+      "twist",
+      "emotional-whiplash",
+      "exploitable"
+    ]
+  },
+  "patrick": {
+    "description": "An image macro featuring Patrick Star from SpongeBob SquarePants, drawn from a 2001 episode where he suggests moving the entire town to avoid danger, paired with the format 'Why don't we take X and put it Y?' The meme became popular around 2010 and is used to mock absurdly impractical problem-solving.",
+    "emotion": "absurdist silliness",
+    "usage_context": "Used to humorously propose ridiculous, overly simple, or completely impractical solutions to real problems, satirizing naive or illogical thinking.",
+    "extra_tags": [
+      "patrick-star",
+      "spongebob",
+      "nickelodeon",
+      "stupid-solution",
+      "why-dont-we-take",
+      "absurd",
+      "animated"
+    ]
+  },
+  "perfection": {
+    "description": "A three-panel image macro featuring Michael Fassbender as Magneto (Erik Lehnsherr) from X-Men: First Class (2011), in which he asks to see two rejected versions of something before declaring the final option 'Perfection.' The original scene shows him asking Mystique to reveal her true blue form, which he prefers over her human disguise.",
+    "emotion": "smug approval",
+    "usage_context": "Used to express strong preference for one option over alternatives, often with the implication that the favored choice is more authentic, original, or simply superior to mainstream versions.",
+    "extra_tags": [
+      "magneto",
+      "erik-lehnsherr",
+      "x-men-first-class",
+      "michael-fassbender",
+      "mystique",
+      "preference",
+      "approval"
+    ]
+  },
+  "persian": {
+    "description": "A reaction image featuring a stuffed toy cat with outstretched arms and a bewildered expression, originally titled 'Persian Cat Room Guardian' by DeviantArtist AnyaBoz in 2013 as a playful household spirit figurine. The meme gained traction in 2016 and is used to express disbelief or exasperation.",
+    "emotion": "bewildered exasperation",
+    "usage_context": "Used as a reaction to frustrating or unfair situations where someone feels wrongly blamed, caught off guard, or confronted with something absurd or annoying.",
+    "extra_tags": [
+      "stuffed-animal",
+      "cat",
+      "reaction",
+      "deviantart",
+      "anyaboz",
+      "disbelief",
+      "arms-outstretched"
+    ]
+  },
+  "philosoraptor": {
+    "description": "An advice animal image macro featuring an illustration of a velociraptor in a contemplative pose, paired with captions posing pseudo-philosophical questions, paradoxes, or absurd logical puzzles. Created as a t-shirt design in 2008 and popularized on 4chan in 2009, the meme became a staple of early internet humor.",
+    "emotion": "playful intellectual curiosity",
+    "usage_context": "Used to pose humorous, self-aware philosophical questions or logical paradoxes, ranging from genuine brain-teasers to deliberately silly wordplay.",
+    "extra_tags": [
+      "velociraptor",
+      "dinosaur",
+      "philosophy",
+      "paradox",
+      "advice-animal",
+      "contemplation",
+      "4chan"
+    ]
+  },
+  "pigeon": {
+    "description": "A three-panel exploitable from the 1990 anime series Brave Fighter of Sun Fighbird in which a humanoid robot mistakes a butterfly for a pigeon, with the caption format 'Is this a [X]?' The image was popularized as an internet meme around 2011 and is widely used to label misidentification or deliberate mischaracterization.",
+    "emotion": "mock confusion",
+    "usage_context": "Used to humorously depict someone confidently mislabeling something, often to satirize oversimplification, misunderstanding, or willful category errors.",
+    "extra_tags": [
+      "anime",
+      "fighbird",
+      "butterfly",
+      "misidentification",
+      "is-this-a",
+      "exploitable",
+      "labeling"
+    ]
+  },
+  "pooh": {
+    "description": "A two-panel meme contrasting a regular image of cartoon bear Winnie the Pooh with a photoshopped version of him wearing a tuxedo and looking smugly sophisticated, used to show a 'refined' preference for one thing over a simpler alternative. The tuxedo edit originated on 4chan and spread widely on Reddit around 2019.",
+    "emotion": "smug sophistication",
+    "usage_context": "Used to contrast a basic or common version of something with a supposedly superior, more refined, or elevated version, often ironically to mock pretentiousness or to celebrate a genuine preference.",
+    "extra_tags": [
+      "winnie-the-pooh",
+      "tuxedo",
+      "fancy",
+      "comparison",
+      "elitist",
+      "man-of-culture",
+      "disney"
+    ]
+  },
+  "pool": {
+    "description": "An object-labeling image macro derived from a 1980s photograph showing a woman lifting one child in a swimming pool while another child appears to be drowning unnoticed behind her, captioned with contrasting labels to illustrate neglected priorities. The photo was posted to Reddit in 2018 and became an exploitable format in 2020.",
+    "emotion": "ironic neglect",
+    "usage_context": "Used to comment on situations where attention, resources, or concern go to one thing while a more urgent or important issue is ignored, often for satirical social commentary on misplaced priorities.",
+    "extra_tags": [
+      "swimming-pool",
+      "neglect",
+      "priorities",
+      "object-labeling",
+      "irony",
+      "distraction",
+      "exploitable"
+    ]
+  },
+  "prop3": {
+    "description": "An image macro derived from yard signs used by opponents of Michigan's 2022 Proposal 3 abortion-rights ballot measure, which read 'Too Confusing, Too Extreme.' A Grand Rapids improv group blanked out the proposal name and substituted mundane local frustrations, turning the political slogan into a general-purpose complaint template.",
+    "emotion": "satirical frustration",
+    "usage_context": "Used to mock something that is presented as dangerously confusing or extreme but is actually ordinary, or more broadly to apply melodramatic political rhetoric to trivial everyday annoyances.",
+    "extra_tags": [
+      "michigan",
+      "political-sign",
+      "2022-election",
+      "ballot-measure",
+      "satire",
+      "yard-sign",
+      "plant-parenthood"
+    ]
+  },
+  "ptj": {
+    "description": "A multi-panel image macro from the Friends TV episode where Phoebe Buffay attempts to teach Joey Tribbiani to speak French, but Joey cannot replicate even the simplest words correctly no matter how many times Phoebe demonstrates. The format gained popularity in 2020 to illustrate failed explanations or hopeless instruction.",
+    "emotion": "weary disbelief",
+    "usage_context": "Used to depict situations where an explanation or instruction is repeated clearly but the other person still fails to understand or apply it, highlighting communication gaps or willful incomprehension.",
+    "extra_tags": [
+      "phoebe-buffay",
+      "joey-tribbiani",
+      "friends",
+      "french",
+      "teaching",
+      "miscommunication",
+      "sitcom"
+    ]
+  },
+  "puffin": {
+    "description": "An advice animal image macro featuring a photograph of an Atlantic puffin against a colorful background, paired with captions stating opinions that go against mainstream consensus or popular sentiment. The format originated around 2011 on Reddit as a vehicle for sharing minority or contrarian views.",
+    "emotion": "self-conscious defiance",
+    "usage_context": "Used to voice an opinion the poster knows is unpopular or unconventional, framing the admission with mock bravado or light self-awareness.",
+    "extra_tags": [
+      "unpopular-opinion",
+      "bird",
+      "contrarian",
+      "minority-view",
+      "advice-animal",
+      "reddit",
+      "confession"
+    ]
+  },
+  "red": {
+    "description": "A reaction image macro featuring Red Forman, the gruff and confrontational father played by Kurtwood Smith in That '70s Show, seated and delivering his signature threatening line 'Oh, is that what we're gonna do today? We're gonna fight?' The image is used as a reaction to provocation or when someone is spoiling for a conflict.",
+    "emotion": "menacing confrontation",
+    "usage_context": "Used to react to someone who appears to be starting trouble or making a challenge, either genuinely warning them or humorously escalating a trivial disagreement.",
+    "extra_tags": [
+      "red-forman",
+      "kurtwood-smith",
+      "that-70s-show",
+      "sitcom",
+      "dad",
+      "fight",
+      "intimidation"
+    ]
+  },
+  "regret": {
+    "description": "A reaction image macro featuring Ron Burgundy, played by Will Ferrell in Anchorman: The Legend of Ron Burgundy (2004), immediately after he impulsively jumps into a bear pit at the San Diego Zoo and declares 'I immediately regret this decision.' The moment became a widely shared GIF and meme representing instant buyer's remorse.",
+    "emotion": "instant regret",
+    "usage_context": "Used to react to any impulsive action whose negative consequences become apparent almost immediately after committing to it.",
+    "extra_tags": [
+      "ron-burgundy",
+      "will-ferrell",
+      "anchorman",
+      "bear-pit",
+      "impulsive",
+      "buyers-remorse",
+      "reaction-gif"
+    ]
+  },
+  "remembers": {
+    "description": "An image macro featuring an elderly man invoking the Pepperidge Farm brand tagline, adapted from a 1980s bread commercial and popularized by a 2006 Family Guy parody, used to wistfully or sarcastically recall a past state of affairs that no longer exists. The format spread widely on Reddit starting in 2012.",
+    "emotion": "wistful nostalgia",
+    "usage_context": "Used to lament the disappearance of something from the past, ranging from genuine nostalgic appreciation to sarcastic commentary on how standards or features have declined.",
+    "extra_tags": [
+      "pepperidge-farm",
+      "nostalgia",
+      "family-guy",
+      "commercial",
+      "elderly",
+      "remembers",
+      "throwback"
+    ]
+  },
+  "reveal": {
+    "description": "A scene from the animated series Scooby-Doo, Where Are You! in which the Mystery Inc. gang unmasks a disguised villain, with text labels placed on both the villain and the revealed person beneath. The meme is used to humorously expose that something or someone is actually something else in disguise, often highlighting ironic contradictions or hidden truths.",
+    "emotion": "sardonic revelation",
+    "usage_context": "Used when someone wants to mock the idea that two seemingly different things are actually the same, or to expose a hidden identity, hypocrisy, or ironic truth with a gotcha format.",
+    "extra_tags": [
+      "unmask",
+      "scooby-doo",
+      "mystery",
+      "expose",
+      "villain",
+      "identity",
+      "gotcha"
+    ]
+  },
+  "right": {
+    "description": "A four-panel image macro using screenshots from Star Wars: Episode II depicting Anakin Skywalker making a bold declaration while Padme Amidala asks 'For the better, right?' with a hopeful expression, followed by a panel of Anakin smiling ominously and a final panel of Padme repeating the question with visible worry. The meme exploits the audience's knowledge that Anakin becomes Darth Vader to suggest that an optimistic assumption will go terribly wrong.",
+    "emotion": "dawning dread",
+    "usage_context": "Used when someone describes a plan or change that sounds positive on the surface but clearly implies a bad or ironic outcome, letting the silent middle panel do the punchline.",
+    "extra_tags": [
+      "star-wars",
+      "anakin",
+      "padme",
+      "prequel",
+      "foreshadowing",
+      "silent-panel",
+      "attack-of-the-clones",
+      "optimism"
+    ]
+  },
+  "rollsafe": {
+    "description": "A still of British actor Kayode Ewumi portraying the character Reece Simpson from the BBC Three web series Hood Documentary, shown grinning confidently while pointing to his temple. The meme is used to present deliberately flawed or circular logic as if it were clever insight, satirizing self-defeating reasoning by framing avoidance as a solution.",
+    "emotion": "smug self-satisfaction",
+    "usage_context": "Used to humorously illustrate bad or circular logic -- typically structured as 'can't suffer consequence X if you never engage with X' -- mocking poor decision-making dressed up as wisdom.",
+    "extra_tags": [
+      "think-smart",
+      "loophole",
+      "brain-tap",
+      "flawed-logic",
+      "deadpan",
+      "hood-documentary",
+      "british"
+    ]
+  },
+  "sad-biden": {
+    "description": "A photograph of then-U.S. Vice President Joe Biden gazing pensively out a White House window, taken by Getty Images photographer Oliver Douliery during a September 2014 diplomatic summit. The image became a meme in December 2014 after Twitter users captioned it with humorous internal monologues expressing longing, regret, or trivial disappointments.",
+    "emotion": "wistful melancholy",
+    "usage_context": "Used to humorously express disappointment, longing, or resignation -- particularly when someone feels left out, overlooked, or stuck with a bad outcome.",
+    "extra_tags": [
+      "biden",
+      "pensive",
+      "window",
+      "politician",
+      "democratic",
+      "vice-president",
+      "wishful-thinking"
+    ]
+  },
+  "sad-boehner": {
+    "description": "An image of former U.S. House Speaker John Boehner showing an emotional or tearful expression, referencing his well-known reputation for crying publicly during speeches and ceremonies throughout his political career. The meme applies his image to situations of exaggerated or melodramatic sadness.",
+    "emotion": "melodramatic sadness",
+    "usage_context": "Used to humorously exaggerate emotional reactions or mock someone who is crying or deeply upset over something, often with comedic overstatement.",
+    "extra_tags": [
+      "boehner",
+      "crying",
+      "republican",
+      "speaker",
+      "congress",
+      "tears",
+      "politician"
+    ]
+  },
+  "sad-bush": {
+    "description": "An image of former U.S. President George W. Bush with a dejected or somber expression, applied to the same two-caption sad politician meme format popularized by the Sad Joe Biden series. It is used to express disappointment or wistful resignation with a political figure's face.",
+    "emotion": "dejected resignation",
+    "usage_context": "Used in the same way as other sad politician memes to humorously caption a scene of disappointment, regret, or being left out -- with Bush's face standing in for the emotion.",
+    "extra_tags": [
+      "bush",
+      "george-w",
+      "republican",
+      "president",
+      "politician",
+      "disappointed"
+    ]
+  },
+  "sad-clinton": {
+    "description": "An image of former U.S. President Bill Clinton with a sad or wistful expression, used in the same two-caption format as the Sad Joe Biden meme series. It pairs a setup and punchline to convey disappointment or longing through a recognizable political face.",
+    "emotion": "wistful disappointment",
+    "usage_context": "Used to caption situations of regret, longing, or being denied something, following the same format as Sad Biden -- the politician's expression is the punchline vehicle.",
+    "extra_tags": [
+      "clinton",
+      "bill",
+      "democrat",
+      "president",
+      "politician",
+      "disappointed"
+    ]
+  },
+  "sad-obama": {
+    "description": "An image of former U.S. President Barack Obama with a pensive or unhappy expression, used in the same two-caption sad politician meme format as Sad Joe Biden. The template pairs a setup line with a punchline to convey disappointment or melancholy.",
+    "emotion": "resigned sadness",
+    "usage_context": "Used to humorously portray disappointment or regret in the same structural format as other sad politician memes, with Obama's expression serving as the emotional anchor.",
+    "extra_tags": [
+      "obama",
+      "barack",
+      "democrat",
+      "president",
+      "politician",
+      "pensive"
+    ]
+  },
+  "sadfrog": {
+    "description": "A drawing of Pepe the Frog by cartoonist Matt Furie, showing the character with a downturned mouth and dejected expression, originating from a 2009 4chan post captioned 'Feels Bad Man.' The image became one of the internet's most enduring symbols of sadness, failure, and relatable disappointment.",
+    "emotion": "melancholy dejection",
+    "usage_context": "Used to express genuine or ironic sadness, failure, missed opportunities, or everyday disappointments -- often punctuating a story with 'feelsbadman' as the emotional conclusion.",
+    "extra_tags": [
+      "pepe",
+      "feels-bad-man",
+      "4chan",
+      "frog",
+      "feelsbad",
+      "greentext",
+      "disappointment"
+    ]
+  },
+  "saltbae": {
+    "description": "A viral image of Turkish chef Nusret Gokce, nicknamed Salt Bae, captured mid-motion as he dramatically and theatrically sprinkles salt over meat by letting it cascade down his forearm. The January 2017 video went viral for its over-the-top showmanship and became a meme for adding unnecessary flair or style to anything.",
+    "emotion": "flamboyant confidence",
+    "usage_context": "Used when someone wants to humorously describe adding finishing touches, extra flair, or dramatic flourish to something -- especially when the style far outweighs the substance.",
+    "extra_tags": [
+      "chef",
+      "turkish",
+      "nusret",
+      "sprinkle",
+      "flair",
+      "showmanship",
+      "theatrical",
+      "viral-video"
+    ]
+  },
+  "same": {
+    "description": "A scene from the U.S. sitcom The Office in which Pam Beesly holds up two photographs and declares 'They're the same picture,' taken from the 2011 episode 'Search Committee' where she pranks the acting manager. The meme is used to humorously assert that two things that appear different are actually identical or interchangeable.",
+    "emotion": "deadpan equivalence",
+    "usage_context": "Used when pointing out that two supposedly distinct things are functionally, aesthetically, or conceptually identical -- often to mock a false distinction or highlight an ironic sameness.",
+    "extra_tags": [
+      "the-office",
+      "pam",
+      "pamela-beesly",
+      "identical",
+      "no-difference",
+      "equivalence",
+      "comparison"
+    ]
+  },
+  "sarcasticbear": {
+    "description": "A photograph of a brown bear with its mouth open in a wide grin, posted to Reddit's r/funny in May 2014 under the title 'bear looks sarcastic as fuck,' which launched it as an advice-animal image macro. The meme is used to deliver heavy-handed sarcasm and mockery toward online complaints, perceived hypocrisy, or self-pitying statements.",
+    "emotion": "contemptuous sarcasm",
+    "usage_context": "Used to sarcastically dismiss or mock someone's complaint, excuse, or self-contradictory behavior -- functioning similarly to Condescending Wonka as a vehicle for dry ridicule.",
+    "extra_tags": [
+      "advice-animal",
+      "brown-bear",
+      "condescending",
+      "mockery",
+      "reddit",
+      "oh-really",
+      "dismissive"
+    ]
+  },
+  "say": {
+    "description": "A three-panel scene from The Simpsons episode 'Bart Gets Famous' (1994) in which Milhouse and classmates pressure Bart to repeat his famous catchphrase, Bart reluctantly complies, and the crowd erupts with delight. The meme replaces the catchphrase with any predictable or expected statement, satirizing how people, brands, or institutions are pressured to perform their signature lines on cue.",
+    "emotion": "performative pressure",
+    "usage_context": "Used to mock situations where an entity -- a person, brand, or group -- is expected to predictably repeat a known phrase or position, and always delivers exactly what the crowd wants.",
+    "extra_tags": [
+      "simpsons",
+      "bart",
+      "milhouse",
+      "catchphrase",
+      "predictable",
+      "crowd-pleasing",
+      "i-didnt-do-it",
+      "on-demand"
+    ]
+  },
+  "sb": {
+    "description": "An advice-animal image macro featuring a stylized illustration of a brain sometimes depicted wearing a Scumbag Steve hat, originating on Reddit in March 2011. The meme humorously captures the frustrating experience of one's own mind working against them -- forgetting important things while vividly remembering embarrassing moments or intrusive thoughts.",
+    "emotion": "frustrated self-betrayal",
+    "usage_context": "Used to describe situations where your own brain sabotages you -- such as remembering an embarrassing memory at the worst moment, forgetting something important, or experiencing an unwanted intrusive thought.",
+    "extra_tags": [
+      "scumbag",
+      "brain",
+      "advice-animal",
+      "intrusive-thoughts",
+      "memory",
+      "self-sabotage",
+      "psychology",
+      "forgetfulness"
+    ]
+  },
+  "scc": {
+    "description": "An advice-animal image macro featuring a stock photo of a young man at an outdoor festival staring into the middle distance with wide eyes and an expression of sudden insight, first popularized on Reddit's r/AdviceAnimals in November 2011. The meme presents trivial or absurd realizations dressed up as profound epiphanies, satirizing the feeling of discovering something blindingly obvious.",
+    "emotion": "wide-eyed epiphany",
+    "usage_context": "Used to humorously present a mundane, obvious, or absurd realization as if it were a life-changing insight -- typically captioned 'Oh my God' followed by something laughably trivial.",
+    "extra_tags": [
+      "advice-animal",
+      "epiphany",
+      "realization",
+      "clarity",
+      "festival",
+      "stockphoto",
+      "oh-my-god",
+      "eureka"
+    ]
+  },
+  "seagull": {
+    "description": "A two-panel image macro showing a seagull leaning back with the caption 'inhales' in the first panel, then lurching forward with a large block of text in the second, based on a 2012 YouTube video of a laughing seagull. The meme is used to introduce lengthy copypastas, song lyrics, or dramatic monologues as if dramatically exhaled by the bird.",
+    "emotion": "dramatic anticipation",
+    "usage_context": "Used as a comedic setup for dumping a long copypasta, song lyric wall, movie quote, or any verbose block of text -- the 'inhale' signals that something extensive and possibly unhinged is incoming.",
+    "extra_tags": [
+      "inhale",
+      "boi",
+      "copypasta",
+      "seagull",
+      "loud",
+      "wall-of-text",
+      "breath-in",
+      "dramatic"
+    ]
+  },
+  "sf": {
+    "description": "An advice-animal image macro featuring a wide-eyed seal with an expression of anxious dread, drawn from the 'Impending Doom Seal' meme that circulated on Reddit's r/AdviceAnimals. The meme captures the specific feeling of having done something wrong and knowing with certainty that consequences are on their way.",
+    "emotion": "anxious dread",
+    "usage_context": "Used to express that specific sinking feeling when you have made a mistake and are now waiting helplessly for the inevitable fallout -- the consequences have not arrived yet but they definitely will.",
+    "extra_tags": [
+      "impending-doom",
+      "seal",
+      "anxiety",
+      "consequences",
+      "dread",
+      "advice-animal",
+      "oh-no"
+    ]
+  },
+  "sk": {
+    "description": "An advice-animal image macro featuring a young boy casting a skeptical sideways glance, used in the 'Third World Skeptical Kid' format to humorously contrast lavish first-world concerns with the perspective of someone facing genuine hardship. The meme delivers dry skepticism by juxtaposing an entitled or trivial statement with a punchline that reframes it from a radically different context.",
+    "emotion": "dry skepticism",
+    "usage_context": "Used to deflate first-world complaints or exaggerated claims by responding with a punchline that highlights how absurd the original statement looks from a broader or harsher perspective.",
+    "extra_tags": [
+      "third-world",
+      "skeptical",
+      "side-eye",
+      "contrast",
+      "first-world-problems",
+      "so-you-mean",
+      "disbelief"
+    ]
+  },
+  "ski": {
+    "description": "An advice-animal image macro featuring Thumper, a ski instructor character from the South Park episode 'Asspen' (2002), used to deliver warnings about poor decisions or risky behavior. The meme is strongly associated with the catchphrase 'you're gonna have a bad time,' applied to any situation where someone is about to make a predictably terrible choice.",
+    "emotion": "ominous forewarning",
+    "usage_context": "Used to warn -- often sarcastically -- that a particular choice or course of action is going to end badly, echoing the South Park character's signature catchphrase.",
+    "extra_tags": [
+      "south-park",
+      "thumper",
+      "bad-time",
+      "warning",
+      "advice-animal",
+      "skiing",
+      "consequence"
+    ]
+  },
+  "slap": {
+    "description": "A still image from the 2022 Academy Awards ceremony showing Will Smith walking on stage and slapping comedian Chris Rock after Rock made a joke about Jada Pinkett Smith's shaved head. The meme became one of the defining viral moments of 2022, used as a flexible object-labeling template where one figure represents a disruptive or retaliatory force striking another.",
+    "emotion": "shocked outrage",
+    "usage_context": "Used when one thing aggressively interrupts or harms another, typically to label two opposing concepts where the aggressor is reacting in an outsized way.",
+    "extra_tags": [
+      "oscars",
+      "celebrities",
+      "overreaction",
+      "punch",
+      "assault",
+      "object-labeling",
+      "2022"
+    ]
+  },
+  "snek": {
+    "description": "A close-up photograph of a long-nosed whip snake native to Thailand appearing to squint suspiciously, first popularized on the r/JoeRogan subreddit in 2016 and going viral on Twitter in 2019. The image is used to convey skepticism, suspicion, or side-eyed distrust toward something that seems off.",
+    "emotion": "skeptical suspicion",
+    "usage_context": "Posted when something looks superficially fine but sets off an instinctive red flag, expressing a quiet but unmistakable distrust.",
+    "extra_tags": [
+      "snake",
+      "squinting",
+      "side-eye",
+      "distrust",
+      "suspicious",
+      "animal-reaction",
+      "wildlife"
+    ]
+  },
+  "soa": {
+    "description": "A close-up photograph of a contented-looking Weddell seal taken at a nature center in the Netherlands, used as an Advice Animal image macro pairing the animal's satisfied expression with anecdotes about life's small but deeply gratifying pleasures. The name plays on the double meaning of 'seal of approval.'",
+    "emotion": "deep satisfaction",
+    "usage_context": "Used to describe a simple, often mundane activity that produces an unexpectedly strong sense of contentment or approval.",
+    "extra_tags": [
+      "seal",
+      "satisfied",
+      "approval",
+      "advice-animal",
+      "contentment",
+      "wholesome",
+      "gratification"
+    ]
+  },
+  "sohappy": {
+    "description": "An image of Craig Tucker, a deadpan character from the animated TV show South Park, used in a captioned meme format expressing an earnest but understated wish. The source clip features Craig flatly stating how happy he would be if something would just happen.",
+    "emotion": "earnest yearning",
+    "usage_context": "Used to sincerely or humorously express a strong desire for a specific scenario -- often something trivial or frustrating -- to finally occur.",
+    "extra_tags": [
+      "south-park",
+      "craig-tucker",
+      "wish",
+      "desire",
+      "animated",
+      "deadpan",
+      "relatable"
+    ]
+  },
+  "sohot": {
+    "description": "A still image of the flamboyant fashion villain Mugatu, played by Will Ferrell in the 2001 comedy film Zoolander, delivering his line 'That Hansel, he's so hot right now.' The meme template is used to declare that something -- often a trend, topic, or cultural moment -- is currently extremely popular or fashionable.",
+    "emotion": "overenthusiastic hype",
+    "usage_context": "Posted to comment on something that is trending, viral, or ubiquitous, with tone ranging from genuine celebration to dry irony.",
+    "extra_tags": [
+      "zoolander",
+      "mugatu",
+      "will-ferrell",
+      "trending",
+      "popular",
+      "fashionable",
+      "hype"
+    ]
+  },
+  "soup-nazi": {
+    "description": "An image macro based on the 'Soup Nazi' character from the 1995 Seinfeld episode 'The Soup Nazi,' played by Larry Thomas, who denies customers service with his signature line 'No soup for you!' The character was inspired by a real notoriously strict New York soup vendor.",
+    "emotion": "authoritarian refusal",
+    "usage_context": "Used to humorously deny something to someone or to declare that a person, group, or request is getting nothing.",
+    "extra_tags": [
+      "seinfeld",
+      "no-soup-for-you",
+      "denial",
+      "refusal",
+      "sitcom",
+      "catchphrase",
+      "rules"
+    ]
+  },
+  "sparta": {
+    "description": "A still from the 2006 film 300 depicting King Leonidas of Sparta shouting 'This is Sparta!' before kicking a Persian messenger into a deep well. The scene became one of the most remixed internet memes of the late 2000s, symbolizing fierce, dramatic defiance.",
+    "emotion": "fierce defiance",
+    "usage_context": "Used to make a bold, dramatic declaration about something, or to humorously frame any forceful rejection or emphatic statement.",
+    "extra_tags": [
+      "300",
+      "leonidas",
+      "king-of-sparta",
+      "kick",
+      "persian",
+      "frank-miller",
+      "ytmnd"
+    ]
+  },
+  "spiderman": {
+    "description": "A still from the 1967 Spider-Man animated cartoon episode 'Double Identity' showing two figures in Spider-Man costumes pointing accusingly at each other, used online to highlight situations where two parties are identical or mutually hypocritical. The image went viral as a meme in 2011 and was later referenced in Spider-Man: Into the Spider-Verse.",
+    "emotion": "mutual accusation",
+    "usage_context": "Used when two people, brands, or ideas are essentially the same thing and are awkwardly calling each other out, highlighting irony or hypocrisy.",
+    "extra_tags": [
+      "1967-cartoon",
+      "pointing",
+      "hypocrisy",
+      "identical",
+      "doppelganger",
+      "accusation",
+      "60s-spider-man"
+    ]
+  },
+  "spirit": {
+    "description": "A parody meme format designed to mimic the packaging of seasonal Halloween retailer Spirit Halloween, presenting fake costume names and absurd included items to satirize internet archetypes, social stereotypes, and cultural figures. The format originated on Facebook in October 2019.",
+    "emotion": "dry satirical mockery",
+    "usage_context": "Used to roast a specific type of person, stereotype, or internet subculture by framing them as a Spirit Halloween costume complete with humorous descriptors.",
+    "extra_tags": [
+      "halloween",
+      "costume",
+      "parody",
+      "packaging",
+      "satirical",
+      "stereotype",
+      "obvious-plant"
+    ]
+  },
+  "spongebob": {
+    "description": "A screenshot of SpongeBob SquarePants in a contorted, chicken-like pose from the episode 'Little Yellow Book,' paired with text written in alternating uppercase and lowercase letters to represent a mocking, sarcastic repetition of someone else's words. The meme went viral on Twitter in May 2017.",
+    "emotion": "mocking contempt",
+    "usage_context": "Used to parody or ridicule someone's statement by echoing it back in a visually sarcastic alternating-caps format.",
+    "extra_tags": [
+      "spongemock",
+      "alternating-caps",
+      "mockery",
+      "sarcasm",
+      "nickelodeon",
+      "parody",
+      "reaction-image"
+    ]
+  },
+  "ss": {
+    "description": "An Advice Animal image macro featuring a photograph of a teenager named Blake Boston wearing a sideways fitted cap, used to represent a self-centered, freeloading, or socially inconsiderate person. The photo originated from a Boston rap group album cover and was popularized on Reddit in January 2011.",
+    "emotion": "smug selfishness",
+    "usage_context": "Used to caption behaviors that are opportunistic, mooching, or socially inconsiderate -- things a stereotypical freeloader would do.",
+    "extra_tags": [
+      "advice-animal",
+      "scumbag-hat",
+      "freeloader",
+      "reddit",
+      "blake-boston",
+      "inconsiderate",
+      "bro"
+    ]
+  },
+  "stew": {
+    "description": "A memorable scene from the TV comedy Arrested Development in which actor Carl Weathers (playing a cheap caricature of himself) makes a free stew from restaurant table scraps and enthusiastically declares 'Baby, you've got a stew going!' The moment became beloved as a celebration of frugal resourcefulness.",
+    "emotion": "enthusiastic resourcefulness",
+    "usage_context": "Used to celebrate improvising a solution from whatever is on hand, or to hype up any situation where scraps are being creatively combined into something worthwhile.",
+    "extra_tags": [
+      "arrested-development",
+      "carl-weathers",
+      "frugal",
+      "improvise",
+      "cooking",
+      "sitcom",
+      "resourceful"
+    ]
+  },
+  "stonks": {
+    "description": "A surreal image of Meme Man, a smooth 3D rendered humanoid figure, standing confidently in front of a stock market chart alongside the intentionally misspelled word 'STONKS.' Originally posted on Facebook in 2017, it satirizes overconfident and often terrible financial decision-making with deadpan absurdism.",
+    "emotion": "delusional confidence",
+    "usage_context": "Used to celebrate a questionable decision or bad financial move with ironic bravado, or to mock any situation where someone is clearly doing something counterproductive while looking pleased with themselves.",
+    "extra_tags": [
+      "meme-man",
+      "finance",
+      "investing",
+      "irony",
+      "misspelling",
+      "wallstreetbets",
+      "gamestop"
+    ]
+  },
+  "stop": {
+    "description": "An image macro based on a 1987 anti-drug public service announcement featuring basketball legend Michael Jordan looking directly at the camera and calmly but firmly saying 'Stop it. Get some help.' The PSA, sponsored by McDonald's, aired on ABC and was repurposed as a reaction clip for dismissing foolish behavior.",
+    "emotion": "stern disapproval",
+    "usage_context": "Posted as a reaction to someone doing something embarrassing, foolish, or self-destructive, firmly but humorously urging them to reconsider.",
+    "extra_tags": [
+      "michael-jordan",
+      "psa",
+      "anti-drug",
+      "reaction",
+      "vine",
+      "1987",
+      "nba"
+    ]
+  },
+  "stop-it": {
+    "description": "A multi-panel image macro from the SpongeBob SquarePants episode 'Wishing You Well' in which Patrick Star misinterprets Squidward's claustrophobia in an absurd literal way, prompting the exasperated response 'Stop it, Patrick! You're scaring him!' Used to mock beliefs or ideologies by having Patrick describe them hilariously.",
+    "emotion": "exasperated alarm",
+    "usage_context": "Used to satirize a belief, ideology, or community by having Patrick 'explain' it in the most absurdly accurate or alarming way, followed by pleas to stop.",
+    "extra_tags": [
+      "patrick-star",
+      "squidward",
+      "spongebob-squarepants",
+      "phobia",
+      "misunderstanding",
+      "ideology-mockery",
+      "exploitable"
+    ]
+  },
+  "success": {
+    "description": "A photograph of an 11-month-old baby named Sammy Griner on a beach clutching a fistful of sand with a triumphant, smug expression, taken by his mother Laney Griner in 2007. As a meme it captures the feeling of an unexpected small victory, often captioned with a setup describing a low-stakes challenge that was narrowly won.",
+    "emotion": "smug triumph",
+    "usage_context": "Used to celebrate a small personal win or something that went better than expected, especially when the success required little effort or was more lucky than planned.",
+    "extra_tags": [
+      "baby",
+      "fist-pump",
+      "victory",
+      "small-win",
+      "advice-animal",
+      "sammy",
+      "beach"
+    ]
+  },
+  "tenguy": {
+    "description": "An Advice Animal image macro featuring a photograph of a young man with visibly reddened, drooping eyes, posted to Reddit's r/trees community in 2011 as 'Being at a [10] is not always pretty,' where [10] refers to the highest level of marijuana intoxication on a community scale. Captions depict the garbled logic and non-sequitur thoughts of someone extremely high.",
+    "emotion": "stoned bewilderment",
+    "usage_context": "Used to voice the absurd, disconnected internal monologue of someone who is very intoxicated, especially when making a statement that sounds profound but is actually nonsense.",
+    "extra_tags": [
+      "marijuana",
+      "cannabis",
+      "stoner",
+      "reddit",
+      "r-trees",
+      "advice-animal",
+      "really-high-guy",
+      "weed"
+    ]
+  },
+  "toohigh": {
+    "description": "An image macro featuring Jimmy McMillan, founder of the Rent Is Too Damn High political party, captured mid-speech at the 2010 New York gubernatorial debate passionately declaring his signature slogan. The meme evolved into the snowclone 'The X is too damn high,' applied to any frustratingly excessive quantity.",
+    "emotion": "indignant exasperation",
+    "usage_context": "Used to complain that something -- prices, difficulty, volume, or any measurable value -- has reached an unacceptably high level.",
+    "extra_tags": [
+      "jimmy-mcmillan",
+      "rent",
+      "politics",
+      "new-york",
+      "snowclone",
+      "debate",
+      "housing-costs"
+    ]
+  },
+  "touch": {
+    "description": "A two-panel image macro from The Simpsons Season 5 episode 'The Boy Who Knew Too Much,' showing Principal Skinner briefly questioning whether he is out of touch before confidently concluding 'No, it's the children who are wrong.' It satirizes the mindset of authority figures who refuse to adapt and instead blame everyone else.",
+    "emotion": "self-assured obliviousness",
+    "usage_context": "Used when an institution, boss, or older person doubles down on their own outdated view rather than considering they might be the one who needs to change.",
+    "extra_tags": [
+      "simpsons",
+      "principal-skinner",
+      "children-are-wrong",
+      "authority",
+      "self-delusion",
+      "generational-gap",
+      "out-of-touch"
+    ]
+  },
+  "tried": {
+    "description": "The 'At Least You Tried' meme features a gold star sticker with the phrase 'You Tried,' parodying the participation-trophy culture of elementary school gold star rewards. It is used sarcastically to acknowledge a failed or underwhelming attempt, drawing on the cultural practice of rewarding effort regardless of outcome.",
+    "emotion": "patronizing sympathy",
+    "usage_context": "Posted in response to someone's failed joke, poor argument, or lackluster effort as a backhanded form of consolation.",
+    "extra_tags": [
+      "gold-star",
+      "participation-trophy",
+      "consolation",
+      "sarcasm",
+      "fail",
+      "tumblr"
+    ]
+  },
+  "trump": {
+    "description": "A generic image macro template using a photo of Donald Trump, with captions written in his characteristically superlative style. The example text parodies his rhetorical habit of declaring everything he encounters to be the greatest or best.",
+    "emotion": "mock grandiosity",
+    "usage_context": "Used to parody Trump's speech patterns by applying his superlative-laden rhetoric to any mundane or absurd topic.",
+    "extra_tags": [
+      "superlatives",
+      "political",
+      "parody",
+      "bragging",
+      "rhetoric",
+      "greatest",
+      "president"
+    ]
+  },
+  "ugandanknuck": {
+    "description": "Ugandan Knuckles is a deliberately crude, low-polygon fan depiction of the Sonic character Knuckles that went viral in VRChat in early 2018, where swarms of players would chase others asking 'do you know de wey' in a mock accent. The meme references the Ugandan film 'Who Killed Captain Alex?' and is associated with tribal, hive-mind mob humor.",
+    "emotion": "absurdist chaos",
+    "usage_context": "Used to humorously express a demand for directions or guidance, or to reference the VRChat mob phenomenon.",
+    "extra_tags": [
+      "vrchat",
+      "sonic",
+      "knuckles",
+      "de-wey",
+      "tribe",
+      "spitting",
+      "uganda"
+    ]
+  },
+  "vince": {
+    "description": "The Vince McMahon Reaction is a multi-panel progression meme featuring WWE chairman Vince McMahon showing increasingly wide-eyed expressions of amazement, sourced from a 2002 WWE broadcast. Each panel is labeled with an escalating option, with McMahon's growing enthusiasm illustrating that the later options are increasingly impressive or preferred.",
+    "emotion": "escalating enthusiasm",
+    "usage_context": "Used to compare a set of options or facts in escalating order, showing that each successive item is more exciting or surprising than the last.",
+    "extra_tags": [
+      "wwe",
+      "wrestling",
+      "progression",
+      "escalation",
+      "reaction",
+      "approval",
+      "mcmahon"
+    ]
+  },
+  "wallet": {
+    "description": "Patrick Star's Wallet meme comes from a SpongeBob SquarePants scene in which Patrick is presented with clear evidence that a found wallet is his, yet concludes 'it's not my wallet.' The template is a multi-panel dialogue format used to represent willfully circular or absurd logic that ignores obvious evidence.",
+    "emotion": "baffled absurdity",
+    "usage_context": "Used to illustrate someone reaching a nonsensical conclusion despite being shown irrefutable evidence, or to mock circular reasoning.",
+    "extra_tags": [
+      "spongebob",
+      "patrick-star",
+      "bikini-bottom",
+      "illogical",
+      "circular-reasoning",
+      "cartoon",
+      "denial"
+    ]
+  },
+  "waygd": {
+    "description": "The 'What Are Ya Gonna Do?' template is sourced from a Big Mouth Netflix animated musical segment and features a resigned, shrugging tone. It captures the feeling of acknowledging an unpleasant or unavoidable situation with a helpless, 'whaddya gonna do' attitude.",
+    "emotion": "resigned helplessness",
+    "usage_context": "Used when acknowledging an annoying or unfortunate situation that is beyond one's control and must simply be accepted.",
+    "extra_tags": [
+      "shrug",
+      "resigned",
+      "helpless",
+      "big-mouth",
+      "netflix",
+      "whatcha-gonna-do",
+      "acceptance"
+    ]
+  },
+  "wddth": {
+    "description": "The 'We Don't Do That Here' meme features a still of T'Challa (Black Panther) from the 2018 Marvel film Avengers: Infinity War, in which he calmly tells Bruce Banner not to bow to him in Wakanda. Online the image is used as a dignified, calm rebuke of a social norm violation or unwanted behavior.",
+    "emotion": "calm disapproval",
+    "usage_context": "Used to call out a social faux pas, an unwanted behavior, or an unwritten rule being violated, with regal composure.",
+    "extra_tags": [
+      "black-panther",
+      "wakanda",
+      "marvel",
+      "tchalla",
+      "chadwick-boseman",
+      "etiquette",
+      "rebuke"
+    ]
+  },
+  "whatyear": {
+    "description": "The 'What Year Is It?' meme uses a disheveled still of Robin Williams as Alan Parrish from the 1995 film Jumanji, who emerges from a board game after 26 years to ask what year it is. The image is used to express disoriented confusion about time, often when something feels anachronistically out of place.",
+    "emotion": "disoriented confusion",
+    "usage_context": "Used to react to something that feels oddly dated, when history seems to be repeating itself, or when waking from a long absence.",
+    "extra_tags": [
+      "jumanji",
+      "robin-williams",
+      "time-travel",
+      "disorientation",
+      "nostalgia",
+      "anachronism",
+      "film"
+    ]
+  },
+  "winter": {
+    "description": "The 'Brace Yourselves, Winter Is Coming' meme features Ned Stark from HBO's Game of Thrones using the House Stark motto as a warning of impending doom. The phrasal template 'Brace Yourselves, X Is Coming' became one of the most widespread image macros for announcing the imminent arrival of any anticipated or dreaded event.",
+    "emotion": "ominous forewarning",
+    "usage_context": "Used to humorously warn that something unavoidable -- a seasonal trend, an event, or an internet wave -- is about to arrive in force.",
+    "extra_tags": [
+      "game-of-thrones",
+      "ned-stark",
+      "sean-bean",
+      "brace-yourselves",
+      "hbo",
+      "house-stark",
+      "winterfell"
+    ]
+  },
+  "wishes": {
+    "description": "The Genie Rules meme is a three-panel webcomic in which a genie lists three rules for granting wishes, then invents a fourth rule on the spot to block the wisher's clever or problematic request. It originated around 2018 on Reddit and is used to highlight logical paradoxes, impossible scenarios, or moral absurdities.",
+    "emotion": "smug rule-lawyering",
+    "usage_context": "Used to show that a seemingly clever loophole or rule-breaking request is immediately and arbitrarily shut down by an authority figure.",
+    "extra_tags": [
+      "genie",
+      "loophole",
+      "rules",
+      "paradox",
+      "webcomic",
+      "wish-granting",
+      "three-wishes"
+    ]
+  },
+  "wkh": {
+    "description": "The 'Who Killed Hannibal?' meme originates from a sketch on The Eric Andre Show in which Eric Andre shoots his co-host Hannibal Buress, then immediately turns to the camera and asks 'Who killed Hannibal?' The image macro labels Andre as the perpetrator of a problem who then acts bewildered and blameless, making it ideal for depicting deflection of responsibility.",
+    "emotion": "deflective innocence",
+    "usage_context": "Used when someone causes a problem and then disingenuously acts confused about how it happened, shifting blame away from themselves.",
+    "extra_tags": [
+      "eric-andre",
+      "hannibal-buress",
+      "eric-andre-show",
+      "blame-shifting",
+      "deflection",
+      "comedy",
+      "shooting"
+    ]
+  },
+  "woman-cat": {
+    "description": "The Woman Yelling at a Cat meme juxtaposes a screencap of Taylor Armstrong from The Real Housewives of Beverly Hills pointing and crying at a dinner table with a photo of Smudge the Cat sitting unfazed behind a plate of vegetables. It became the defining meme of 2019, used to show a dramatic, emotional accusation met with utter indifference.",
+    "emotion": "outrage met with indifference",
+    "usage_context": "Used to contrast an overblown emotional reaction or accusation with the calm, unaffected target of that reaction.",
+    "extra_tags": [
+      "smudge",
+      "real-housewives",
+      "taylor-armstrong",
+      "kyle-richards",
+      "cat",
+      "dinner-table",
+      "2019"
+    ]
+  },
+  "wonka": {
+    "description": "Condescending Wonka features Gene Wilder as Willy Wonka in a leaning, smirking pose from the 1971 film Willy Wonka and the Chocolate Factory. The caption format presents a sarcastic, patronizing observation -- typically mocking naive or self-important statements -- and became one of the classic Advice Animals macros of the early 2010s.",
+    "emotion": "condescending sarcasm",
+    "usage_context": "Used to mock someone for stating something naive, obvious, or self-aggrandizing with a veneer of saccharine politeness.",
+    "extra_tags": [
+      "gene-wilder",
+      "willy-wonka",
+      "creepy-wonka",
+      "advice-animals",
+      "patronizing",
+      "sarcastic",
+      "quickmeme"
+    ]
+  },
+  "worst": {
+    "description": "The Worst Day Of Your Life So Far meme is a two-panel still from The Simpsons Movie in which Homer tells Bart that his current terrible experience is 'the worst day of your life so far,' with 'so far' implying it will only get worse. It is used as a darkly optimistic punchline to suggest that a bad situation is just a preview of worse things to come.",
+    "emotion": "dark pessimism",
+    "usage_context": "Used to respond to a complaint about a bad situation by darkly suggesting that things have not yet hit rock bottom.",
+    "extra_tags": [
+      "simpsons",
+      "homer-simpson",
+      "bart-simpson",
+      "simpsons-movie",
+      "dark-humor",
+      "pessimism",
+      "consolation"
+    ]
+  },
+  "xy": {
+    "description": "The 'X All the Y' meme derives from a 2010 Hyperbole and a Half webcomic by Allie Brosh, depicting a stick-figure character in an enthusiastic frenzy with a raised broom captioned 'clean ALL the things!' The phrasal template '[Verb] ALL THE [Noun]!' became a widespread early 2010s image macro for expressing manic, all-encompassing enthusiasm.",
+    "emotion": "manic enthusiasm",
+    "usage_context": "Used to express an overwhelming, frenzied desire to do something to every available instance of a thing, often comically overdone.",
+    "extra_tags": [
+      "allie-brosh",
+      "hyperbole-and-a-half",
+      "all-the-things",
+      "enthusiasm",
+      "webcomic",
+      "clean-all-the-things",
+      "advice-animals"
+    ]
+  },
+  "yallgot": {
+    "description": "Y'all Got Any More of Them features Dave Chappelle as the crackhead character Tyrone Biggums from Chappelle's Show, set against a color-wheel background, with a caption demanding more of something. The meme captures the desperation and intensity of an addict's craving, repurposed humorously for any object of strong desire.",
+    "emotion": "desperate craving",
+    "usage_context": "Used to humorously express an intense, insatiable desire for more of something -- content, food, memes, or any repeatedly enjoyed thing.",
+    "extra_tags": [
+      "dave-chappelle",
+      "tyrone-biggums",
+      "chappelles-show",
+      "crackhead",
+      "addiction",
+      "craving",
+      "advice-animals"
+    ]
+  },
+  "yodawg": {
+    "description": "Xzibit Yo Dawg is an image macro featuring rapper and Pimp My Ride host Xzibit with the recursive caption 'Yo Dawg, I heard you like X, so I put an X in your Y so you can Z while you Z.' Originating on 4chan around 2007, it became one of the internet's most enduring recursive humor formats, celebrating absurd nested redundancy.",
+    "emotion": "gleeful redundancy",
+    "usage_context": "Used to highlight a comically recursive or self-referential situation where something contains or requires the very thing it is.",
+    "extra_tags": [
+      "xzibit",
+      "pimp-my-ride",
+      "recursion",
+      "inception",
+      "nested",
+      "hip-hop",
+      "mtv"
+    ]
+  },
+  "yuno": {
+    "description": "The Y U NO Guy is a rage-face image macro featuring a crudely drawn stick figure with an exaggeratedly distorted face, traced from the manga Gantz, accompanied by captions written in abbreviated SMS text like 'I TXT U, Y U NO TXT BAK!?' The format expresses exasperated frustration at someone for failing to do an expected or simple thing.",
+    "emotion": "exasperated frustration",
+    "usage_context": "Used to call out someone -- or a system, company, or situation -- for inexplicably failing to do something expected or obvious.",
+    "extra_tags": [
+      "rage-face",
+      "gantz",
+      "sms-language",
+      "advice-animals",
+      "frustration",
+      "stick-figure",
+      "txtbak"
+    ]
+  },
+  "zero-wing": {
+    "description": "All Your Base Are Belong to Us originates from a notoriously mistranslated line in the 1989 arcade shoot-em-up Zero Wing, in which the villain CATS declares 'All your base are belong to us.' The phrase became one of the earliest viral internet phenomena, spreading via Photoshopped images and Flash animations across forums in 2000-2001 and is a foundational artifact of internet meme culture.",
+    "emotion": "triumphant absurdity",
+    "usage_context": "Used as a retro internet culture reference to declare total domination or conquest, or to invoke early-internet nostalgia.",
+    "extra_tags": [
+      "zero-wing",
+      "cats",
+      "engrish",
+      "mistranslation",
+      "retro-internet",
+      "for-great-justice",
+      "arcade",
+      "shoot-em-up"
+    ]
   }
 }
