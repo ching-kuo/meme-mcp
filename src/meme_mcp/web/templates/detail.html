@@ -98,6 +98,8 @@
             <dd>{{ origin.get("name") }}</dd>
           </div>
           {% if origin_source_url_safe %}
+            {# Only a server-validated https URL renders, and only as a link.
+               A URL that failed the gate is shown nothing -- never as text. #}
             <div class="detail__attr">
               <dt>Source</dt>
               <dd>
@@ -105,12 +107,6 @@
                   {{ origin_source_url_safe }}
                 </a>
               </dd>
-            </div>
-          {% elif origin.get("source_url") %}
-            {# Non-https source: render as inert plain text, never a live link. #}
-            <div class="detail__attr">
-              <dt>Source</dt>
-              <dd>{{ origin.get("source_url") }}</dd>
             </div>
           {% endif %}
         </dl>

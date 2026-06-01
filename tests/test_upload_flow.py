@@ -731,10 +731,11 @@ def test_approve_round_trip_promotes_origin_status_to_high(tmp_path) -> None:
 
     edited = dict(data["metadata"])
     edited["name"] = "Pigeon Display"
+    # The web review form submits origin with name/source_url and NO status key
+    # (see upload.js collectMetadata): an absent status is the human-review signal.
     edited["origin"] = {
         "name": "Is This a Pigeon?",
         "source_url": "https://knowyourmeme.com/memes/is-this-a-pigeon?ref=share&x=1",
-        "status": "low",
     }
     approved = client.post(
         f"/api/uploads/{data['pending_upload_id']}/approve",
@@ -748,6 +749,32 @@ def test_approve_round_trip_promotes_origin_status_to_high(tmp_path) -> None:
     assert origin["source_url"] == (
         "https://knowyourmeme.com/memes/is-this-a-pigeon?ref=share&x=1"
     )  # query string survived unmangled
+
+
+def test_approve_passthrough_low_status_is_not_laundered_to_high(tmp_path) -> None:
+    # A programmatic client that echoes the analyze response verbatim -- origin
+    # still carrying status "low" -- must NOT have it promoted by a no-op approve.
+    # A low-confidence identity stays low (no find alias) unless reviewed.
+    result = WebDetectionResult(
+        "low_confidence",
+        WebGrounding(best_guess="maybe", entities=(), page_titles=()),
+        OriginCandidate(name="maybe", source_url="https://example.com/a"),
+    )
+    app, _vlm, _reverse = _online_app(tmp_path, result)
+    client = TestClient(app)
+    headers = auth_headers(client)
+    data = _analyze_online(client, headers)["data"]
+    assert data["metadata"]["origin"]["status"] == "low"
+
+    # Echo the analyze metadata back unchanged (status "low" still present).
+    approved = client.post(
+        f"/api/uploads/{data['pending_upload_id']}/approve",
+        headers=headers,
+        json={"metadata": data["metadata"]},
+    )
+    assert approved.status_code == 200
+    template = app.state.templates.get(approved.json()["data"]["template_id"])
+    assert template.metadata["origin"]["status"] == "low"  # not laundered
 
 
 def test_rate_limit_precedes_any_egress(tmp_path) -> None:

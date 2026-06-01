@@ -105,6 +105,15 @@ def test_clean_origin_value_enforces_clean_data_invariant() -> None:
     assert clean_origin_value("name", "") == ""
 
 
+def test_clean_origin_value_keeps_long_https_url_with_query_string() -> None:
+    # A valid https URL longer than flag_anomalies' 512-char length flag (but under
+    # the 2048 URL cap) must survive: sanitize_url is the complete validator for
+    # source_url, so the anomaly length flag must not silently drop it.
+    long_url = "https://knowyourmeme.com/memes/x?" + "&".join(f"key{i}=value{i}" for i in range(60))
+    assert 512 < len(long_url) <= 2048
+    assert clean_origin_value("source_url", long_url) == long_url
+
+
 class FakeCompletions:
     def create(self, **kwargs):
         self.kwargs = kwargs

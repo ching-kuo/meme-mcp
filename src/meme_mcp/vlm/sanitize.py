@@ -140,9 +140,12 @@ def clean_origin_value(key: str, value: str) -> str:
     if not value:
         return ""
     if key == "source_url":
-        cleaned = sanitize_url(value)
-    else:
-        cleaned = _clean_and_guard(value, FIELD_CAPS.get(key, 128))
+        # sanitize_url is the complete validator for URLs (https allowlist +
+        # length cap). Do NOT run flag_anomalies here: its hardcoded 512-char
+        # length flag would silently drop valid long https URLs (query strings)
+        # that sanitize_url's 2048 cap accepts.
+        return sanitize_url(value)
+    cleaned = _clean_and_guard(value, FIELD_CAPS.get(key, 128))
     if cleaned and flag_anomalies({key: cleaned}):
         return ""
     return cleaned

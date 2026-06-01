@@ -363,14 +363,19 @@ def _validated_metadata(
 
 
 def _promote_origin_status(cleaned: dict[str, Any]) -> None:
-    """Promote a reviewed origin to ``status="high"`` on approve (KTD9).
+    """Promote a friend-reviewed origin to ``status="high"`` on approve (KTD9).
 
-    By approving, the friend confirms the origin -- so a previously
-    low-confidence origin name they kept (or edited) becomes a trusted ``find``
-    alias (U7). Only promotes when a non-empty origin name survived sanitization.
+    The web review form submits origin with only ``name``/``source_url`` and no
+    ``status`` key -- so an absent status is the human-review signal and earns the
+    trusted ``find`` alias (U7). A status passed through verbatim as ``"low"``
+    (e.g. a programmatic client echoing the analyze response unchanged) is NOT
+    promoted: a low-confidence identity must not be laundered to high-weight by a
+    no-op approve. Only a non-empty, sanitized origin name is eligible.
     """
     origin = cleaned.get("origin")
-    if isinstance(origin, dict) and str(origin.get("name", "")).strip():
+    if not isinstance(origin, dict) or not str(origin.get("name", "")).strip():
+        return
+    if origin.get("status") != "low":
         origin["status"] = "high"
 
 
