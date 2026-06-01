@@ -56,12 +56,17 @@ def _get_dotted(data: dict[str, Any], key: str) -> Any:
     return current
 
 
+NAME_MATCH_RATIO = 0.72
+
+
+def _fuzzy_match(needle: str, value: str) -> bool:
+    return needle in value or SequenceMatcher(None, needle, value).ratio() >= NAME_MATCH_RATIO
+
+
 def _name_match(query: str, record: TemplateRecord) -> bool:
     needle = query.lower()
     return any(
-        needle in value
-        or SequenceMatcher(None, needle, value).ratio() >= 0.72
-        for value in (record.slug.lower(), record.name.lower())
+        _fuzzy_match(needle, value) for value in (record.slug.lower(), record.name.lower())
     )
 
 
@@ -79,9 +84,7 @@ def _origin_name_match(query: str, record: TemplateRecord) -> bool:
     origin_name = _get_dotted(record.metadata, "origin.name")
     if not isinstance(origin_name, str) or not origin_name.strip():
         return False
-    needle = query.lower()
-    value = origin_name.lower()
-    return needle in value or SequenceMatcher(None, needle, value).ratio() >= 0.72
+    return _fuzzy_match(query.lower(), origin_name.lower())
 
 
 def search(

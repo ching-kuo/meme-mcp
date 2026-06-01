@@ -579,7 +579,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # non-https one renders as plain text, never a live link (U6/KTD6). Stored
         # origin is already store-sanitized; this is defense-in-depth for any
         # legacy/seed row.
-        origin = template.metadata.get("origin") if isinstance(template.metadata, dict) else None
+        origin = template.metadata.get("origin")
         origin = origin if isinstance(origin, dict) else None
         origin_source_url_safe = sanitize_url(str(origin.get("source_url", ""))) if origin else ""
         return templates.TemplateResponse(

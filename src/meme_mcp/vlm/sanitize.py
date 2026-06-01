@@ -29,6 +29,10 @@ FIELD_CAPS = {
     "source_url": 2048,
 }
 
+# Fields validated as URLs (https allowlist) rather than markup-cleaned as prose.
+# Declared once so both sanitization dispatch sites agree on which keys are URLs.
+URL_FIELDS = {"source_url"}
+
 # https-only source links capped well under the metadata blob size. A URL longer
 # than this is rejected (returned empty), not truncated -- a truncated URL is a
 # broken/dangerous link.
@@ -54,10 +58,10 @@ def hard_sanitize_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     cleaned: dict[str, Any] = {}
     for key, value in metadata.items():
         if isinstance(value, str):
-            # source_url is https-validated, not markup-mangled: MARKUP_RE.sub
+            # URL fields are https-validated, not markup-mangled: MARKUP_RE.sub
             # corrupts URLs (KTD6). This canonical branch also covers the friend's
             # edited source_url arriving via approve -> _validated_metadata.
-            if key == "source_url":
+            if key in URL_FIELDS:
                 cleaned[key] = sanitize_url(value)
             else:
                 cleaned[key] = _clean_string(value, FIELD_CAPS.get(key, 128))
@@ -139,16 +143,15 @@ def clean_origin_value(key: str, value: str) -> str:
     """
     if not value:
         return ""
-    if key == "source_url":
+    if key in URL_FIELDS:
         # sanitize_url is the complete validator for URLs (https allowlist +
         # length cap). Do NOT run flag_anomalies here: its hardcoded 512-char
         # length flag would silently drop valid long https URLs (query strings)
         # that sanitize_url's 2048 cap accepts.
         return sanitize_url(value)
-    cleaned = _clean_and_guard(value, FIELD_CAPS.get(key, 128))
-    if cleaned and flag_anomalies({key: cleaned}):
-        return ""
-    return cleaned
+    # _clean_and_guard already drops a still-flagged value to empty, so no
+    # second flag_anomalies pass is needed here.
+    return _clean_and_guard(value, FIELD_CAPS.get(key, 128))
 
 
 def _clean_and_guard(value: str, cap: int) -> str:
