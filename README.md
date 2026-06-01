@@ -6,6 +6,7 @@ Private meme retrieval and rendering service with:
 - compatibility JSON routes under `/api/mcp/*`
 - GitHub OAuth browser sessions for friends
 - bearer PAT auth for MCP clients
+- self-service PAT management for friends via a browser `/account` page (generate/regenerate/revoke their single token)
 - friend upload analysis/review/approval via a browser `/upload` page or the PAT API
 - optional reverse-image enrichment (Google Cloud Vision) that recovers a meme's web identity before the VLM fills metadata
 - SQLite + filesystem storage by default
@@ -60,6 +61,10 @@ uv run meme-mcp allowlist add <github-login>
 # Issue a PAT. The token is printed once; only its hash is stored. The PAT expires
 # after 90 days by default; pass --ttl-days 0 to opt out of expiry, and
 # --scope read for read-only access.
+#
+# Allowlisted friends can self-mint their own token at the web `/account` page
+# (bounded to 30/90/365-day expiry; never-expire stays operator-CLI-only). This
+# CLI remains the operator fallback and the only way to issue a non-expiring token.
 uv run meme-mcp pat issue <github-login> [--ttl-days N] [--scope read|readwrite]
 
 # Inventory active and revoked PATs.
@@ -81,6 +86,7 @@ Useful routes:
 - `GET /` (public landing page)
 - `GET /healthz`
 - `GET /readyz`
+- `GET /account` (HTML page where an allowlisted friend generates/regenerates/revokes their MCP PAT and copies it once; anonymous browsers are redirected to GitHub login)
 - `GET /browse` (HTML gallery with template previews; cards link to the detail page; an anonymous browser is redirected to GitHub login)
 - `GET /templates/{template_id}` (HTML detail page: full preview plus metadata, slots, and fingerprint; auth-gated like `/browse`)
 - `GET /templates/{template_id}/image` (the gallery's preview image; auth-gated like `/browse`)
@@ -110,6 +116,10 @@ GHCR packages are private by default, so make the package public (or attach an
 `imagePullSecret`) before an unauthenticated cluster can pull it.
 
 ## MCP client snippets
+
+Mint your token first: sign in at `https://your-host.example/account` and click Generate
+(pick a scope and expiry), then copy the plaintext — it is shown exactly once. Export it as
+`MEME_MCP_PAT` for the snippets below.
 
 Codex CLI:
 
@@ -162,6 +172,8 @@ Implemented:
 - embedding model-drift startup guard (refuses to boot if persisted vectors disagree with `EMBEDDING_MODEL`)
 - global `DecompressionBombWarning` escalation
 - public landing page and web browse/search/detail/preview routes
+- self-service web PAT management at `/account` (session-authed, CSRF-protected, per-user rate limited, one-time plaintext reveal)
+- structured JSONL audit log (`audit.jsonl` under the storage dir) carrying `pat_issued`/`pat_revoked` events (never the token or its hash)
 - operator CLI for allowlist, PAT issue, seed, and reindex
 - Docker and Kubernetes deployment examples
 

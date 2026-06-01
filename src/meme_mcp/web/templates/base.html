@@ -11,7 +11,8 @@
     {% if pat_expires_in_days is not none and pat_expires_in_days >= 0 and pat_expires_in_days < 7 %}
       <div class="banner banner-warning" role="status">
         Your PAT expires in {{ pat_expires_in_days }} day{{ "" if pat_expires_in_days == 1 else "s" }}.
-        Re-issue via <code>meme-mcp pat issue {{ friend_login }}</code> to avoid losing access.
+        Signed in as {{ friend_login }}.
+        <a href="/account">Renew it in account settings</a> to avoid losing access.
       </div>
     {% endif %}
     {% if web_session %}
@@ -19,6 +20,7 @@
       <nav class="site-nav" aria-label="Primary">
         <a href="/browse"{% if path == "/browse" %} aria-current="page"{% endif %}>Browse</a>
         <a href="/upload"{% if path == "/upload" %} aria-current="page"{% endif %}>Upload</a>
+        <a href="/account"{% if path == "/account" %} aria-current="page"{% endif %}>Account</a>
       </nav>
     {% endif %}
     {% block body %}{% endblock %}

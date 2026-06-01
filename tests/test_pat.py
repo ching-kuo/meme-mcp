@@ -173,6 +173,56 @@ def test_corrupt_capability_value_fails_closed(tmp_path: Path) -> None:
     assert store.verify(pat_hash) is None
 
 
+def test_revoke_active_revokes_verifiable_token(tmp_path: Path) -> None:
+    store = SQLitePatStore(tmp_path / "pats.db")
+    token = issue_pat(store, "alice", "pepper", ttl_days=30)
+
+    assert store.revoke_active("alice") is True
+
+    assert verify_pat(store, token, "pepper") is None
+    assert store.current_status("alice").state == "revoked"
+
+
+def test_revoke_active_returns_false_without_active_token(tmp_path: Path) -> None:
+    fixed_now = datetime(2026, 1, 1, tzinfo=UTC)
+    clock_value = [fixed_now]
+    store = SQLitePatStore(tmp_path / "pats.db", clock=lambda: clock_value[0])
+
+    assert store.revoke_active("missing") is False
+
+    issue_pat(store, "alice", "pepper", ttl_days=1)
+    clock_value[0] = fixed_now + timedelta(days=2)
+    assert store.revoke_active("alice") is False
+    assert store.current_status("alice").state == "expired"
+
+
+def test_current_status_reflects_states_without_hash(tmp_path: Path) -> None:
+    fixed_now = datetime(2026, 1, 1, tzinfo=UTC)
+    clock_value = [fixed_now]
+    store = SQLitePatStore(tmp_path / "pats.db", clock=lambda: clock_value[0])
+
+    none_status = store.current_status("alice")
+    assert none_status.state == "none"
+    assert not hasattr(none_status, "pat_hash")
+
+    read_token = issue_pat(store, "alice", "pepper", ttl_days=30, capability="read")
+    assert verify_pat(store, read_token, "pepper") == ("alice", "read")
+    active = store.current_status("alice")
+    assert active.state == "active"
+    assert active.capability == "read"
+    assert active.expires_at == fixed_now + timedelta(days=30)
+    assert active.last_used_at == fixed_now
+
+    clock_value[0] = fixed_now + timedelta(days=31)
+    assert store.current_status("alice").state == "expired"
+
+    issue_pat(store, "bob", "pepper", ttl_days=30, capability="readwrite")
+    assert store.revoke_active("bob") is True
+    revoked = store.current_status("bob")
+    assert revoked.state == "revoked"
+    assert revoked.capability == "readwrite"
+
+
 def test_verify_sql_does_not_filter_by_expires_or_capability() -> None:
     """SEC-001 timing: the SQL used by SQLitePatStore.verify MUST NOT push expires_at,
     capability, or revoked_at into the WHERE clause. The query plan for an unknown

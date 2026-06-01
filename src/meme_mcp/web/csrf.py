@@ -30,7 +30,7 @@ CSRF_SESSION_KEY = "csrf_token"
 CSRF_HEADER_NAME = "X-CSRF-Token"
 
 DEFAULT_NEXT = "/browse"
-ALLOWED_NEXT_PATHS = frozenset({"/upload", "/browse"})
+ALLOWED_NEXT_PATHS = frozenset({"/upload", "/browse", "/account"})
 TEMPLATE_DETAIL_PREFIX = "/templates/"
 
 

@@ -1,0 +1,169 @@
+.account {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px 20px 56px;
+}
+
+.account__header {
+  margin-bottom: 28px;
+}
+
+.account__header h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.account__lede {
+  color: #5a6678;
+  margin: 8px 0 0;
+}
+
+.token-panel,
+.token-reveal {
+  border: 1px solid #d9dee8;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 18px;
+  background: #fff;
+}
+
+.token-panel h2,
+.token-reveal h2 {
+  margin: 0 0 14px;
+  font-size: 1.15rem;
+}
+
+.token-panel__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.token-badge {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.token-badge--active {
+  background: #ddf7e8;
+  color: #17633a;
+}
+
+.token-badge--expired,
+.token-badge--revoked {
+  background: #fff0d8;
+  color: #8a4b00;
+}
+
+.token-badge--none {
+  background: #edf1f7;
+  color: #445165;
+}
+
+.token-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 18px 0 0;
+}
+
+.token-facts div {
+  min-width: 0;
+}
+
+.token-facts dt {
+  color: #667085;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+}
+
+.token-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.token-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 14px;
+}
+
+.token-form label {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  color: #344054;
+  font-size: 0.9rem;
+}
+
+.token-form select,
+.token-form button,
+.token-panel--danger button,
+.token-copy-row button {
+  min-height: 40px;
+  border-radius: 6px;
+  border: 1px solid #b8c0cc;
+  padding: 0 12px;
+}
+
+.token-form button,
+.token-copy-row button {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+  font-weight: 700;
+}
+
+.token-note {
+  color: #8a4b00;
+  margin-bottom: 0;
+}
+
+.token-reveal {
+  border-color: #8bb5ff;
+  background: #f7fbff;
+}
+
+.token-copy-row {
+  display: flex;
+  gap: 10px;
+}
+
+.token-copy-row code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border: 1px solid #ccd6e5;
+  border-radius: 6px;
+  background: #fff;
+  padding: 10px;
+}
+
+.token-panel--danger {
+  border-color: #f0c5c5;
+}
+
+.token-panel--danger button {
+  background: #b42318;
+  border-color: #b42318;
+  color: #fff;
+  font-weight: 700;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 720px) {
+  .token-facts,
+  .token-copy-row {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+}

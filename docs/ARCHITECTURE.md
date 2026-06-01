@@ -9,9 +9,14 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
   verifier's SQL query filters only on `pat_hash`; expiry, revocation, and capability
   are evaluated in Python after fetch and every failure branch runs a constant-time
   compare so the query plan and timing cost are uniform across unknown / revoked /
-  expired / corrupt records. The web `/browse` view renders a warning banner when the
-  authenticated friend's PAT will expire in fewer than 7 days, sourced from
-  `expires_at_for_login`; session/OAuth users never see the banner.
+  expired / corrupt records. `revoke_active(login)` revokes the single active row for a
+  login (used by the web `/account` flow) and `current_status(login)` reads the latest row's
+  display fields (state `none|active|expired|revoked`, scope, expiry, last-used) without ever
+  returning the hash; both reuse the same parse-before-compare / raw-revoked fail-closed
+  discipline as `verify` and stay out of the timing-sensitive verify path. The web `/browse`
+  view renders a warning banner when the authenticated friend's PAT will expire in fewer than
+  7 days, sourced from `expires_at_for_login`; the banner links to `/account` so the friend can
+  regenerate it themselves.
 - `upload/` validates bytes before any persistence and strips image metadata by re-encoding.
 - `rendering/` writes generated PNGs through a content-addressed `ImageStore`.
 - `retrieval/` ranks local template records using typed filters, term overlap, and name boosts.
@@ -27,6 +32,14 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
 - The MCP server exposes three tools: `find`, `generate`, and `record_outcome`. The last one
   emits an `audit/events.py` `record_outcome` event so the JSONL audit log carries the same
   share signal the retrieval boost reads from.
+- `audit/sink.py` (`JsonlAuditSink`) is constructed once into `app.state.audit_sink` at app
+  composition (path from `AUDIT_LOG_PATH`, defaulting to `<storage_dir>/audit.jsonl`). It writes
+  one JSON object per line at `0600` and self-rotates at 100 MB (`audit.jsonl.1`), so it needs no
+  separate `gc` story. The web `/account` flow is the first live emitter of `pat_issued` /
+  `pat_revoked` events; emission is best-effort (the sink swallows write errors and the
+  `pat_web.py` helpers swallow any sink exception) so an audit-write failure never blocks the
+  user action. Event payloads carry actor, outcome, scope, and `expires_in_days` only — never
+  the token plaintext or its hash.
 - `db/uploads.py` enforces a 24h TTL on pending uploads; pre-TTL databases are migrated on first
   connection via an idempotent `ALTER TABLE ADD COLUMN` and stale rows are expired immediately.
 - `db/vectors.py` exposes `EmbeddingMetaStore`, which records the embedding model used for each
@@ -170,6 +183,35 @@ blob is reclaimed by the daily `gc-uploads` sweep (`cli/gc_uploads.py`, see
 when no template and no surviving pending row references it. `analyze_image` records the
 pending row (from `ImageStore.path_for`) before writing the blob, so a re-upload's reference is
 observable to the sweep before the bytes land; the grace window is a defense-in-depth margin.
+
+## Web account surface
+
+`GET /account` is a single-page, session-authed screen (`web/templates/account.html` +
+`web/static/account.js` + `web/static/account.css`, vanilla JS, no build step) where an
+allowlisted friend manages their single MCP PAT without operator involvement. It reuses the
+`/upload` front-door pattern exactly: an anonymous or non-allowlisted visitor is 303-redirected
+to `/auth/login?next=/account` (`safe_next` accepts `/account`), the page mints the per-session
+CSRF token into a `<meta name="csrf-token">` tag, and the two state-changing endpoints
+(`web/pat_routes.py`) authenticate session-only via `_session_friend` (a PAT header can never
+drive them — they call `friend_from_request_or_header` with no Authorization) and require the
+`X-CSRF-Token` header. The `/account` nav link in `base.html` renders only for an allowlisted
+session (`has_web_session`).
+
+- `POST /account/token` generates (when none active) or regenerates (when active — the existing
+  one-active-token model means `issue_pat` auto-revokes the prior row). `POST /account/token/revoke`
+  marks the active row revoked. Both run `app.state.pat_admin_limiter.hit(login)` after auth+CSRF,
+  a per-user `RATE_PAT_ADMIN_PER_HOUR` cap; revoking the PAT leaves the web session untouched.
+- `auth/pat_web.py` is the request-independent helper layer: it validates the web-allowed scope
+  (`read`/`readwrite`) and TTL (a fixed `{30, 90, 365}` set — never-expire `ttl_days=0` is rejected
+  with `INVALID_INPUT` and stays operator-CLI-only, the one combination kept behind operator
+  involvement), delegates to the store, and emits the `pat_issued`/`pat_revoked` audit events.
+- One-time reveal: the plaintext is returned only in the `POST /account/token` success envelope
+  (served `Cache-Control: no-store`, fetched with `cache: "no-store"`, so no browser/proxy can
+  replay it) and never persisted (only the HMAC digest is) or rendered into the template, so a
+  reload cannot re-expose it. The client shows it in a reveal panel with a copy button and a
+  "cannot be shown again" warning; regenerate and revoke each gate on a `window.confirm` step.
+  The page otherwise renders only the non-secret status (`current_status`): state badge, scope,
+  expiry, last-used.
 
 ## Reverse-image enrichment
 

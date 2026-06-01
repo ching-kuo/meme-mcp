@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 Capability = Literal["read", "readwrite"]
+PatStatusState = Literal["none", "active", "expired", "revoked"]
 VALID_CAPABILITIES: tuple[Capability, ...] = ("read", "readwrite")
 DEFAULT_TTL_DAYS = 90
 DEFAULT_CAPABILITY: Capability = "readwrite"
@@ -23,6 +24,14 @@ class PatRecord:
     expires_at: datetime | None = None
     capability: Capability = DEFAULT_CAPABILITY
     revoked_at: datetime | None = None
+    last_used_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class PatStatus:
+    state: PatStatusState
+    capability: Capability | None = None
+    expires_at: datetime | None = None
     last_used_at: datetime | None = None
 
 
@@ -136,6 +145,64 @@ class SQLitePatStore:
                 (now.isoformat(), pat_hash),
             )
             return str(login), capability
+
+    def revoke_active(self, friend_login: str) -> bool:
+        now = self._clock()
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, expires_at
+                FROM pats
+                WHERE friend_login = ? AND revoked_at IS NULL
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                (friend_login,),
+            ).fetchone()
+            if row is None:
+                return False
+            row_id, expires_raw = row
+            if _is_expired(expires_raw, now):
+                return False
+            result = conn.execute(
+                "UPDATE pats SET revoked_at = ? WHERE id = ?", (now.isoformat(), row_id)
+            )
+            return result.rowcount > 0
+
+    def current_status(self, friend_login: str) -> PatStatus:
+        now = self._clock()
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT expires_at, capability, revoked_at, last_used_at
+                FROM pats
+                WHERE friend_login = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                (friend_login,),
+            ).fetchone()
+        if row is None:
+            return PatStatus("none")
+        expires_raw, capability_raw, revoked_raw, last_used_raw = row
+        capability = _coerce_capability(capability_raw)
+        expires_at = _parse_optional_iso(expires_raw)
+        last_used_at = _parse_optional_iso(last_used_raw)
+        # Derive "revoked" from the raw column, not a parsed datetime: a non-null
+        # but malformed revoked_at must still read as revoked, matching verify's
+        # fail-closed `revoked_at is not None` check on the same raw value.
+        if revoked_raw is not None:
+            state: PatStatusState = "revoked"
+        elif capability is None or _is_expired(expires_raw, now):
+            state = "expired"
+        else:
+            state = "active"
+        return PatStatus(
+            state=state,
+            capability=capability,
+            expires_at=expires_at,
+            last_used_at=last_used_at,
+        )
 
 
 def hash_pat(plaintext: str, pepper: str) -> str:
@@ -265,6 +332,19 @@ def _parse_optional_iso(value: object) -> datetime | None:
         return datetime.fromisoformat(str(value))
     except ValueError:
         return None
+
+
+def _is_expired(expires_raw: object, now: datetime) -> bool:
+    """Fail-closed expiry check on a raw expires_at column value.
+
+    NULL means "never expires" (not expired). Any non-null value that fails to
+    parse, is naive, or is at/before ``now`` reads as expired, matching verify's
+    parse-before-compare discipline on the same raw value (SEC-001).
+    """
+    if expires_raw is None:
+        return False
+    expires_at = _parse_optional_iso(expires_raw)
+    return expires_at is None or expires_at.tzinfo is None or expires_at <= now
 
 
 def _coerce_capability(value: object) -> Capability | None:

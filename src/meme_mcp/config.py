@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     rate_find_per_min: int = 60
     rate_generate_per_min: int = 30
     rate_upload_per_hour: int = 10
+    rate_pat_admin_per_hour: int = 10
+    audit_log_path: str | None = None
 
 
 def _secret_value(secret: SecretStr | None) -> str:
@@ -135,4 +137,3 @@ def _validate_vision_credentials(path: str | None, problems: list[str]) -> None:
             "GOOGLE_APPLICATION_CREDENTIALS is set process-wide; reverse-image "
             "enrichment passes its credentials path explicitly and does not use it."
         )
-

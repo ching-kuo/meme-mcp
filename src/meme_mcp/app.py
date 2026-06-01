@@ -19,6 +19,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from meme_mcp.audit.sink import JsonlAuditSink
 from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.depends import require_write
 from meme_mcp.auth.pat import SQLitePatStore, expires_at_for_login
@@ -48,6 +49,7 @@ from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pe
 from meme_mcp.vlm.client import VLMClient
 from meme_mcp.vlm.sanitize import sanitize_url
 from meme_mcp.web.csrf import ensure_csrf_token, require_csrf, safe_next
+from meme_mcp.web.pat_routes import register_pat_routes
 from meme_mcp.web.upload_routes import register_upload_routes
 
 # Pre-buffer body-size cap for the analyze endpoints. A 10 MB image base64
@@ -214,6 +216,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # (KTD11/F01).
         app.add_middleware(BodySizeGuardMiddleware, max_bytes=MAX_ANALYZE_BODY_BYTES)
         app.state.settings = settings
+        app.state.web_templates = templates
         run_migrations(settings)
         db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
         app.state.pat_store = SQLitePatStore(db_path)
@@ -229,6 +232,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.find_limiter = WindowedRateLimiter(settings.rate_find_per_min, 60)
         app.state.generate_limiter = WindowedRateLimiter(settings.rate_generate_per_min, 60)
         app.state.upload_limiter = WindowedRateLimiter(settings.rate_upload_per_hour, 60 * 60)
+        app.state.pat_admin_limiter = WindowedRateLimiter(
+            settings.rate_pat_admin_per_hour, 60 * 60
+        )
+        audit_log_path = settings.audit_log_path or str(Path(settings.storage_dir) / "audit.jsonl")
+        app.state.audit_sink = JsonlAuditSink(audit_log_path)
         app.state.github_oauth = GitHubOAuthHTTPClient(
             client_id=settings.github_client_id,
             client_secret=settings.github_client_secret.get_secret_value(),
@@ -628,6 +636,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     register_upload_routes(app, _upload_deps)
+    if hasattr(app.state, "settings"):
+        register_pat_routes(app)
 
     return app
 
@@ -692,7 +702,9 @@ def _pat_expires_in_days(app: FastAPI, login: str) -> int | None:
     if not isinstance(pat_store, SQLitePatStore):
         return None
     expires_at = expires_at_for_login(pat_store, login)
-    if expires_at is None:
+    # Fail closed on a naive timestamp (corrupt/legacy row): a naive minus aware
+    # subtraction would raise and 500 the page, so suppress the banner instead.
+    if expires_at is None or expires_at.tzinfo is None:
         return None
     delta = expires_at - datetime.now(UTC)
     return max(0, delta.days)
