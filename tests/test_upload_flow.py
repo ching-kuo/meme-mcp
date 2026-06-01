@@ -47,8 +47,11 @@ class FakeVLMClient:
         self,
         image_bytes: bytes,
         title_hint: str | None = None,
+        grounding: str | None = None,
+        *,
+        grounding_authoritative: bool = True,
     ) -> EnrichmentResult:
-        del image_bytes
+        del image_bytes, grounding, grounding_authoritative
         return EnrichmentResult(
             "success",
             {
@@ -70,8 +73,11 @@ class TimeoutVLMClient:
         self,
         image_bytes: bytes,
         title_hint: str | None = None,
+        grounding: str | None = None,
+        *,
+        grounding_authoritative: bool = True,
     ) -> EnrichmentResult:
-        del image_bytes, title_hint
+        del image_bytes, title_hint, grounding, grounding_authoritative
         return EnrichmentResult("timeout", None, None, [])
 
 
@@ -80,8 +86,11 @@ class SuspectVLMClient:
         self,
         image_bytes: bytes,
         title_hint: str | None = None,
+        grounding: str | None = None,
+        *,
+        grounding_authoritative: bool = True,
     ) -> EnrichmentResult:
-        del image_bytes, title_hint
+        del image_bytes, title_hint, grounding, grounding_authoritative
         return EnrichmentResult(
             "success",
             {

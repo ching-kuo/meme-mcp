@@ -39,7 +39,14 @@ class RateLimiter(Protocol):
 
 
 class VLMEnricher(Protocol):
-    def enrich_template(self, image_bytes: bytes, title_hint: str | None = None) -> Any: ...
+    def enrich_template(
+        self,
+        image_bytes: bytes,
+        title_hint: str | None = None,
+        grounding: str | None = None,
+        *,
+        grounding_authoritative: bool = True,
+    ) -> Any: ...
 
 
 class TemplateRepository(Protocol):
