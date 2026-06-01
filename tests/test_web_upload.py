@@ -28,7 +28,13 @@ from meme_mcp.limits import WindowedRateLimiter
 from meme_mcp.upload.strip import strip_and_reencode
 from meme_mcp.upload.validation import compute_hashes
 from meme_mcp.web.csrf import CSRF_HEADER_NAME
-from tests.test_upload_flow import FakeVLMClient, good_settings, png_bytes
+from tests.test_upload_flow import (
+    FakeReverseImageClient,
+    FakeVLMClient,
+    _pigeon_success,
+    good_settings,
+    png_bytes,
+)
 
 CSRF_TOKEN = "test-csrf-token-value"
 
@@ -116,6 +122,41 @@ def test_session_analyze_and_approve_matches_pat_template(tmp_path) -> None:
     web_template = web_app.state.templates.get(web_template_id)
     assert web_template.source == "friend"
     assert web_template.name == "Deploy Face"
+
+
+# ---------------------------------------------------------------------------
+# AE2 (web half): the web door defaults identify_online ON
+# ---------------------------------------------------------------------------
+
+
+def test_web_door_defaults_identify_online_on(tmp_path) -> None:
+    # No identify_online field on the web door means the lookup runs (the
+    # interactive surface defaults ON, KTD7).
+    app = _make_app(tmp_path)
+    reverse = FakeReverseImageClient(_pigeon_success())
+    app.state.reverse_image_client = reverse
+    client = _session_client(app)
+
+    data = client.post(
+        "/upload/analyze", headers=_csrf_headers(), json=_analyze_body()
+    ).json()["data"]
+
+    assert reverse.calls  # lookup ran without an explicit toggle
+    assert data["reverse_image_status"] == "success"
+    assert data["metadata"]["origin"]["name"] == "Is This a Pigeon?"
+
+
+def test_web_door_unchecked_toggle_suppresses_egress(tmp_path) -> None:
+    app = _make_app(tmp_path)
+    reverse = FakeReverseImageClient(_pigeon_success())
+    app.state.reverse_image_client = reverse
+    client = _session_client(app)
+
+    body = {**_analyze_body(), "identify_online": False}
+    data = client.post("/upload/analyze", headers=_csrf_headers(), json=body).json()["data"]
+
+    assert reverse.calls == []  # unchecked toggle == no egress
+    assert data["reverse_image_status"] == "skipped"
 
 
 # ---------------------------------------------------------------------------

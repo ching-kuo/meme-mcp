@@ -238,6 +238,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             api_key=settings.vlm_api_key.get_secret_value(),
             base_url=settings.vlm_base_url,
         )
+        # None when the feature is off (KTD7); the credentials path was already
+        # validated as a regular file at startup (U1). Built once here so a
+        # missing/malformed SA file fails fast, not at first request (KTD4).
+        app.state.reverse_image_client = _make_reverse_image_client(settings)
         app.state.pat_hash_pepper_value = settings.pat_hash_pepper.get_secret_value()
         app.state.mcp_server = create_mcp_server(
             app.state.pat_store,
@@ -470,6 +474,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
         friend = require_write(friend_from_header(app, authorization))
+        # PAT door defaults identify_online OFF: a programmatic caller does not
+        # silently begin egressing images when the operator enables the feature
+        # (KTD7). It must opt in explicitly per request.
         result = await analyze_image(
             content_base64=str(payload.get("content_base64", "")),
             declared_mime=str(payload.get("mime", "")),
@@ -477,6 +484,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             title_hint=payload.get("title_hint"),
             friend_login=friend.github_login,
             deps=_upload_deps(app),
+            identify_online=bool(payload.get("identify_online", False)),
         )
         return JSONResponse(
             make_success(
@@ -489,6 +497,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         "template_id": result.duplicate_template_id,
                     },
                     "suspect_flags": result.suspect_flags,
+                    "reverse_image_status": result.reverse_image_status,
                 }
             )
         )
@@ -697,6 +706,19 @@ def _duplicate_index(app: FastAPI) -> DuplicateIndex:
     return index
 
 
+def _make_reverse_image_client(settings: Settings) -> object | None:
+    """Build the Vision client when enabled, else None (the disabled sentinel).
+
+    Imported lazily so the heavy google.cloud.vision dependency tree is only
+    loaded when the feature is actually on.
+    """
+    if not settings.reverse_image_enabled or not settings.google_vision_credentials_path:
+        return None
+    from meme_mcp.reverse_image.client import GoogleVisionClient
+
+    return GoogleVisionClient.from_credentials_path(settings.google_vision_credentials_path)
+
+
 def _upload_deps(app: FastAPI) -> UploadServiceDeps:
     return UploadServiceDeps(
         upload_limiter=app.state.upload_limiter,
@@ -705,6 +727,7 @@ def _upload_deps(app: FastAPI) -> UploadServiceDeps:
         pending_uploads=app.state.pending_uploads,
         templates=app.state.templates,
         duplicate_index=_duplicate_index(app),
+        reverse_image_client=getattr(app.state, "reverse_image_client", None),
     )
 
 
