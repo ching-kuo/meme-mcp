@@ -146,6 +146,43 @@ def test_web_door_defaults_identify_online_on(tmp_path) -> None:
     assert data["metadata"]["origin"]["name"] == "Is This a Pigeon?"
 
 
+def test_web_approve_promotes_reviewed_origin_to_high(tmp_path) -> None:
+    # The web review form is the trusted human-review surface: approving there
+    # promotes a low-confidence origin to status="high" (earning the find alias),
+    # and the https URL survives the canonical sanitizer unmangled.
+    from meme_mcp.reverse_image.client import OriginCandidate, WebDetectionResult, WebGrounding
+
+    app = _make_app(tmp_path)
+    app.state.reverse_image_client = FakeReverseImageClient(
+        WebDetectionResult(
+            "low_confidence",
+            WebGrounding(best_guess="maybe", entities=(), page_titles=()),
+            OriginCandidate(name="maybe", source_url="https://example.com/a"),
+        )
+    )
+    client = _session_client(app)
+    data = client.post(
+        "/upload/analyze", headers=_csrf_headers(), json=_analyze_body()
+    ).json()["data"]
+    assert data["metadata"]["origin"]["status"] == "low"
+
+    edited = dict(data["metadata"])
+    edited["name"] = "Pigeon Display"
+    edited["origin"] = {  # web client submits name/source_url, no status
+        "name": "Is This a Pigeon?",
+        "source_url": "https://knowyourmeme.com/memes/is-this-a-pigeon?ref=share&x=1",
+    }
+    approved = client.post(
+        f"/upload/approve/{data['pending_upload_id']}",
+        headers=_csrf_headers(),
+        json={"metadata": edited},
+    )
+    assert approved.status_code == 200
+    origin = app.state.templates.get(approved.json()["data"]["template_id"]).metadata["origin"]
+    assert origin["status"] == "high"  # promoted on web review/confirm
+    assert origin["source_url"] == "https://knowyourmeme.com/memes/is-this-a-pigeon?ref=share&x=1"
+
+
 def test_web_door_unchecked_toggle_suppresses_egress(tmp_path) -> None:
     app = _make_app(tmp_path)
     reverse = FakeReverseImageClient(_pigeon_success())

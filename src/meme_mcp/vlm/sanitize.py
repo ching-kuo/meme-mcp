@@ -103,7 +103,12 @@ def sanitize_url(value: str) -> str:
     if not normalized or len(normalized) > URL_MAX_LEN:
         return ""
     parsed = urlsplit(normalized)
-    if parsed.scheme != "https" or not parsed.netloc:
+    if parsed.scheme != "https" or not parsed.hostname:
+        return ""
+    # Reject userinfo (e.g. https://trusted.com@evil.example/x): the visible
+    # prefix impersonates a trusted host while the real host is the part after
+    # '@'. urlsplit parses that into username/password, so guard on both.
+    if parsed.username or parsed.password or "@" in parsed.netloc:
         return ""
     return normalized
 

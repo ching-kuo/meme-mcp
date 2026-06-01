@@ -119,6 +119,9 @@ def register_upload_routes(
             slot_overrides=slot_definitions_raw if isinstance(slot_definitions_raw, list) else None,
             ack_suspect=bool(payload.get("ack_suspect", False)),
             deps=upload_deps(app),
+            # The web review form is the trusted human-review surface: approving
+            # here confirms the origin and promotes it to status="high" (KTD9).
+            origin_reviewed=True,
         )
         return JSONResponse(make_success({"template_id": result.template_id, "slug": result.slug}))
 

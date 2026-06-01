@@ -62,6 +62,16 @@ def test_sanitize_url_accepts_https_and_rejects_others() -> None:
     assert sanitize_url("not a url") == ""
 
 
+def test_sanitize_url_rejects_userinfo_impersonation() -> None:
+    # https://trusted.com@evil.example/x visually impersonates trusted.com but
+    # the real host is evil.example -- reject it.
+    assert sanitize_url("https://knowyourmeme.com@evil.example/x") == ""
+    assert sanitize_url("https://user:pass@evil.example/x") == ""
+    assert sanitize_url("https://knowyourmeme.com/memes/pigeon") == (
+        "https://knowyourmeme.com/memes/pigeon"
+    )
+
+
 def test_hard_sanitize_origin_preserves_https_url_unmangled() -> None:
     # The query string survives the nested-dict recursion intact (MARKUP_RE is
     # skipped for source_url), and inner keys are capped (KTD6).

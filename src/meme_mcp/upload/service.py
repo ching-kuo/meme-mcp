@@ -244,6 +244,7 @@ def approve_pending(
     slot_overrides: list[Any] | None,
     ack_suspect: bool,
     deps: UploadServiceDeps,
+    origin_reviewed: bool = False,
 ) -> ApproveResult:
     """Promote a pending upload to a template after validating the metadata.
 
@@ -251,10 +252,18 @@ def approve_pending(
     that ``NOT_FOUND`` stays opaque per front door. This function enforces write
     capability and the name-required check, upserts the template
     (``source="friend"``), and deletes the pending row.
+
+    ``origin_reviewed`` is the trusted human-review signal: only the web review
+    surface (where the friend sees and can edit the origin fields) passes True,
+    which promotes the origin to ``status="high"`` (KTD9). The PAT/API door
+    leaves it False so a programmatic client cannot launder a low-confidence
+    origin to high merely by omitting ``origin.status``.
     """
     require_write(actor)
     metadata_in = metadata_overrides if metadata_overrides is not None else pending.metadata
-    metadata = _validated_metadata(metadata_in, pending.suspect_flags, ack_suspect)
+    metadata = _validated_metadata(
+        metadata_in, pending.suspect_flags, ack_suspect, origin_reviewed
+    )
     if slot_overrides is not None:
         slot_definitions: list[Any] = slot_overrides
     else:
@@ -329,6 +338,7 @@ def _validated_metadata(
     metadata: dict[str, Any],
     suspect_flags: list[str],
     ack_suspect: bool,
+    origin_reviewed: bool = False,
 ) -> dict[str, Any]:
     raw_flags = flag_anomalies(metadata)
     cleaned = hard_sanitize_metadata(metadata)
@@ -358,24 +368,24 @@ def _validated_metadata(
     if not isinstance(cleaned.get("tags"), list):
         raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "tags", "reason": "list"}])
     cleaned["slot_definitions"] = slot_definitions_for(cleaned)
-    _promote_origin_status(cleaned)
+    _promote_origin_status(cleaned, origin_reviewed)
     return cleaned
 
 
-def _promote_origin_status(cleaned: dict[str, Any]) -> None:
+def _promote_origin_status(cleaned: dict[str, Any], origin_reviewed: bool) -> None:
     """Promote a friend-reviewed origin to ``status="high"`` on approve (KTD9).
 
-    The web review form submits origin with only ``name``/``source_url`` and no
-    ``status`` key -- so an absent status is the human-review signal and earns the
-    trusted ``find`` alias (U7). A status passed through verbatim as ``"low"``
-    (e.g. a programmatic client echoing the analyze response unchanged) is NOT
-    promoted: a low-confidence identity must not be laundered to high-weight by a
-    no-op approve. Only a non-empty, sanitized origin name is eligible.
+    Promotion is gated on the explicit ``origin_reviewed`` signal, which ONLY the
+    web review surface passes (the friend saw and could edit the origin fields).
+    The PAT/API door never promotes: a programmatic client cannot launder a
+    low-confidence origin to high-weight by omitting ``origin.status`` -- a
+    write-capable client that genuinely wants high must set it explicitly. Only a
+    non-empty, sanitized origin name is eligible.
     """
-    origin = cleaned.get("origin")
-    if not isinstance(origin, dict) or not str(origin.get("name", "")).strip():
+    if not origin_reviewed:
         return
-    if origin.get("status") != "low":
+    origin = cleaned.get("origin")
+    if isinstance(origin, dict) and str(origin.get("name", "")).strip():
         origin["status"] = "high"
 
 

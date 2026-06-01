@@ -191,8 +191,9 @@ use; the cultural meaning lives on the web, not in the pixels.
   tripping `flag_anomalies` after sanitization is hard-dropped to empty) so stored origin — and
   therefore `find`/MCP output to agents — is guaranteed clean without a read-time pass.
   `source_url` is https-allowlisted via `sanitize_url` (a canonical change to
-  `hard_sanitize_metadata`, so the friend's edited URL on approve is covered too) and rendered
-  through autoescape; `detail.html` additionally gates the link `href` server-side because Jinja
+  `hard_sanitize_metadata`, so the friend's edited URL on approve is covered too; it also rejects
+  userinfo URLs like `https://trusted.com@evil.example/x` that impersonate a trusted host) and
+  rendered through autoescape; `detail.html` additionally gates the link `href` server-side because Jinja
   autoescape does not neutralize a `javascript:` href. The in-prompt isolation (grounding fenced
   in `WEB_CONTEXT` markers, framed as data-not-instructions) is best-effort defense-in-depth; the
   structural defenses are the out-of-band store-sanitize, the https allowlist, and autoescape.
@@ -201,8 +202,11 @@ use; the cultural meaning lives on the web, not in the pixels.
   `metadata.name`; `retrieval/search.py` applies the existing `+10` name-boost to an
   `origin.name` hit (tagged `origin_name_match`) only when the persisted `origin.status == "high"`
   — the runtime status does not survive to query time, so the trust bit must be stored. Approve
-  promotes a reviewed origin to `status="high"` (the friend confirmed it). `origin.source_url` is
-  excluded from the term-match haystack (a URL is not descriptive text).
+  gates promotion to `status="high"` on an explicit `origin_reviewed` signal that ONLY the web
+  review surface passes (the friend saw and could edit the origin fields); the PAT/API approve door
+  never promotes, so a programmatic client cannot launder a low-confidence origin to high-weight by
+  omitting `origin.status`. `origin.source_url` is excluded from the term-match haystack (a URL is
+  not descriptive text).
 - **Egress departure (privacy).** Enabling the feature sends uploaded images off-box to Google for
   the first time beyond the VLM provider. Egress occurs the instant the lookup is invoked — a
   `timeout`/`error` status does **not** mean the bytes stayed local; no-retention is provider
