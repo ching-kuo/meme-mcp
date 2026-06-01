@@ -603,6 +603,40 @@ def test_get_upload_authenticated_renders_page(tmp_path) -> None:
     assert "JavaScript" in html
 
 
+def test_upload_page_shows_identify_toggle_when_feature_enabled(tmp_path) -> None:
+    app = _make_app(tmp_path)
+    # Flip the flag after construction (validation already ran with it off).
+    app.state.settings.reverse_image_enabled = True
+    client = _session_client(app, csrf=None)
+
+    html = client.get("/upload").text
+
+    assert "data-identify-toggle" in html
+    assert "checked" in html  # default-checked when the feature is on
+    assert "Google" in html  # disclosure names the egress destination
+
+
+def test_upload_page_hides_toggle_when_feature_disabled(tmp_path) -> None:
+    app = _make_app(tmp_path)  # feature off by default
+    client = _session_client(app, csrf=None)
+
+    html = client.get("/upload").text
+
+    # No checked Google-bound toggle renders when the feature is off (KTD7).
+    assert "data-identify-toggle" not in html
+
+
+def test_upload_page_always_renders_editable_origin_fields(tmp_path) -> None:
+    app = _make_app(tmp_path)
+    client = _session_client(app, csrf=None)
+
+    html = client.get("/upload").text
+
+    # Origin fields are always present (R10), even with the feature off.
+    assert 'data-field="origin_name"' in html
+    assert 'data-field="origin_source_url"' in html
+
+
 def test_get_upload_renders_nav_link(tmp_path) -> None:
     app = _make_app(tmp_path)
     client = _session_client(app, csrf=None)

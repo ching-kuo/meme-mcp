@@ -46,6 +46,7 @@ from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_
 from meme_mcp.upload.dedupe import DuplicateIndex
 from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pending
 from meme_mcp.vlm.client import VLMClient
+from meme_mcp.vlm.sanitize import sanitize_url
 from meme_mcp.web.csrf import ensure_csrf_token, require_csrf, safe_next
 from meme_mcp.web.upload_routes import register_upload_routes
 
@@ -337,6 +338,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "friend_login": login,
                 "pat_expires_in_days": _pat_expires_in_days(app, login),
                 "web_session": True,
+                # Drives the egress toggle: when the feature is off, the page must
+                # NOT render a checked Google-bound toggle (U6/KTD7).
+                "reverse_image_enabled": app.state.settings.reverse_image_enabled,
             },
         )
 
@@ -570,11 +574,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             template = app.state.templates.get(template_id)
         except KeyError as exc:
             raise MemeMCPError(ErrorCode.NOT_FOUND, []) from exc
+        # Server-side https gate for the origin source link: Jinja autoescape does
+        # NOT neutralize a javascript: href, so the safe URL is computed here and a
+        # non-https one renders as plain text, never a live link (U6/KTD6). Stored
+        # origin is already store-sanitized; this is defense-in-depth for any
+        # legacy/seed row.
+        origin = template.metadata.get("origin") if isinstance(template.metadata, dict) else None
+        origin = origin if isinstance(origin, dict) else None
+        origin_source_url_safe = sanitize_url(str(origin.get("source_url", ""))) if origin else ""
         return templates.TemplateResponse(
             request,
             "detail.html",
             {
                 "template": template,
+                "origin": origin,
+                "origin_source_url_safe": origin_source_url_safe,
                 "friend_login": friend.github_login,
                 "pat_expires_in_days": _pat_expires_in_days(app, friend.github_login),
                 "web_session": has_web_session(app, request),

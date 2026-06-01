@@ -173,6 +173,68 @@ def test_template_detail_redirects_anonymous_browser_to_login(tmp_path) -> None:
     assert response.headers["location"] == "/auth/login?next=%2Ftemplates%2Fdeploy-face"
 
 
+def _upsert_with_origin(app, origin: dict[str, object]) -> str:
+    image_path = app.state.image_store.put(png_bytes("white"), "png")
+    app.state.templates.upsert(
+        TemplateCreate(
+            template_id="pigeon",
+            slug="pigeon",
+            name="Anime Butterfly",
+            source="friend",
+            metadata={
+                "name": "Anime Butterfly",
+                "description": "anime man and butterfly",
+                "emotion": "wonder",
+                "usage_context": "captivated",
+                "tags": ["anime"],
+                "format": "static",
+                "origin": origin,
+            },
+            slot_definitions=[{"name": "top", "position": "top"}],
+            image_path=image_path,
+            perceptual_hash="1" * 16,
+            exact_hash="b" * 64,
+        )
+    )
+    return "pigeon"
+
+
+def test_detail_page_renders_origin_with_safe_https_link(tmp_path) -> None:
+    client, headers = authed_client(tmp_path)
+    template_id = _upsert_with_origin(
+        client.app,
+        {
+            "name": "Is This a Pigeon?",
+            "source_url": "https://knowyourmeme.com/memes/is-this-a-pigeon",
+            "status": "high",
+        },
+    )
+
+    body = client.get(f"/templates/{template_id}", headers=headers).text
+
+    assert "Is This a Pigeon?" in body
+    assert "https://knowyourmeme.com/memes/is-this-a-pigeon" in body
+    assert 'rel="noopener noreferrer"' in body
+
+
+def test_detail_page_does_not_linkify_non_https_source(tmp_path) -> None:
+    client, headers = authed_client(tmp_path)
+    template_id = _upsert_with_origin(
+        client.app,
+        {
+            "name": "Sneaky",
+            "source_url": "javascript:alert(1)",
+            "status": "high",
+        },
+    )
+
+    body = client.get(f"/templates/{template_id}", headers=headers).text
+
+    # The origin name still renders, but the bad URL never becomes a live link.
+    assert "Sneaky" in body
+    assert 'href="javascript:' not in body
+
+
 def test_template_detail_invalid_pat_returns_401(tmp_path) -> None:
     client, _ = authed_client(tmp_path)
 
