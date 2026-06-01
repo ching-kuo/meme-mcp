@@ -217,6 +217,28 @@ def test_detail_page_renders_origin_with_safe_https_link(tmp_path) -> None:
     assert 'rel="noopener noreferrer"' in body
 
 
+def test_detail_page_renders_source_panel_for_nameless_origin(tmp_path) -> None:
+    # The memegen relocation shape: origin carries only a source_url (no name).
+    client, headers = authed_client(tmp_path)
+    template_id = _upsert_with_origin(
+        client.app, {"source_url": "https://knowyourmeme.com/memes/10-guy"}
+    )
+
+    body = client.get(f"/templates/{template_id}", headers=headers).text
+
+    # The provenance link renders even with no origin.name...
+    assert "https://knowyourmeme.com/memes/10-guy" in body
+    assert 'rel="noopener noreferrer"' in body
+    # ...under a "Source" panel heading, never the named "Origin" heading.
+    assert '<h2 class="detail__panel-title">Source</h2>' in body
+    assert ">Origin<" not in body
+    # No name row, and the link row is labeled "Reference" (not a duplicate "Source").
+    assert "Identified as" not in body
+    assert "<dt>Reference</dt>" in body
+    # The corpus tag row is relabeled "Library" so there is no duplicate "Source".
+    assert "<dt>Library</dt>" in body
+
+
 def test_detail_page_does_not_linkify_non_https_source(tmp_path) -> None:
     client, headers = authed_client(tmp_path)
     template_id = _upsert_with_origin(

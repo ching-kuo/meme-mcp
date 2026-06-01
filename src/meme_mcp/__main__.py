@@ -46,7 +46,13 @@ def run(argv: Sequence[str] | None = None, settings: Settings | None = None) -> 
     if args.command == "seed-memegen":
         upstream = Path(args.upstream_path) if args.upstream_path else None
         manifest = Path(args.manifest_path) if args.manifest_path else None
-        return run_seed(app_settings, upstream_path=upstream, manifest_path=manifest)
+        enrichment = Path(args.enrichment_path) if args.enrichment_path else None
+        return run_seed(
+            app_settings,
+            upstream_path=upstream,
+            manifest_path=manifest,
+            enrichment_path=enrichment,
+        )
     if args.command == "gc-renders":
         return run_gc_renders(
             app_settings,
@@ -105,6 +111,7 @@ def _parser() -> argparse.ArgumentParser:
     seed = subcommands.add_parser("seed-memegen")
     seed.add_argument("--upstream-path", default=None)
     seed.add_argument("--manifest-path", default=None)
+    seed.add_argument("--enrichment-path", default=None)
     gc = subcommands.add_parser("gc-renders")
     gc.add_argument("--ttl-days", type=int, default=None)
     gc.add_argument("--max-bytes", type=int, default=None)

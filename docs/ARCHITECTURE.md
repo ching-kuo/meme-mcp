@@ -51,7 +51,18 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
   Narrow, off-axis, or rotated boxes additionally retain a `position_override` mapping for
   external callers that already inspect it. `import_upstream_corpus` persists templates and
   returns a manifest of `slug -> SHA-256(image bytes)` pinned to the upstream commit, which
-  `cli/seed.py` writes to `assets/memegen-seed-manifest.json` for reproducible seeding.
+  `cli/seed.py` writes to `assets/memegen-seed-manifest.json` for reproducible seeding. The seed
+  Job must `git checkout` that pinned commit before importing — cloning bare HEAD drifts the corpus.
+- **Memegen metadata: relocation + enrichment.** The upstream `source` URL is provenance, not a
+  usage description, so `_build_metadata` puts it in an `origin = {source_url}` block (scheme
+  normalized http→https so the existing https-only `sanitize_url`/`origin_source_url_safe` gates
+  accept it) instead of `usage_context`. This keeps the URL out of the keyword haystack and the
+  embedding (both already exclude `origin`). Empty `description`/`emotion`/`usage_context` are
+  optionally overlaid from `assets/memegen-enrichment.json` (web-grounded prose authored offline,
+  keyed by slug; force-included in the wheel and resolved like the renderer's font asset). The
+  whole metadata dict is routed through `hard_sanitize_metadata` before upsert — the same
+  clean-data path uploads use — so authored prose cannot reach the `find`/MCP sink unsanitized; a
+  missing/malformed enrichment file degrades to relocation-only.
 - `cli/gc_renders.py` and the `meme-mcp gc-renders` CLI prune render outputs by TTL
   (`--ttl-days N`) or by max-byte budget (`--max-bytes N`, LRU by `generated_receipts.created_at`).
   Scope is the receipts-table — template seed images have no receipt row and are never touched.
@@ -206,7 +217,10 @@ use; the cultural meaning lives on the web, not in the pixels.
   review surface passes (the friend saw and could edit the origin fields); the PAT/API approve door
   never promotes, so a programmatic client cannot launder a low-confidence origin to high-weight by
   omitting `origin.status`. `origin.source_url` is excluded from the term-match haystack (a URL is
-  not descriptive text).
+  not descriptive text). Memegen-seeded rows reuse this block in its provenance-only shape —
+  `{source_url}` with no `name`/`status` — so the reference link renders (the detail page titles
+  that panel "Source" rather than "Origin" and labels the row "Reference") but never earns the
+  `origin_name_match` alias bonus.
 - **Egress departure (privacy).** Enabling the feature sends uploaded images off-box to Google for
   the first time beyond the VLM provider. Egress occurs the instant the lookup is invoked — a
   `timeout`/`error` status does **not** mean the bytes stayed local; no-retention is provider

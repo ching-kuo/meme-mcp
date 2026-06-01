@@ -47,8 +47,11 @@ images beyond the VLM provider**:
 # Seed a deterministic local starter corpus.
 uv run meme-mcp seed-memegen
 
-# Or import the full upstream memegen template library from a local clone.
+# Or import the full upstream memegen template library from a local clone
+# (checkout the pinned commit first; cloning bare HEAD drifts the corpus).
 # Pins the upstream commit and per-template SHA-256 in assets/memegen-seed-manifest.json.
+# Each template's source URL is stored as a provenance link (origin), not in usage_context,
+# and prose is optionally overlaid from assets/memegen-enrichment.json (--enrichment-path to override).
 uv run meme-mcp seed-memegen --upstream-path /path/to/memegen-clone
 
 # Add a GitHub login to the allowlist used by both web sessions and PAT auth.

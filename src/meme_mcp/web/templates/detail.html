@@ -58,7 +58,7 @@
           <dd>{{ template.metadata.get("format") or "static" }}</dd>
         </div>
         <div class="detail__attr">
-          <dt>Source</dt>
+          <dt>Library</dt>
           <dd>{{ template.source }}</dd>
         </div>
         <div class="detail__attr">
@@ -89,19 +89,25 @@
       {% endif %}
     </section>
 
-    {% if origin and origin.get("name") %}
+    {% set origin_name = origin.get("name") if origin else none %}
+    {% if origin_name or origin_source_url_safe %}
+      {# Uploads carry a recovered identity ("Origin"); memegen rows carry only a
+         provenance link ("Source"). The Attributes "Library" row above is the
+         corpus tag (memegen/friend) -- distinct from this reference link. #}
       <section class="detail__panel">
-        <h2 class="detail__panel-title">Origin</h2>
+        <h2 class="detail__panel-title">{{ "Origin" if origin_name else "Source" }}</h2>
         <dl class="detail__attrs">
-          <div class="detail__attr">
-            <dt>Identified as</dt>
-            <dd>{{ origin.get("name") }}</dd>
-          </div>
+          {% if origin_name %}
+            <div class="detail__attr">
+              <dt>Identified as</dt>
+              <dd>{{ origin_name }}</dd>
+            </div>
+          {% endif %}
           {% if origin_source_url_safe %}
             {# Only a server-validated https URL renders, and only as a link.
                A URL that failed the gate is shown nothing -- never as text. #}
             <div class="detail__attr">
-              <dt>Source</dt>
+              <dt>{{ "Source" if origin_name else "Reference" }}</dt>
               <dd>
                 <a href="{{ origin_source_url_safe }}" target="_blank" rel="noopener noreferrer">
                   {{ origin_source_url_safe }}

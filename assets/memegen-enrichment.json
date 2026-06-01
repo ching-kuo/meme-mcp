@@ -1,0 +1,7 @@
+{
+  "_meta": {
+    "memegen_commit": "3e1cdd13a2e914d51b96fc5916b507904fb74d5a",
+    "model": "sonnet",
+    "note": "slug -> {description, emotion, usage_context, extra_tags}. Populated by the deferred web-grounded authoring pass (plan 2026-06-01-002). Until a slug has an entry, its prose fields stay empty and the import degrades to relocation-only (KTD4)."
+  }
+}
