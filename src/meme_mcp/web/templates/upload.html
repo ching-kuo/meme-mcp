@@ -63,6 +63,18 @@
         </div>
       </div>
 
+      {% if reverse_image_enabled %}
+        <label class="upload-identify" data-identify-row>
+          <input type="checkbox" data-identify-toggle checked>
+          <span>Identify this meme online</span>
+        </label>
+        <p class="helper" data-identify-help>
+          Sends your image to Google to identify the meme and fill in its real
+          name and usage. Uncheck for private or original images you do not want
+          sent off this server.
+        </p>
+      {% endif %}
+
       <div class="upload-actions">
         <button type="button" class="upload-btn" data-analyze-btn disabled>Analyze</button>
       </div>
@@ -70,8 +82,8 @@
 
     <div class="upload-analyzing" data-spinner hidden role="status" aria-live="polite">
       <span class="upload-analyzing__bars" aria-hidden="true"><span></span><span></span><span></span></span>
-      <p class="upload-analyzing__title">Looking at your image&hellip;</p>
-      <p class="upload-analyzing__hint">This usually takes 5&ndash;60 seconds.</p>
+      <p class="upload-analyzing__title" data-analyzing-title>Looking at your image&hellip;</p>
+      <p class="upload-analyzing__hint" data-analyzing-hint>This usually takes 5&ndash;60 seconds.</p>
       <p class="upload-analyzing__rm">Analyzing the image. This may take several seconds.</p>
       <div class="upload-analyzing__sweep" aria-hidden="true"></div>
     </div>
@@ -118,6 +130,16 @@
             Tags (comma-separated)
             <input type="text" name="tags" data-field="tags">
             <span class="helper">Separate tags with commas. Do not put a comma inside a single tag.</span>
+          </label>
+          <label>
+            Origin name (optional)
+            <input type="text" name="origin_name" data-field="origin_name">
+            <span class="helper" data-origin-status></span>
+          </label>
+          <label>
+            Origin source URL (optional)
+            <input type="url" name="origin_source_url" data-field="origin_source_url" placeholder="https://">
+            <span class="helper">Where this meme comes from. Only https links are kept.</span>
           </label>
         </div>
 

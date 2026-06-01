@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from meme_mcp.retrieval.search import TemplateRecord, search
+from meme_mcp.retrieval.search import Candidate, TemplateRecord, search
 
 
 @dataclass(frozen=True)
@@ -140,19 +140,13 @@ class SQLiteTemplateRepository:
         filters: dict[str, Any] | None = None,
         top_k: int = 5,
         outcome_lookup: Callable[[str], int] | None = None,
-    ) -> list[TemplateRecord]:
-        return [
-            TemplateRecord(
-                template_id=candidate.template_id,
-                slug=candidate.slug,
-                name=candidate.name,
-                metadata=candidate.metadata,
-                slot_definitions=candidate.slot_definitions,
-            )
-            for candidate in search(
-                self.list_records(), query, filters, top_k, outcome_lookup
-            )
-        ]
+    ) -> list[Candidate]:
+        # Return Candidates directly: down-converting to TemplateRecord here
+        # dropped similarity_score and matched_fields before they could reach the
+        # MCP find envelope, so an origin_name_match (or any match tag) never
+        # surfaced to the agent (U7/KTD9). Callers that only need identity read
+        # template_id/slug/name, which Candidate also carries.
+        return search(self.list_records(), query, filters, top_k, outcome_lookup)
 
 
 def _row_from_sql(row: tuple[Any, ...]) -> TemplateRow:

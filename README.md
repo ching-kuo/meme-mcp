@@ -7,6 +7,7 @@ Private meme retrieval and rendering service with:
 - GitHub OAuth browser sessions for friends
 - bearer PAT auth for MCP clients
 - friend upload analysis/review/approval via a browser `/upload` page or the PAT API
+- optional reverse-image enrichment (Google Cloud Vision) that recovers a meme's web identity before the VLM fills metadata
 - SQLite + filesystem storage by default
 
 ## Local setup
@@ -17,6 +18,28 @@ cp .env.example .env
 ```
 
 Set the required GitHub OAuth, VLM, embedding, session, and PAT pepper values in `.env`.
+
+### Reverse-image enrichment (optional, off by default)
+
+A meme's cultural meaning often differs from what the image literally depicts. When enabled,
+the upload pipeline sends the EXIF-stripped image bytes to Google Cloud Vision Web Detection
+to recover the meme's real identity, then feeds that as grounding to the VLM and stores a
+structured `origin` block (name + https source link). This is the **first egress of uploaded
+images beyond the VLM provider**:
+
+- Enable with `REVERSE_IMAGE_ENABLED=true` and `GOOGLE_VISION_CREDENTIALS_PATH=/path/to/sa.json`.
+  The app fails to start if enabled without a readable credentials file.
+- Use a **Vision-only, least-privilege** service account (so a leaked key cannot pivot), and
+  keep the JSON key `chmod 600` and out of version control.
+- **Re-verify Google's no-retention / no-training data terms before provisioning credentials.**
+  This is a gate on enabling the feature, not a footnote: the provider was chosen because it
+  uniquely satisfies raw-byte input + no-retention. If that has drifted, do not enable it.
+- The web `/upload` toggle defaults **on** (and is hidden when the feature is off); programmatic
+  PAT callers must opt in per request with `"identify_online": true`. Egress happens the instant
+  the lookup is invoked — a `timeout`/`error` outcome does not mean the image stayed local.
+- Failures degrade silently to today's image-only enrichment. Operators distinguish a healthy
+  "no match" from systemic failure via the client's redacted liveness logs (see
+  `docs/ARCHITECTURE.md`). Cost: 1,000 Vision units/month are free; overage is ~$3.50/1,000.
 
 ## Operator workflow
 
@@ -130,6 +153,7 @@ Implemented:
 - GitHub OAuth session flow with PKCE state (token exchange against `github.com`, user fetch against `api.github.com`)
 - persisted templates, receipts, pending uploads (with 24h TTL), and vectors
 - upload validation, EXIF-stripping re-encode, duplicate detection, VLM review fallback
+- optional reverse-image enrichment via Google Cloud Vision (deploy-gated, per-upload toggle)
 - content-addressed rendering, authenticated receipt fetch, path-traversal guard on `/renders/`
 - per-friend rate limiting on `find`/`generate`/`record_outcome` across both HTTP and MCP transports
 - embedding model-drift startup guard (refuses to boot if persisted vectors disagree with `EMBEDDING_MODEL`)
@@ -142,5 +166,6 @@ Known remaining external validation:
 
 - live GitHub OAuth app callback
 - live VLM provider call
+- live Google Cloud Vision call + reverse-image efficacy matrix (calibrate the confidence floor; see the validation playbook)
 - live embedding provider call
 - live MCP client smoke against `/mcp`

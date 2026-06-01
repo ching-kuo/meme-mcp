@@ -160,6 +160,69 @@ when no template and no surviving pending row references it. `analyze_image` rec
 pending row (from `ImageStore.path_for`) before writing the blob, so a re-upload's reference is
 observable to the sweep before the bytes land; the grace window is a defense-in-depth margin.
 
+## Reverse-image enrichment
+
+`reverse_image/client.py` (`GoogleVisionClient`) is an optional, deploy-gated step inserted into
+the shared `analyze_image` pipeline between the dedupe `block` gate and the VLM call (KTD5). It
+exists because a vision model reading the pixels of "Is This a Pigeon?" sees "an anime man
+gesturing at a butterfly" and fills `usage_context` as the literal inverse of the meme's real
+use; the cultural meaning lives on the web, not in the pixels.
+
+- **Provider + contract.** Google Cloud Vision Web Detection, chosen because it uniquely accepts
+  raw image bytes inline (no second public-URL egress surface) under a no-retention data policy.
+  The client wraps a reused `ImageAnnotatorClient` built once at startup from an explicit
+  service-account file (never the process-wide `GOOGLE_APPLICATION_CREDENTIALS`, which would leak
+  the credential scope to every Google client in-process — `config.validate_at_startup` warns when
+  it is set). `detect()` returns a frozen `WebDetectionResult(status, grounding, origin)` and
+  **never raises** into the pipeline: every SDK/in-body/oversize failure maps to a status, so the
+  upload always falls back to today's image-only enrichment.
+- **Confidence floor (KTD3).** Web Detection returns *visual-similarity* matches, not identity
+  confidence — a derivative meme can confidently reverse-match an old template and produce a
+  clean-but-wrong identity that poisons metadata worse than the literal description. So a match
+  above a configurable floor on the top web-entity score is `success` (grounding fed to the VLM
+  with R3 "prefer over literal" precedence, origin stamped `status="high"`); a weaker match is
+  `low_confidence` (origin captured for human review at `status="low"`, grounding fed *without*
+  precedence, no `find` alias). The floor's calibration is unproven until measured against the
+  real-upload efficacy matrix (validation playbook) — Vision scores are unbounded relevance
+  values, not 0–1 probabilities.
+- **Untrusted input (R8/KTD6).** All web-recovered text is treated as untrusted. The service is
+  the single sanitization owner: `vlm/sanitize.sanitize_web_results` cleans the grounding text and
+  `clean_origin_value` cleans the stored origin, enforcing a clean-data invariant (a field still
+  tripping `flag_anomalies` after sanitization is hard-dropped to empty) so stored origin — and
+  therefore `find`/MCP output to agents — is guaranteed clean without a read-time pass.
+  `source_url` is https-allowlisted via `sanitize_url` (a canonical change to
+  `hard_sanitize_metadata`, so the friend's edited URL on approve is covered too; it also rejects
+  userinfo URLs like `https://trusted.com@evil.example/x` that impersonate a trusted host) and
+  rendered through autoescape; `detail.html` additionally gates the link `href` server-side because Jinja
+  autoescape does not neutralize a `javascript:` href. The in-prompt isolation (grounding fenced
+  in `WEB_CONTEXT` markers, framed as data-not-instructions) is best-effort defense-in-depth; the
+  structural defenses are the out-of-band store-sanitize, the https allowlist, and autoescape.
+- **The `origin` block** lives inside `metadata_json` (no schema migration): `{name, source_url,
+  status}`. `origin.name` is a provenance/search alias distinct from the editable display
+  `metadata.name`; `retrieval/search.py` applies the existing `+10` name-boost to an
+  `origin.name` hit (tagged `origin_name_match`) only when the persisted `origin.status == "high"`
+  — the runtime status does not survive to query time, so the trust bit must be stored. Approve
+  gates promotion to `status="high"` on an explicit `origin_reviewed` signal that ONLY the web
+  review surface passes (the friend saw and could edit the origin fields); the PAT/API approve door
+  never promotes, so a programmatic client cannot launder a low-confidence origin to high-weight by
+  omitting `origin.status`. `origin.source_url` is excluded from the term-match haystack (a URL is
+  not descriptive text).
+- **Egress departure (privacy).** Enabling the feature sends uploaded images off-box to Google for
+  the first time beyond the VLM provider. Egress occurs the instant the lookup is invoked — a
+  `timeout`/`error` status does **not** mean the bytes stayed local; no-retention is provider
+  policy, not a technical guarantee. The web-form toggle (default on, hidden when the feature is
+  off) is the only pre-send guard; PAT clients are opt-in per call (`identify_online=true`),
+  defaulting OFF so enabling the feature never silently begins egressing for programmatic callers
+  (KTD7). Only EXIF-stripped, re-encoded bytes are ever sent.
+- **Operator liveness (KTD10).** Silent degradation protects the friend's UX but would hide a
+  fully-broken integration (expired/wrong-scope credentials, quota exhaustion, region errors) —
+  every upload would silently revert to the inverted-output behavior the feature exists to fix. So
+  the client emits redacted structured logs (no image bytes, no provider `error.message`)
+  distinguishing `timeout`/`error` from the expected `no_match`, so operators can alert on a
+  sustained failure rate. The friend-facing `reverse_image_status` on the analyze response
+  (`success`/`low_confidence`/`no_match`/`skipped`/`unavailable`) is distinct from this: it only
+  shapes the review-form copy, never shows an error.
+
 ## Storage backends
 
 `PgVectorStore` ships in v1.5 (sync `psycopg` + `pgvector.psycopg.register_vector`); the

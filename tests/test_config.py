@@ -50,3 +50,59 @@ def test_embedding_dimensions_accepts_override() -> None:
     assert good_settings(embedding_dimensions=768).embedding_dimensions == 768
     assert good_settings(embedding_dimensions=1536).embedding_dimensions == 1536
 
+
+def test_reverse_image_disabled_validates_without_credentials() -> None:
+    # The default (feature off) needs no Vision credentials.
+    validate_at_startup(good_settings())
+    validate_at_startup(good_settings(reverse_image_enabled=False))
+
+
+def test_reverse_image_enabled_with_credentials_file_passes(tmp_path) -> None:
+    creds = tmp_path / "vision.json"
+    creds.write_text("{}")
+    validate_at_startup(
+        good_settings(
+            reverse_image_enabled=True,
+            google_vision_credentials_path=str(creds),
+        )
+    )
+
+
+def test_reverse_image_enabled_without_path_fails() -> None:
+    with pytest.raises(ConfigError, match="GOOGLE_VISION_CREDENTIALS_PATH is required"):
+        validate_at_startup(good_settings(reverse_image_enabled=True))
+
+
+def test_reverse_image_enabled_with_missing_file_fails(tmp_path) -> None:
+    with pytest.raises(ConfigError, match="does not exist"):
+        validate_at_startup(
+            good_settings(
+                reverse_image_enabled=True,
+                google_vision_credentials_path=str(tmp_path / "absent.json"),
+            )
+        )
+
+
+def test_reverse_image_enabled_with_directory_path_fails(tmp_path) -> None:
+    with pytest.raises(ConfigError, match="not a regular file"):
+        validate_at_startup(
+            good_settings(
+                reverse_image_enabled=True,
+                google_vision_credentials_path=str(tmp_path),
+            )
+        )
+
+
+def test_reverse_image_enabled_warns_when_adc_set(tmp_path, monkeypatch, caplog) -> None:
+    creds = tmp_path / "vision.json"
+    creds.write_text("{}")
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "/some/other/creds.json")
+    with caplog.at_level("WARNING"):
+        validate_at_startup(
+            good_settings(
+                reverse_image_enabled=True,
+                google_vision_credentials_path=str(creds),
+            )
+        )
+    assert any("GOOGLE_APPLICATION_CREDENTIALS" in record.message for record in caplog.records)
+

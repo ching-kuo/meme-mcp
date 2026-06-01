@@ -28,7 +28,13 @@ from meme_mcp.limits import WindowedRateLimiter
 from meme_mcp.upload.strip import strip_and_reencode
 from meme_mcp.upload.validation import compute_hashes
 from meme_mcp.web.csrf import CSRF_HEADER_NAME
-from tests.test_upload_flow import FakeVLMClient, good_settings, png_bytes
+from tests.test_upload_flow import (
+    FakeReverseImageClient,
+    FakeVLMClient,
+    _pigeon_success,
+    good_settings,
+    png_bytes,
+)
 
 CSRF_TOKEN = "test-csrf-token-value"
 
@@ -116,6 +122,78 @@ def test_session_analyze_and_approve_matches_pat_template(tmp_path) -> None:
     web_template = web_app.state.templates.get(web_template_id)
     assert web_template.source == "friend"
     assert web_template.name == "Deploy Face"
+
+
+# ---------------------------------------------------------------------------
+# AE2 (web half): the web door defaults identify_online ON
+# ---------------------------------------------------------------------------
+
+
+def test_web_door_defaults_identify_online_on(tmp_path) -> None:
+    # No identify_online field on the web door means the lookup runs (the
+    # interactive surface defaults ON, KTD7).
+    app = _make_app(tmp_path)
+    reverse = FakeReverseImageClient(_pigeon_success())
+    app.state.reverse_image_client = reverse
+    client = _session_client(app)
+
+    data = client.post(
+        "/upload/analyze", headers=_csrf_headers(), json=_analyze_body()
+    ).json()["data"]
+
+    assert reverse.calls  # lookup ran without an explicit toggle
+    assert data["reverse_image_status"] == "success"
+    assert data["metadata"]["origin"]["name"] == "Is This a Pigeon?"
+
+
+def test_web_approve_promotes_reviewed_origin_to_high(tmp_path) -> None:
+    # The web review form is the trusted human-review surface: approving there
+    # promotes a low-confidence origin to status="high" (earning the find alias),
+    # and the https URL survives the canonical sanitizer unmangled.
+    from meme_mcp.reverse_image.client import OriginCandidate, WebDetectionResult, WebGrounding
+
+    app = _make_app(tmp_path)
+    app.state.reverse_image_client = FakeReverseImageClient(
+        WebDetectionResult(
+            "low_confidence",
+            WebGrounding(best_guess="maybe", entities=(), page_titles=()),
+            OriginCandidate(name="maybe", source_url="https://example.com/a"),
+        )
+    )
+    client = _session_client(app)
+    data = client.post(
+        "/upload/analyze", headers=_csrf_headers(), json=_analyze_body()
+    ).json()["data"]
+    assert data["metadata"]["origin"]["status"] == "low"
+
+    edited = dict(data["metadata"])
+    edited["name"] = "Pigeon Display"
+    edited["origin"] = {  # web client submits name/source_url, no status
+        "name": "Is This a Pigeon?",
+        "source_url": "https://knowyourmeme.com/memes/is-this-a-pigeon?ref=share&x=1",
+    }
+    approved = client.post(
+        f"/upload/approve/{data['pending_upload_id']}",
+        headers=_csrf_headers(),
+        json={"metadata": edited},
+    )
+    assert approved.status_code == 200
+    origin = app.state.templates.get(approved.json()["data"]["template_id"]).metadata["origin"]
+    assert origin["status"] == "high"  # promoted on web review/confirm
+    assert origin["source_url"] == "https://knowyourmeme.com/memes/is-this-a-pigeon?ref=share&x=1"
+
+
+def test_web_door_unchecked_toggle_suppresses_egress(tmp_path) -> None:
+    app = _make_app(tmp_path)
+    reverse = FakeReverseImageClient(_pigeon_success())
+    app.state.reverse_image_client = reverse
+    client = _session_client(app)
+
+    body = {**_analyze_body(), "identify_online": False}
+    data = client.post("/upload/analyze", headers=_csrf_headers(), json=body).json()["data"]
+
+    assert reverse.calls == []  # unchecked toggle == no egress
+    assert data["reverse_image_status"] == "skipped"
 
 
 # ---------------------------------------------------------------------------
@@ -560,6 +638,40 @@ def test_get_upload_authenticated_renders_page(tmp_path) -> None:
     # A <noscript> block states the flow requires JavaScript.
     assert "<noscript>" in html
     assert "JavaScript" in html
+
+
+def test_upload_page_shows_identify_toggle_when_feature_enabled(tmp_path) -> None:
+    app = _make_app(tmp_path)
+    # Flip the flag after construction (validation already ran with it off).
+    app.state.settings.reverse_image_enabled = True
+    client = _session_client(app, csrf=None)
+
+    html = client.get("/upload").text
+
+    assert "data-identify-toggle" in html
+    assert "checked" in html  # default-checked when the feature is on
+    assert "Google" in html  # disclosure names the egress destination
+
+
+def test_upload_page_hides_toggle_when_feature_disabled(tmp_path) -> None:
+    app = _make_app(tmp_path)  # feature off by default
+    client = _session_client(app, csrf=None)
+
+    html = client.get("/upload").text
+
+    # No checked Google-bound toggle renders when the feature is off (KTD7).
+    assert "data-identify-toggle" not in html
+
+
+def test_upload_page_always_renders_editable_origin_fields(tmp_path) -> None:
+    app = _make_app(tmp_path)
+    client = _session_client(app, csrf=None)
+
+    html = client.get("/upload").text
+
+    # Origin fields are always present (R10), even with the feature off.
+    assert 'data-field="origin_name"' in html
+    assert 'data-field="origin_source_url"' in html
 
 
 def test_get_upload_renders_nav_link(tmp_path) -> None:

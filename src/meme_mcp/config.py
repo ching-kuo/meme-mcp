@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import logging
+import os
+import stat
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigError(RuntimeError):
@@ -39,6 +45,14 @@ class Settings(BaseSettings):
     vlm_base_url: str
     vlm_api_key: SecretStr
     vlm_model: str
+
+    # Reverse-image enrichment (Google Cloud Vision Web Detection). Deploy-gated
+    # and OFF by default: enabling sends uploaded images off-box to Google when a
+    # caller opts in per request (KTD7). The credentials path is a plain str -- the
+    # service-account JSON it points to is the secret and is never read or logged
+    # here; U2 hands the path to the SDK, which opens it.
+    reverse_image_enabled: bool = False
+    google_vision_credentials_path: str | None = None
 
     embedding_base_url: str = "https://api.openai.com/v1"
     embedding_api_key: SecretStr
@@ -82,6 +96,43 @@ def validate_at_startup(settings: Settings) -> None:
             if value is None
         ]
         problems.extend(missing)
+    if settings.reverse_image_enabled:
+        _validate_vision_credentials(settings.google_vision_credentials_path, problems)
     if problems:
         raise ConfigError("; ".join(problems))
+
+
+def _validate_vision_credentials(path: str | None, problems: list[str]) -> None:
+    """Fail fast on a missing/unusable Vision credentials path when enabled.
+
+    Stats the file without opening it (the service-account JSON is the secret and
+    must never be read or logged here); a missing path or non-regular-file is a
+    hard config error so a misprovisioned deploy is caught at startup rather than
+    silently degrading every upload to image-only enrichment at first request.
+    Group/other-readability and a pre-set GOOGLE_APPLICATION_CREDENTIALS are
+    warnings, not failures.
+    """
+    if not path:
+        problems.append(
+            "GOOGLE_VISION_CREDENTIALS_PATH is required when REVERSE_IMAGE_ENABLED is true"
+        )
+        return
+    try:
+        info = Path(path).stat()
+    except OSError:
+        problems.append(f"GOOGLE_VISION_CREDENTIALS_PATH does not exist or is unreadable: {path}")
+        return
+    if not stat.S_ISREG(info.st_mode):
+        problems.append(f"GOOGLE_VISION_CREDENTIALS_PATH is not a regular file: {path}")
+        return
+    if info.st_mode & (stat.S_IRGRP | stat.S_IROTH):
+        logger.warning(
+            "Google Vision credentials file is group/other-readable; "
+            "restrict it to the service account (chmod 600)."
+        )
+    if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+        logger.warning(
+            "GOOGLE_APPLICATION_CREDENTIALS is set process-wide; reverse-image "
+            "enrichment passes its credentials path explicitly and does not use it."
+        )
 

@@ -41,8 +41,12 @@
     thumbImg: root.querySelector("[data-thumb-img]"),
     previewImg: root.querySelector("[data-preview-img]"),
     pickError: root.querySelector("[data-pick-error]"),
+    identifyToggle: root.querySelector("[data-identify-toggle]"),
     analyzeBtn: root.querySelector("[data-analyze-btn]"),
     spinner: root.querySelector("[data-spinner]"),
+    analyzingTitle: root.querySelector("[data-analyzing-title]"),
+    analyzingHint: root.querySelector("[data-analyzing-hint]"),
+    originStatus: root.querySelector("[data-origin-status]"),
     analyzeError: root.querySelector("[data-analyze-error]"),
     reviewStep: root.querySelector('[data-step="review"]'),
     reviewHeading: root.querySelector('[data-step="review"] h2'),
@@ -350,10 +354,23 @@
     if (!file) {
       return;
     }
+    // Always send identify_online explicitly so the server's default does not
+    // decide for us: checked when the toggle is present and on, false otherwise
+    // (including when the feature is off and no toggle renders).
+    var identifyOnline = !!(els.identifyToggle && els.identifyToggle.checked);
     setMessage(els.analyzeError, "");
     els.analyzeBtn.disabled = true;
     els.fileInput.disabled = true;
     setStep("analyze");
+    if (identifyOnline) {
+      // The combined wait is rate-limit + Vision (~8s) + VLM (~60s), so set the
+      // extended-wait copy when an online lookup will run.
+      setText("[data-analyzing-title]", "Looking up this meme online…");
+      setText(
+        "[data-analyzing-hint]",
+        "Checking the web to identify it, then describing it. This can take up to a minute."
+      );
+    }
     show(els.spinner);
 
     var controller = new AbortController();
@@ -373,7 +390,8 @@
           filename: file.name,
           mime: file.type,
           content_base64: contentBase64,
-          title_hint: file.name
+          title_hint: file.name,
+          identify_online: identifyOnline
         }),
         signal: controller.signal
       });
@@ -421,6 +439,11 @@
     field("usage_context").value = metadata.usage_context || "";
     field("tags").value = Array.isArray(metadata.tags) ? metadata.tags.join(", ") : "";
 
+    var origin = metadata.origin || {};
+    field("origin_name").value = origin.name || "";
+    field("origin_source_url").value = origin.source_url || "";
+    renderOriginStatus(data.reverse_image_status);
+
     renderSlots(data.slot_definitions || []);
     renderDuplicate(data.duplicate || {});
     renderSuspect(data.suspect_flags || []);
@@ -440,6 +463,39 @@
     // hidden, which would otherwise strand keyboard/screen-reader focus.
     if (els.reviewHeading) {
       els.reviewHeading.focus();
+    }
+  }
+
+  // Distinguish "we looked and could not identify it" from "we did not look",
+  // so the empty origin fields read honestly (R10). Silent degradation still
+  // applies -- no error is shown, just context-appropriate helper copy.
+  function renderOriginStatus(status) {
+    if (!els.originStatus) {
+      return;
+    }
+    var msg = "";
+    if (status === "success") {
+      msg = "Identified online. Edit if anything looks off.";
+    } else if (status === "no_match" || status === "low_confidence") {
+      msg = "Could not confidently identify this meme online. Add its name and source if you know them.";
+    } else if (status === "skipped" || status === "unavailable") {
+      msg = "Online identification was not used. Add the meme's origin if you know it.";
+    }
+    els.originStatus.textContent = msg;
+  }
+
+  // Client-side https check, mirroring the server allowlist. UX only -- the
+  // server store-sanitize is the authoritative guarantee. Blanks a non-https or
+  // unparseable URL before it is sent or could back a link.
+  function safeHttpsUrl(value) {
+    var url = String(value || "").trim();
+    if (!url) {
+      return "";
+    }
+    try {
+      return new URL(url).protocol === "https:" ? url : "";
+    } catch (err) {
+      return "";
     }
   }
 
@@ -504,7 +560,7 @@
         return t.trim();
       })
       .filter(Boolean);
-    return {
+    var metadata = {
       name: field("name").value.trim(),
       description: field("description").value,
       emotion: field("emotion").value,
@@ -512,6 +568,14 @@
       tags: tags,
       format: "static"
     };
+    // Collect origin only when at least one field is filled; omit it entirely
+    // (do not send empty strings) so a blank origin leaves no stored block.
+    var originName = field("origin_name").value.trim();
+    var originUrl = safeHttpsUrl(field("origin_source_url").value);
+    if (originName || originUrl) {
+      metadata.origin = { name: originName, source_url: originUrl };
+    }
+    return metadata;
   }
 
   async function onApprove(event) {

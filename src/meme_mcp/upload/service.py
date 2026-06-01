@@ -19,7 +19,7 @@ import base64
 import binascii
 import re
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from meme_mcp.auth.depends import Friend, require_write
 from meme_mcp.db.templates import TemplateCreate
@@ -29,9 +29,27 @@ from meme_mcp.rendering.image_store import ImageStore
 from meme_mcp.upload.dedupe import DuplicateIndex, check_duplicates
 from meme_mcp.upload.strip import strip_and_reencode
 from meme_mcp.upload.validation import compute_hashes, validate_upload
-from meme_mcp.vlm.sanitize import flag_anomalies, hard_sanitize_metadata
+from meme_mcp.vlm.sanitize import (
+    clean_origin_value,
+    flag_anomalies,
+    hard_sanitize_metadata,
+    sanitize_web_results,
+)
+
+if TYPE_CHECKING:
+    # Annotation-only import (PEP 563): keeps the heavy google.cloud.vision tree
+    # out of the import path when the feature is off. The runtime call is
+    # duck-typed (client.detect), so no value import is needed here.
+    from meme_mcp.reverse_image.client import GoogleVisionClient
 
 PLACEHOLDER_NAME = "Uploaded Meme"
+
+# Friend-facing reverse-image outcome surfaced on AnalyzeResult so the web form
+# (U6) can distinguish "ran but found nothing" from "skipped"/"feature off".
+# Distinct from silent degradation: no *error* is shown to the friend, but the
+# UI can word the empty state honestly. timeout/error collapse into no_match here
+# (the operator-liveness distinction lives in the client logs, KTD10).
+ReverseImageStatus = Literal["skipped", "unavailable", "success", "low_confidence", "no_match"]
 
 
 class RateLimiter(Protocol):
@@ -39,7 +57,14 @@ class RateLimiter(Protocol):
 
 
 class VLMEnricher(Protocol):
-    def enrich_template(self, image_bytes: bytes, title_hint: str | None = None) -> Any: ...
+    def enrich_template(
+        self,
+        image_bytes: bytes,
+        title_hint: str | None = None,
+        grounding: str | None = None,
+        *,
+        grounding_authoritative: bool = True,
+    ) -> Any: ...
 
 
 class TemplateRepository(Protocol):
@@ -56,6 +81,10 @@ class UploadServiceDeps:
     pending_uploads: PendingUploadStore
     templates: TemplateRepository
     duplicate_index: DuplicateIndex
+    # None is the disabled sentinel (feature off / no credentials). Typed
+    # concretely -- there is exactly one provider (KTD4); tests inject a
+    # duck-typed fake.
+    reverse_image_client: GoogleVisionClient | None = None
 
 
 @dataclass(frozen=True)
@@ -66,6 +95,7 @@ class AnalyzeResult:
     duplicate_action: str
     duplicate_template_id: str | None
     suspect_flags: list[str]
+    reverse_image_status: ReverseImageStatus
 
 
 @dataclass(frozen=True)
@@ -82,6 +112,7 @@ async def analyze_image(
     title_hint: object,
     friend_login: str,
     deps: UploadServiceDeps,
+    identify_online: bool = False,
 ) -> AnalyzeResult:
     """Validate, strip, dedupe and enrich an uploaded image; persist a pending row.
 
@@ -89,6 +120,13 @@ async def analyze_image(
     ``INVALID_INPUT`` error envelope are identical across both front doors
     (KTD2). Raises ``MemeMCPError`` on rejection (rate limit, bad base64,
     validation failure, exact-hash duplicate).
+
+    When ``identify_online`` is set and a reverse-image client is configured, a
+    Web Detection lookup runs on the sanitized bytes after the dedupe ``block``
+    gate and before the VLM call (KTD5): the per-upload rate-limit ``hit`` above
+    already gated the external call (R12). The lookup never raises -- every
+    non-success outcome degrades silently to today's image-only enrichment.
+    The service default is OFF so the PAT door does not silently egress (KTD7).
     """
     deps.upload_limiter.hit(friend_login)
     hint = _normalize_title_hint(title_hint)
@@ -102,10 +140,15 @@ async def analyze_image(
             ErrorCode.DUPLICATE_TEMPLATE,
             [{"field": "file", "reason": f"duplicate:{duplicate.template_id}"}],
         )
+    grounding, origin_block, reverse_status = await _reverse_image_lookup(
+        sanitized, identify_online, deps.reverse_image_client
+    )
     enrichment = await asyncio.to_thread(
         deps.vlm_client.enrich_template,
         sanitized,
         hint,
+        grounding,
+        grounding_authoritative=(reverse_status == "success"),
     )
     if enrichment.status == "success" and enrichment.metadata is not None:
         metadata = enrichment.metadata
@@ -113,6 +156,10 @@ async def analyze_image(
     else:
         metadata = _blank_upload_metadata(hint)
         suspect_flags = [f"vlm_{enrichment.status}"]
+    if origin_block is not None:
+        # Merge the clean origin BEFORE the pending row is created so it persists
+        # (KTD5). A copy avoids mutating the VLM client's returned dict.
+        metadata = {**metadata, "origin": origin_block}
     slot_definitions = slot_definitions_for(metadata)
     # Record the pending row BEFORE writing the blob (KTD8). create-then-put makes the
     # row -- and thus the image_path reference -- observable to the gc sweep's live-
@@ -142,7 +189,51 @@ async def analyze_image(
         duplicate_action=pending.duplicate_action,
         duplicate_template_id=pending.duplicate_template_id,
         suspect_flags=pending.suspect_flags,
+        reverse_image_status=reverse_status,
     )
+
+
+async def _reverse_image_lookup(
+    sanitized: bytes,
+    identify_online: bool,
+    client: GoogleVisionClient | None,
+) -> tuple[str | None, dict[str, Any] | None, ReverseImageStatus]:
+    """Run the gated, never-raising reverse-image lookup (KTD5/KTD6).
+
+    Returns ``(grounding, origin_block, status)``: ``grounding`` is the sanitized
+    text for the VLM (None when absent); ``origin_block`` is the clean,
+    storage-ready dict carrying ``origin.status`` (None when absent); ``status``
+    is the friend-facing outcome. All web text is sanitized here -- the service
+    is the single sanitization owner (KTD6).
+    """
+    if not identify_online:
+        return None, None, "skipped"
+    if client is None:
+        return None, None, "unavailable"
+    result = await asyncio.to_thread(client.detect, sanitized)
+    if result.status not in ("success", "low_confidence"):
+        # no_match / timeout / error all degrade to image-only; the operator
+        # liveness distinction stays in the client logs (KTD10).
+        return None, None, "no_match"
+    authoritative = result.status == "success"
+    grounding_text = ""
+    if result.grounding is not None:
+        grounding_text = sanitize_web_results(
+            result.grounding.best_guess,
+            result.grounding.entities,
+            result.grounding.page_titles,
+        )
+    origin_block: dict[str, Any] | None = None
+    if result.origin is not None:
+        name = clean_origin_value("name", result.origin.name)
+        source_url = clean_origin_value("source_url", result.origin.source_url)
+        if name or source_url:
+            origin_block = {
+                "name": name,
+                "source_url": source_url,
+                "status": "high" if authoritative else "low",
+            }
+    return (grounding_text or None, origin_block, result.status)
 
 
 def approve_pending(
@@ -153,6 +244,7 @@ def approve_pending(
     slot_overrides: list[Any] | None,
     ack_suspect: bool,
     deps: UploadServiceDeps,
+    origin_reviewed: bool = False,
 ) -> ApproveResult:
     """Promote a pending upload to a template after validating the metadata.
 
@@ -160,10 +252,18 @@ def approve_pending(
     that ``NOT_FOUND`` stays opaque per front door. This function enforces write
     capability and the name-required check, upserts the template
     (``source="friend"``), and deletes the pending row.
+
+    ``origin_reviewed`` is the trusted human-review signal: only the web review
+    surface (where the friend sees and can edit the origin fields) passes True,
+    which promotes the origin to ``status="high"`` (KTD9). The PAT/API door
+    leaves it False so a programmatic client cannot launder a low-confidence
+    origin to high merely by omitting ``origin.status``.
     """
     require_write(actor)
     metadata_in = metadata_overrides if metadata_overrides is not None else pending.metadata
-    metadata = _validated_metadata(metadata_in, pending.suspect_flags, ack_suspect)
+    metadata = _validated_metadata(
+        metadata_in, pending.suspect_flags, ack_suspect, origin_reviewed
+    )
     if slot_overrides is not None:
         slot_definitions: list[Any] = slot_overrides
     else:
@@ -238,6 +338,7 @@ def _validated_metadata(
     metadata: dict[str, Any],
     suspect_flags: list[str],
     ack_suspect: bool,
+    origin_reviewed: bool = False,
 ) -> dict[str, Any]:
     raw_flags = flag_anomalies(metadata)
     cleaned = hard_sanitize_metadata(metadata)
@@ -267,7 +368,25 @@ def _validated_metadata(
     if not isinstance(cleaned.get("tags"), list):
         raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "tags", "reason": "list"}])
     cleaned["slot_definitions"] = slot_definitions_for(cleaned)
+    _promote_origin_status(cleaned, origin_reviewed)
     return cleaned
+
+
+def _promote_origin_status(cleaned: dict[str, Any], origin_reviewed: bool) -> None:
+    """Promote a friend-reviewed origin to ``status="high"`` on approve (KTD9).
+
+    Promotion is gated on the explicit ``origin_reviewed`` signal, which ONLY the
+    web review surface passes (the friend saw and could edit the origin fields).
+    The PAT/API door never promotes: a programmatic client cannot launder a
+    low-confidence origin to high-weight by omitting ``origin.status`` -- a
+    write-capable client that genuinely wants high must set it explicitly. Only a
+    non-empty, sanitized origin name is eligible.
+    """
+    if not origin_reviewed:
+        return
+    origin = cleaned.get("origin")
+    if isinstance(origin, dict) and str(origin.get("name", "")).strip():
+        origin["status"] = "high"
 
 
 def _template_id(name: str, exact_hash: str) -> str:

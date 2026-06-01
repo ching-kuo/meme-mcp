@@ -66,6 +66,11 @@ def register_upload_routes(
     async def analyze_web(request: Request, payload: dict[str, object]) -> JSONResponse:
         friend = _session_friend(app, request)
         require_csrf(request)
+        # Web door defaults identify_online ON (KTD7): most friend uploads are
+        # newer memes whose meaning is hard to recover from the image alone, so
+        # enrichment-first is the right default for the interactive surface. The
+        # friend can uncheck the toggle (U6); a configured-off feature still
+        # yields a no-egress "unavailable" status in the service.
         result = await analyze_image(
             content_base64=str(payload.get("content_base64", "")),
             declared_mime=str(payload.get("mime", "")),
@@ -73,6 +78,7 @@ def register_upload_routes(
             title_hint=payload.get("title_hint"),
             friend_login=friend.github_login,
             deps=upload_deps(app),
+            identify_online=bool(payload.get("identify_online", True)),
         )
         return JSONResponse(
             make_success(
@@ -85,6 +91,7 @@ def register_upload_routes(
                         "template_id": result.duplicate_template_id,
                     },
                     "suspect_flags": result.suspect_flags,
+                    "reverse_image_status": result.reverse_image_status,
                 }
             )
         )
@@ -112,6 +119,9 @@ def register_upload_routes(
             slot_overrides=slot_definitions_raw if isinstance(slot_definitions_raw, list) else None,
             ack_suspect=bool(payload.get("ack_suspect", False)),
             deps=upload_deps(app),
+            # The web review form is the trusted human-review surface: approving
+            # here confirms the origin and promotes it to status="high" (KTD9).
+            origin_reviewed=True,
         )
         return JSONResponse(make_success({"template_id": result.template_id, "slug": result.slug}))
 

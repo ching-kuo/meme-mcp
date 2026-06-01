@@ -89,6 +89,30 @@
       {% endif %}
     </section>
 
+    {% if origin and origin.get("name") %}
+      <section class="detail__panel">
+        <h2 class="detail__panel-title">Origin</h2>
+        <dl class="detail__attrs">
+          <div class="detail__attr">
+            <dt>Identified as</dt>
+            <dd>{{ origin.get("name") }}</dd>
+          </div>
+          {% if origin_source_url_safe %}
+            {# Only a server-validated https URL renders, and only as a link.
+               A URL that failed the gate is shown nothing -- never as text. #}
+            <div class="detail__attr">
+              <dt>Source</dt>
+              <dd>
+                <a href="{{ origin_source_url_safe }}" target="_blank" rel="noopener noreferrer">
+                  {{ origin_source_url_safe }}
+                </a>
+              </dd>
+            </div>
+          {% endif %}
+        </dl>
+      </section>
+    {% endif %}
+
     <details class="detail__fingerprint">
       <summary>Fingerprint</summary>
       <dl class="detail__attrs">

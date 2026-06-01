@@ -46,6 +46,7 @@ from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_
 from meme_mcp.upload.dedupe import DuplicateIndex
 from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pending
 from meme_mcp.vlm.client import VLMClient
+from meme_mcp.vlm.sanitize import sanitize_url
 from meme_mcp.web.csrf import ensure_csrf_token, require_csrf, safe_next
 from meme_mcp.web.upload_routes import register_upload_routes
 
@@ -238,6 +239,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             api_key=settings.vlm_api_key.get_secret_value(),
             base_url=settings.vlm_base_url,
         )
+        # None when the feature is off (KTD7); the credentials path was already
+        # validated as a regular file at startup (U1). Built once here so a
+        # missing/malformed SA file fails fast, not at first request (KTD4).
+        app.state.reverse_image_client = _make_reverse_image_client(settings)
         app.state.pat_hash_pepper_value = settings.pat_hash_pepper.get_secret_value()
         app.state.mcp_server = create_mcp_server(
             app.state.pat_store,
@@ -333,6 +338,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "friend_login": login,
                 "pat_expires_in_days": _pat_expires_in_days(app, login),
                 "web_session": True,
+                # Drives the egress toggle: when the feature is off, the page must
+                # NOT render a checked Google-bound toggle (U6/KTD7).
+                "reverse_image_enabled": app.state.settings.reverse_image_enabled,
             },
         )
 
@@ -470,6 +478,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
         friend = require_write(friend_from_header(app, authorization))
+        # PAT door defaults identify_online OFF: a programmatic caller does not
+        # silently begin egressing images when the operator enables the feature
+        # (KTD7). It must opt in explicitly per request.
         result = await analyze_image(
             content_base64=str(payload.get("content_base64", "")),
             declared_mime=str(payload.get("mime", "")),
@@ -477,6 +488,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             title_hint=payload.get("title_hint"),
             friend_login=friend.github_login,
             deps=_upload_deps(app),
+            identify_online=bool(payload.get("identify_online", False)),
         )
         return JSONResponse(
             make_success(
@@ -489,6 +501,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         "template_id": result.duplicate_template_id,
                     },
                     "suspect_flags": result.suspect_flags,
+                    "reverse_image_status": result.reverse_image_status,
                 }
             )
         )
@@ -561,11 +574,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             template = app.state.templates.get(template_id)
         except KeyError as exc:
             raise MemeMCPError(ErrorCode.NOT_FOUND, []) from exc
+        # Server-side https gate for the origin source link: Jinja autoescape does
+        # NOT neutralize a javascript: href, so the safe URL is computed here and a
+        # non-https one renders as plain text, never a live link (U6/KTD6). Stored
+        # origin is already store-sanitized; this is defense-in-depth for any
+        # legacy/seed row.
+        origin = template.metadata.get("origin")
+        origin = origin if isinstance(origin, dict) else None
+        origin_source_url_safe = sanitize_url(str(origin.get("source_url", ""))) if origin else ""
         return templates.TemplateResponse(
             request,
             "detail.html",
             {
                 "template": template,
+                "origin": origin,
+                "origin_source_url_safe": origin_source_url_safe,
                 "friend_login": friend.github_login,
                 "pat_expires_in_days": _pat_expires_in_days(app, friend.github_login),
                 "web_session": has_web_session(app, request),
@@ -697,6 +720,19 @@ def _duplicate_index(app: FastAPI) -> DuplicateIndex:
     return index
 
 
+def _make_reverse_image_client(settings: Settings) -> object | None:
+    """Build the Vision client when enabled, else None (the disabled sentinel).
+
+    Imported lazily so the heavy google.cloud.vision dependency tree is only
+    loaded when the feature is actually on.
+    """
+    if not settings.reverse_image_enabled or not settings.google_vision_credentials_path:
+        return None
+    from meme_mcp.reverse_image.client import GoogleVisionClient
+
+    return GoogleVisionClient.from_credentials_path(settings.google_vision_credentials_path)
+
+
 def _upload_deps(app: FastAPI) -> UploadServiceDeps:
     return UploadServiceDeps(
         upload_limiter=app.state.upload_limiter,
@@ -705,6 +741,7 @@ def _upload_deps(app: FastAPI) -> UploadServiceDeps:
         pending_uploads=app.state.pending_uploads,
         templates=app.state.templates,
         duplicate_index=_duplicate_index(app),
+        reverse_image_client=getattr(app.state, "reverse_image_client", None),
     )
 
 
