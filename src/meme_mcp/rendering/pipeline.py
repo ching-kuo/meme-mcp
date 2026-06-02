@@ -191,15 +191,19 @@ def _render_png_bytes(spec: TemplateSpec, slot_fills: list[str]) -> bytes:
 
 
 def render_meme(
-    spec: TemplateSpec, slot_fills: list[str], image_store: ImageStore
+    spec: TemplateSpec, slot_fills: list[str], image_store: ImageStore, base_url: str
 ) -> RenderResult:
+    # base_url is the externally visible origin (e.g. https://meme.igene.tw); it is
+    # prepended so rendered_url is absolute and an MCP client can fetch the image
+    # without knowing the server host out of band. Callers pass the same public
+    # origin used for OAuth metadata, so render and auth URLs cannot drift.
     content = _render_png_bytes(spec, slot_fills)
     digest = hashlib.sha256(content).hexdigest()[:16]
     path = image_store.put(content, "png")
     return RenderResult(
         hash=digest,
         path=path,
-        rendered_url=f"/renders/{path}",
+        rendered_url=f"{base_url.rstrip('/')}/renders/{path}",
         alt_text=f"Meme {spec.template_id}: " + " / ".join(slot_fills),
         bytes=content,
     )

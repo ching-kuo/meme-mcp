@@ -45,7 +45,7 @@ def _render(angle: float, tmp_path: Path) -> bytes:
         slots=[_slot(angle)],
     )
     store = FilesystemImageStore(tmp_path / f"renders-{int(angle)}")
-    return render_meme(spec, ["change my mind"], store).bytes
+    return render_meme(spec, ["change my mind"], store, "http://localhost:8000").bytes
 
 
 def test_has_rotation_detects_nonzero_angle() -> None:
@@ -101,7 +101,7 @@ def test_multiple_rotations_dont_collide(tmp_path: Path) -> None:
         ],
     )
     store = FilesystemImageStore(tmp_path / "renders-multi")
-    rendered = render_meme(spec, ["one", "two"], store).bytes
+    rendered = render_meme(spec, ["one", "two"], store, "http://localhost:8000").bytes
     with Image.open(BytesIO(rendered)) as img:
         assert img.mode == "RGBA"
         assert img.size == (400, 300)

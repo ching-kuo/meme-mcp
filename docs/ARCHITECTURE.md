@@ -18,7 +18,10 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
   7 days, sourced from `expires_at_for_login`; the banner links to `/account` so the friend can
   regenerate it themselves.
 - `upload/` validates bytes before any persistence and strips image metadata by re-encoding.
-- `rendering/` writes generated PNGs through a content-addressed `ImageStore`.
+- `rendering/` writes generated PNGs through a content-addressed `ImageStore`. `render_meme`
+  prepends the public app base URL (the `_public_app_base_url` value, same origin as OAuth
+  metadata) so `rendered_url` is an absolute `https://host/renders/...` link an MCP client can
+  fetch without knowing the server host out of band.
 - `retrieval/` ranks local template records using typed filters, term overlap, and name boosts.
   When an `outcome_lookup` callable is supplied (live MCP `find` calls thread
   `OutcomeEventStore.recent_used_count` through), templates with recent `used` events from

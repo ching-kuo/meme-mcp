@@ -308,6 +308,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             redirect_uri=settings.github_redirect_uri,
         )
         public_app_base_url = _public_app_base_url(settings.github_redirect_uri)
+        # Stored so AppMCPBackend.generate can build absolute rendered_url values
+        # off the same origin advertised in OAuth metadata.
+        app.state.public_app_base_url = public_app_base_url
         app.state.vlm_client = VLMClient(
             settings.vlm_model,
             api_key=settings.vlm_api_key.get_secret_value(),
@@ -769,7 +772,9 @@ class AppMCPBackend:
         if dry_run:
             _validate_slot_fills(spec, slot_fills)
             return make_success(_receipt(template_id, slot_fills, None, None))
-        result = render_meme(spec, slot_fills, self.app.state.image_store)
+        result = render_meme(
+            spec, slot_fills, self.app.state.image_store, self.app.state.public_app_base_url
+        )
         self.app.state.receipts.record(result.hash, template_id, actor)
         return make_success(
             _receipt(template_id, slot_fills, result.rendered_url, result.hash, result.alt_text)

@@ -70,12 +70,13 @@ def test_render_meme_returns_stable_hash_and_alt_text(tmp_path) -> None:
         image_bytes=template_bytes(),
         slots=[{"name": "top", "position": "top"}, {"name": "bottom", "position": "bottom"}],
     )
-    result = render_meme(spec, ["raw sql", "an orm"], store)
-    again = render_meme(spec, ["raw sql", "an orm"], store)
+    result = render_meme(spec, ["raw sql", "an orm"], store, "http://localhost:8000")
+    again = render_meme(spec, ["raw sql", "an orm"], store, "http://localhost:8000")
     assert result.hash == again.hash
     assert len(result.hash) == 16
     assert "raw sql" in result.alt_text
     assert "an orm" in result.alt_text
+    assert result.rendered_url == f"http://localhost:8000/renders/{result.path}"
     assert (tmp_path / result.path).exists()
 
 

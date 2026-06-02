@@ -98,7 +98,7 @@ def test_visual_parity_against_memegen_reference(case: dict[str, Any], tmp_path:
 
     spec = _load_template_spec(case["slug"])
     store = FilesystemImageStore(tmp_path / "renders")
-    rendered = render_meme(spec, case["fills"], store)
+    rendered = render_meme(spec, case["fills"], store, "http://localhost:8000")
     distance = _hamming_distance(rendered.bytes, reference_path.read_bytes())
     _record_distance(case["slug"], distance)
     threshold = _threshold_for(case)

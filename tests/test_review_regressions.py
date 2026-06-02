@@ -79,7 +79,8 @@ def test_app_wires_web_mcp_ready_and_authenticated_renders(tmp_path) -> None:
     )
 
     spec = TemplateSpec("drake", image_bytes(), [{"position": "top"}])
-    result = render_meme(spec, ["hello"], app.state.image_store)
+    result = render_meme(spec, ["hello"], app.state.image_store, app.state.public_app_base_url)
+    assert result.rendered_url.startswith("http://localhost:8000/renders/")
     app.state.receipts.record(result.hash, "drake", "alice")
 
     client = TestClient(app)
