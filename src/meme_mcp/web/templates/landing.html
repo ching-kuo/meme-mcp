@@ -2,7 +2,7 @@
 {% block body %}
   <main class="landing">
     <h1>meme-mcp</h1>
-    <p class="tagline">A private meme studio for friends &mdash; find the right template, fill it in, and ship it.</p>
+    <p class="tagline">{{ t("landing.tagline") }}</p>
     {% if web_session %}
       <p>Signed in as <strong>{{ friend_login }}</strong>.</p>
       <p class="cta-row">

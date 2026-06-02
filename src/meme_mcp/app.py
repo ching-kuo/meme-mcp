@@ -8,6 +8,7 @@ import warnings
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Protocol, cast
 from urllib.parse import urlencode, urlsplit, urlunsplit
@@ -18,6 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
+from starlette.datastructures import MutableHeaders
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -53,6 +55,7 @@ from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pe
 from meme_mcp.vlm.client import VLMClient
 from meme_mcp.vlm.sanitize import sanitize_url
 from meme_mcp.web.csrf import ensure_csrf_token, require_csrf, safe_next
+from meme_mcp.web.i18n import SUPPORTED, plural, resolve_locale, t
 from meme_mcp.web.pat_routes import register_pat_routes
 from meme_mcp.web.upload_routes import register_upload_routes
 
@@ -172,6 +175,59 @@ class McpSlashNormalizeMiddleware:
         await self.app(scope, receive, send)
 
 
+class LocaleVaryMiddleware:
+    """Add ``Vary: Cookie, Accept-Language`` to HTML responses.
+
+    Locale is negotiated from the ``lang`` cookie and the ``Accept-Language``
+    header (U1/KTD2), so a cache must key on both or it could serve one
+    visitor's language to another. A no-op for the current direct-served setup;
+    it makes a future CDN/reverse proxy correct out of the box. Only ``text/html``
+    responses are touched, and an existing ``Vary`` is extended, never clobbered.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_vary(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(raw=message["headers"])
+                if headers.get("content-type", "").startswith("text/html"):
+                    existing = headers.get("vary")
+                    parts = [p.strip() for p in existing.split(",")] if existing else []
+                    lowered = {p.lower() for p in parts}
+                    for value in ("Cookie", "Accept-Language"):
+                        if value.lower() not in lowered:
+                            parts.append(value)
+                    headers["vary"] = ", ".join(parts)
+            await send(message)
+
+        await self.app(scope, receive, send_with_vary)
+
+
+def _i18n_context(request: Request) -> dict[str, object]:
+    """Inject the active locale and bound translation helpers into every render.
+
+    Attached to the shared ``Jinja2Templates`` instance as a context processor
+    (KTD3), so all ``TemplateResponse`` call sites -- in ``app.py`` and
+    ``pat_routes.py`` -- receive ``t``, ``locale``, ``supported_locales``, and
+    ``plural`` without per-route plumbing. ``t`` and ``plural`` are bound to the
+    resolved locale so templates call ``t("key")`` / ``plural(n, "base")``.
+    """
+
+    locale = resolve_locale(request)
+    return {
+        "t": partial(t, locale=locale),
+        "locale": locale,
+        "supported_locales": SUPPORTED,
+        "plural": partial(plural, locale=locale),
+    }
+
+
 def _header_value(scope: Scope, name: bytes) -> int | None:
     for key, value in scope.get("headers", []):
         if key == name:
@@ -268,8 +324,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     warnings.simplefilter("error", Image.DecompressionBombWarning)
     app = FastAPI(title="meme-mcp", lifespan=_app_lifespan)
     web_dir = Path(__file__).parent / "web"
-    templates = Jinja2Templates(directory=web_dir / "templates")
+    templates = Jinja2Templates(directory=web_dir / "templates", context_processors=[_i18n_context])
     app.mount("/static", StaticFiles(directory=web_dir / "static"), name="static")
+    # Locale varies by cookie + Accept-Language; tag HTML so any future cache
+    # keys on it. Added before the settings-gated middleware so it wraps every
+    # templated response, including the settings-less test app's landing page.
+    app.add_middleware(LocaleVaryMiddleware)
     if settings is not None:
         app.add_middleware(
             SessionMiddleware,
