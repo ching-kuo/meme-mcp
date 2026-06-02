@@ -43,8 +43,7 @@ class InMemoryPatStore:
 class SQLitePatStore:
     # Verifier SQL is fixed and unconditional on pat_hash. expires_at, capability, and
     # revoked_at are applied in Python after fetch so the query plan does not differ
-    # between "unknown token", "revoked token", and "expired token" — see SEC-001 in
-    # docs/plans/2026-05-24-001-feat-meme-mcp-v1-plan.md.
+    # between "unknown token", "revoked token", and "expired token" (timing-safe lookup).
     _VERIFY_SQL = (
         "SELECT friend_login, expires_at, capability, revoked_at "
         "FROM pats WHERE pat_hash = ?"

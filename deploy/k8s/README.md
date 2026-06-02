@@ -17,7 +17,7 @@ reproducible rollouts. The GHCR package is private by default; make it public or
 Two supported topologies:
 
 - **SQLite + filesystem on the `meme-mcp-storage` PVC** — the default. Single-pod, simplest to
-  operate, suitable up to the corpus sizes documented in `docs/v1-validation-playbook.md`.
+  operate, suitable for small-to-moderate corpus sizes.
 - **Postgres + pgvector + S3-compatible object storage** — ships in v1.5 (see `docs/MIGRATION.md`).
   Use this when you need horizontal scale, a managed DB, or off-cluster image durability.
 

@@ -340,5 +340,4 @@ the parity / smoke suites.
 images from `memegen.link` using `imagehash.dhash` Hamming distance (threshold 8 on 256x256). The
 suite skips when `/tmp/memegen-upstream/templates` is absent and records distances to
 `assets/golden/parity-distances.json`. All 10 representative templates pass under the threshold
-after the visual-parity renderer landed
-(`docs/plans/2026-05-25-001-feat-visual-parity-renderer-plan.md`).
+after the visual-parity renderer landed.
