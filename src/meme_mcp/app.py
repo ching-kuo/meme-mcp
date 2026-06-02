@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, cast
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import httpx
 from fastapi import FastAPI, Header, Request
@@ -31,7 +31,7 @@ from meme_mcp.auth.session import (
     has_web_session,
     session_login,
 )
-from meme_mcp.config import Settings, validate_at_startup
+from meme_mcp.config import ConfigError, Settings, validate_at_startup
 from meme_mcp.db.engine import sqlite_path
 from meme_mcp.db.migrations import run_migrations
 from meme_mcp.db.outcomes import VALID_OUTCOMES, OutcomeEventStore
@@ -242,6 +242,23 @@ _IMAGE_CONTENT_TYPES = {
 }
 
 
+def _public_app_base_url(github_redirect_uri: str) -> str:
+    """Derive the externally visible app base URL from the GitHub callback URL.
+
+    The callback path must end in ``/auth/callback`` (the route the app actually
+    serves); otherwise ``removesuffix`` would be a silent no-op and bake the full
+    callback path into the advertised OAuth issuer/resource URLs, so fail fast.
+    """
+    parsed = urlsplit(github_redirect_uri)
+    path = parsed.path.rstrip("/")
+    if not path.endswith("/auth/callback"):
+        raise ConfigError(
+            f"GITHUB_REDIRECT_URI must end with /auth/callback: {github_redirect_uri}"
+        )
+    base_path = path.removesuffix("/auth/callback").rstrip("/")
+    return urlunsplit((parsed.scheme, parsed.netloc, base_path, "", ""))
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is not None:
         validate_at_startup(settings)
@@ -290,6 +307,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             client_secret=settings.github_client_secret.get_secret_value(),
             redirect_uri=settings.github_redirect_uri,
         )
+        public_app_base_url = _public_app_base_url(settings.github_redirect_uri)
         app.state.vlm_client = VLMClient(
             settings.vlm_model,
             api_key=settings.vlm_api_key.get_secret_value(),
@@ -304,10 +322,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.pat_store,
             app.state.allowlist,
             app.state.pat_hash_pepper_value,
+            public_app_base_url,
             AppMCPBackend(app),
             allowed_hosts=settings.mcp_allowed_hosts,
             allowed_origins=settings.mcp_allowed_origins,
         )
+        auth_settings = app.state.mcp_server.settings.auth
+        if auth_settings is not None and auth_settings.resource_server_url is not None:
+            from mcp.server.auth.routes import create_protected_resource_routes
+
+            # FastMCP registers RFC 9728 metadata inside the mounted sub-app,
+            # which makes the external path `/mcp/.well-known/...` instead of
+            # the spec path at the origin root. Mirror the route on the parent
+            # app so the advertised resource_metadata URL actually resolves.
+            app.router.routes.extend(
+                create_protected_resource_routes(
+                    resource_url=auth_settings.resource_server_url,
+                    authorization_servers=[auth_settings.issuer_url],
+                    scopes_supported=auth_settings.required_scopes,
+                )
+            )
         app.mount("/mcp", app.state.mcp_server.streamable_http_app())
         # Rewrite bare /mcp -> /mcp/ before routing so the mount serves it
         # directly instead of 307-redirecting (which mcp-remote can't follow on

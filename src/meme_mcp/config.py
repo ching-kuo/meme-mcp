@@ -97,6 +97,12 @@ def _is_loopback_host(entry: str) -> bool:
 
 def validate_at_startup(settings: Settings) -> None:
     problems: list[str] = []
+    # The MCP public OAuth issuer/resource URLs are derived by stripping
+    # /auth/callback off this; a URI without that suffix would silently bake a
+    # broken path into the advertised metadata, so reject it before migrations
+    # or any other startup side effect run.
+    if not settings.github_redirect_uri.rstrip("/").endswith("/auth/callback"):
+        problems.append("GITHUB_REDIRECT_URI must end with /auth/callback")
     if settings.mcp_host != "127.0.0.1":
         if len(_secret_value(settings.session_secret)) < 32 or "dev" in _secret_value(
             settings.session_secret

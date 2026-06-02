@@ -108,6 +108,7 @@ def create_mcp_server(
     pat_store: SQLitePatStore,
     allowlist: Container[str],
     pepper: str,
+    public_base_url: str,
     backend: MCPBackend | None = None,
     allowed_hosts: list[str] | None = None,
     allowed_origins: list[str] | None = None,
@@ -126,6 +127,7 @@ def create_mcp_server(
         if allowed_origins is not None
         else ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
     )
+    public_base_url = public_base_url.rstrip("/")
     mcp = FastMCP(
         "meme-mcp",
         instructions="Find and render private meme templates.",
@@ -140,8 +142,8 @@ def create_mcp_server(
         ),
         auth=AuthSettings.model_validate(
             {
-                "issuer_url": "http://localhost:8000",
-                "resource_server_url": "http://localhost:8000/mcp",
+                "issuer_url": public_base_url,
+                "resource_server_url": f"{public_base_url}/mcp",
                 "required_scopes": ["meme:read"],
             }
         ),

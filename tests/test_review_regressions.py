@@ -12,7 +12,7 @@ from pydantic import SecretStr
 from meme_mcp.app import create_app
 from meme_mcp.auth.depends import require_pat
 from meme_mcp.auth.pat import SQLitePatStore, issue_pat, verify_pat
-from meme_mcp.config import Settings
+from meme_mcp.config import ConfigError, Settings
 from meme_mcp.db.templates import TemplateCreate
 from meme_mcp.errors import MemeMCPError
 from meme_mcp.limits import WindowedRateLimiter
@@ -161,6 +161,45 @@ def test_mcp_transport_rejects_disallowed_host(tmp_path) -> None:
             follow_redirects=False,
         )
         assert rejected.status_code == 421
+
+
+def test_mcp_public_oauth_metadata_uses_public_host_and_root_well_known(tmp_path) -> None:
+    app = create_app(settings(tmp_path, github_redirect_uri="https://meme.igene.tw/auth/callback"))
+    initialize = {"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {}}
+    with TestClient(app) as client:
+        unauthorized = client.post(
+            "/mcp/",
+            headers={
+                "Accept": "application/json, text/event-stream",
+                "Content-Type": "application/json",
+            },
+            json=initialize,
+            follow_redirects=False,
+        )
+        assert unauthorized.status_code == 401
+        assert (
+            unauthorized.headers["www-authenticate"]
+            == 'Bearer error="invalid_token", error_description="Authentication required", '
+            'resource_metadata="https://meme.igene.tw/.well-known/oauth-protected-resource/mcp"'
+        )
+
+        metadata = client.get("/.well-known/oauth-protected-resource/mcp", follow_redirects=False)
+        assert metadata.status_code == 200
+        assert metadata.headers["content-type"] == "application/json"
+        assert metadata.json() == {
+            "resource": "https://meme.igene.tw/mcp",
+            "authorization_servers": ["https://meme.igene.tw/"],
+            "scopes_supported": ["meme:read"],
+            "bearer_methods_supported": ["header"],
+        }
+
+
+def test_malformed_github_redirect_uri_fails_fast(tmp_path) -> None:
+    # A redirect URI that does not end in /auth/callback would make the base-URL
+    # derivation a silent no-op and bake a broken path into the OAuth metadata;
+    # create_app must reject it at startup instead.
+    with pytest.raises(ConfigError, match="GITHUB_REDIRECT_URI"):
+        create_app(settings(tmp_path, github_redirect_uri="https://meme.igene.tw/oauth/return"))
 
 
 def test_pat_auth_uses_file_allowlist_written_by_operator_cli(tmp_path) -> None:

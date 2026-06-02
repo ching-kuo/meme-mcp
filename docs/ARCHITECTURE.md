@@ -129,6 +129,19 @@ Two auth surfaces share one tree:
   `allowed_hosts`/`allowed_origins`); without them every authenticated request 421s. Bearer-PAT
   auth is the real access control — no ambient browser credentials exist to rebind — so the
   allowlist is defense-in-depth.
+- On an unauthenticated MCP request the transport returns `401` with a `WWW-Authenticate`
+  header whose `resource_metadata` points at the RFC 9728 document. The advertised OAuth
+  issuer/resource URLs are derived from `GITHUB_REDIRECT_URI` (its public scheme+host, minus the
+  `/auth/callback` suffix) via `_public_app_base_url`, not hardcoded — so a hosted deploy
+  advertises `https://<host>` instead of `http://localhost:8000`. `validate_at_startup` rejects a
+  `GITHUB_REDIRECT_URI` that does not end in `/auth/callback` (it would otherwise bake a broken
+  path into the metadata). FastMCP only registers that metadata route inside the mounted `/mcp`
+  sub-app, so `create_app` mirrors it on the parent app at the origin root
+  (`/.well-known/oauth-protected-resource/mcp`) so the advertised URL actually resolves.
+  Known limitation: the document lists the app as its own `authorization_server`, but the app
+  serves no RFC 8414 `/.well-known/oauth-authorization-server` (MCP auth is static-PAT, not an
+  OAuth authorization-code flow). A client that presents a valid PAT gets `200` and never walks
+  the discovery chain; only a token-less strict-OAuth client would hit the gap.
 - MCP (`/mcp` and `/api/mcp/*`) uses a static PAT in `Authorization: Bearer …`. Verification is
   HMAC-SHA-256 with a server-side pepper. The verifier emits `meme:read` for every valid PAT
   and adds `meme:write` only when the PAT was issued with `readwrite` capability. The MCP

@@ -52,9 +52,16 @@ async def test_pat_token_verifier_scopes_derive_from_capability(tmp_path) -> Non
 
 def test_create_mcp_server_registers_official_fastmcp_tools(tmp_path) -> None:
     store = SQLitePatStore(tmp_path / "auth.db")
-    server = create_mcp_server(store, {"alice"}, "pepper")
+    server = create_mcp_server(store, {"alice"}, "pepper", "http://localhost:8000")
     assert isinstance(server, FastMCP)
     assert server.streamable_http_app() is not None
+
+
+def test_create_mcp_server_uses_configured_public_auth_urls(tmp_path) -> None:
+    store = SQLitePatStore(tmp_path / "auth.db")
+    server = create_mcp_server(store, {"alice"}, "pepper", "https://meme.igene.tw")
+    assert str(server.settings.auth.issuer_url) == "https://meme.igene.tw/"
+    assert str(server.settings.auth.resource_server_url) == "https://meme.igene.tw/mcp"
 
 
 def test_authenticated_actor_rejects_unauthenticated_calls() -> None:
