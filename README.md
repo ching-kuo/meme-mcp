@@ -119,7 +119,8 @@ GHCR packages are private by default, so make the package public (or attach an
 
 Mint your token first: sign in at `https://your-host.example/account` and click Generate
 (pick a scope and expiry), then copy the plaintext — it is shown exactly once. Export it as
-`MEME_MCP_PAT` for the snippets below.
+`MEME_MCP_PAT` for the Codex snippet, or paste it into the Claude Desktop
+`AUTH_HEADER` value below.
 
 Codex CLI:
 
@@ -136,11 +137,22 @@ Claude Desktop through `mcp-remote`:
   "mcpServers": {
     "meme-mcp": {
       "command": "npx",
+      "env": {
+        "AUTH_HEADER": "Bearer <paste-your-pat-here>",
+        "npm_config_cache": "/tmp/npm-cache"
+      },
       "args": [
+        "-y",
+        "-p",
+        "node@24",
+        "-p",
+        "mcp-remote@latest",
         "mcp-remote",
-        "https://your-host.example/mcp",
+        "https://your-host.example/mcp/",
+        "--transport",
+        "http-only",
         "--header",
-        "Authorization: Bearer ${MEME_MCP_PAT}"
+        "Authorization:${AUTH_HEADER}"
       ]
     }
   }
@@ -151,6 +163,12 @@ Both `/mcp` and `/mcp/` reach the transport; the server normalizes the bare path
 in-process. (Against an older deploy that 307-redirects bare `/mcp`, use the
 trailing-slash form `…/mcp/`, since `mcp-remote` cannot replay a POST across the
 redirect.)
+
+Pin `mcp-remote` to Node 24 or 22 for now. In local reproduction against the live
+service, `mcp-remote@0.1.38` under Node 26 intermittently failed with
+`Unexpected content type: null` or undici connect timeouts even though the same PAT
+and endpoint returned `200 OK` via plain `curl`. Running the same `mcp-remote`
+command under Node 24/22 succeeded without server changes.
 
 ## Development verification
 
