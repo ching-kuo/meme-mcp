@@ -70,20 +70,19 @@ class SQLiteGooglePinStore:
         """
         now = self._clock().isoformat()
         with self._connect() as conn:
+            # One atomic write: INSERT OR IGNORE swallows BOTH the sub-PK conflict
+            # (idempotent / concurrent same-sub first sign-in) and the email-UNIQUE
+            # conflict (a second sub for an already-pinned email, first-sign-in-wins).
+            # The post-write read of the sub's pinned email then disambiguates: it
+            # equals `email` only when this sub owns that mailbox.
+            conn.execute(
+                "INSERT OR IGNORE INTO google_pins (sub, email, created_at) VALUES (?, ?, ?)",
+                (sub, email, now),
+            )
             row = conn.execute(
                 "SELECT email FROM google_pins WHERE sub = ?", (sub,)
             ).fetchone()
-            if row is not None:
-                return str(row[0]) == email
-            try:
-                conn.execute(
-                    "INSERT INTO google_pins (sub, email, created_at) VALUES (?, ?, ?)",
-                    (sub, email, now),
-                )
-            except sqlite3.IntegrityError:
-                # email UNIQUE violated: already pinned to another sub.
-                return False
-        return True
+        return row is not None and str(row[0]) == email
 
     def delete_by_email(self, email: str) -> bool:
         with self._connect() as conn:

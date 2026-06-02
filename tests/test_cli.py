@@ -550,6 +550,25 @@ def test_pin_cli_show_and_revoke(tmp_path, capsys) -> None:
     assert pins.email_for_sub("sub-A") is None
 
 
+def test_pin_revoke_accepts_namespaced_sub_from_list_output(tmp_path, capsys) -> None:
+    # `pin list` prints google:<sub>; revoking with that exact string must match.
+    s = settings(tmp_path)
+    pins = _pin_store(tmp_path)
+    pins.create_pin("sub-A", "alice@gmail.com")
+    assert run(["pin", "revoke", "google:sub-A"], s) == 0
+    assert "revoked" in capsys.readouterr().out
+    assert pins.email_for_sub("sub-A") is None
+
+
+def test_allowlist_remove_bare_email_also_deletes_pin(tmp_path) -> None:
+    # Defensive: a hand-edited bare email entry still evicts the pin on remove.
+    s = settings(tmp_path)
+    pins = _pin_store(tmp_path)
+    pins.create_pin("sub-A", "alice@gmail.com")
+    assert run(["allowlist", "remove", "alice@gmail.com"], s) == 0
+    assert pins.email_for_sub("sub-A") is None
+
+
 def test_allowlist_remove_google_deletes_pin(tmp_path) -> None:
     # R13: removing the invite also evicts the pin so a re-invite cannot
     # reactivate the previously pinned sub.

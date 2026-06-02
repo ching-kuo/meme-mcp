@@ -134,8 +134,8 @@ def is_authorized(
     """
     provider, _, subject = principal.partition(":")
     if provider == _DEFAULT_PROVIDER:
-        # is_authorized passes the bare login; the allowlist scopes it to GitHub
-        # (bare and ``github:`` entries) once it is provider-aware (U3).
+        # Pass the bare login; FileAllowlist.is_allowlisted scopes a prefix-less
+        # value to GitHub, matching both legacy bare and ``github:`` entries.
         return bool(subject) and allowlist.is_allowlisted(subject)
     if provider == "google":
         # A Google principal is google:<sub>. Resolve the immutable sub to its

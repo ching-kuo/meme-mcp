@@ -184,11 +184,16 @@ def _run_allowlist(args: argparse.Namespace, settings: Settings) -> int:
         return 0
     if args.allowlist_command == "remove":
         allowlist.remove(entry)
-        # Terminal revocation (R13): removing a google:<email> invite also deletes
-        # the pin so re-inviting the same email cannot reactivate the prior sub.
-        if sep and provider.lower() == "google":
+        # Terminal revocation (R13): removing a Google invite also deletes the pin
+        # so re-inviting the same email cannot reactivate the prior sub. Handle
+        # both the namespaced form and a bare email (which a hand-edited file could
+        # leave behind) so eviction is never silently skipped.
+        google_email = (
+            subject if sep and provider.lower() == "google" else entry if "@" in entry else None
+        )
+        if google_email:
             db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
-            SQLiteGooglePinStore(db_path).delete_by_email(canonical_email(subject))
+            SQLiteGooglePinStore(db_path).delete_by_email(canonical_email(google_email))
         return 0
     raise SystemExit(f"unknown allowlist command: {args.allowlist_command}")
 
@@ -291,6 +296,11 @@ def _run_pin(args: argparse.Namespace, settings: Settings) -> int:
         return 0
     if args.pin_command == "revoke":
         identifier = args.identifier
+        # `pin list`/`pin show` print the sub in google:<sub> form; strip the
+        # prefix so an operator can copy it back verbatim and still match the
+        # stored raw sub (otherwise the delete silently matches nothing).
+        if identifier.lower().startswith("google:"):
+            identifier = identifier[len("google:") :]
         if "@" in identifier:
             removed = store.delete_by_email(canonical_email(identifier))
         else:
