@@ -10,6 +10,7 @@ from PIL import Image
 from pydantic import SecretStr
 
 from meme_mcp.app import create_app
+from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.depends import require_pat
 from meme_mcp.auth.pat import SQLitePatStore, issue_pat, verify_pat
 from meme_mcp.config import ConfigError, Settings
@@ -296,12 +297,14 @@ def test_pat_store_persists_and_enforces_allowlist(tmp_path) -> None:
     store = SQLitePatStore(tmp_path / "auth.db")
     token = issue_pat(store, "alice", "pepper")
     reopened = SQLitePatStore(tmp_path / "auth.db")
-    assert verify_pat(reopened, token, "pepper") == ("alice", "readwrite")
-    friend = require_pat(f"Bearer {token}", reopened, {"alice"}, "pepper")
-    assert friend.github_login == "alice"
+    assert verify_pat(reopened, token, "pepper") == ("github:alice", "readwrite")
+    allow = FileAllowlist(tmp_path / "allowlist.txt")
+    allow.add("alice")
+    friend = require_pat(f"Bearer {token}", reopened, allow, "pepper")
+    assert friend.principal == "github:alice"
     assert friend.capability == "readwrite"
     with pytest.raises(MemeMCPError):
-        require_pat(f"Bearer {token}", reopened, set(), "pepper")
+        require_pat(f"Bearer {token}", reopened, FileAllowlist(tmp_path / "empty.txt"), "pepper")
 
 
 def test_render_route_rejects_path_traversal(tmp_path) -> None:

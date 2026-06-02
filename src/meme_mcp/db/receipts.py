@@ -4,6 +4,8 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
+from meme_mcp.auth.authorization import principal_match_values
+
 
 class ReceiptStore:
     def __init__(self, path: str | Path) -> None:
@@ -36,10 +38,15 @@ class ReceiptStore:
             )
 
     def exists_for_friend(self, rendered_hash: str, friend_login: str) -> bool:
+        # Match the namespaced principal AND a legacy bare-login row so a GitHub
+        # friend keeps access to renders recorded before the namespace change.
+        values = principal_match_values(friend_login)
+        placeholders = ", ".join("?" * len(values))
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT 1 FROM generated_receipts WHERE hash = ? AND friend_login = ?",
-                (rendered_hash, friend_login),
+                f"SELECT 1 FROM generated_receipts "
+                f"WHERE hash = ? AND friend_login IN ({placeholders})",
+                (rendered_hash, *values),
             ).fetchone()
             return row is not None
 

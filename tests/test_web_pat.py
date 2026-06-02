@@ -74,7 +74,7 @@ def test_account_page_offers_only_bounded_expiry(tmp_path: Path) -> None:
     assert new_token
     assert verify_pat(app.state.pat_store, old_token, app.state.pat_hash_pepper_value) is None
     assert verify_pat(app.state.pat_store, new_token, app.state.pat_hash_pepper_value) == (
-        "friend",
+        "github:friend",
         "read",
     )
     assert app.state.audit_sink.events[0].event_type == "pat_issued"

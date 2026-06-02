@@ -7,6 +7,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.responses import Response
 
+from meme_mcp.auth.authorization import display_login
 from meme_mcp.auth.depends import Friend
 from meme_mcp.auth.pat import PatStatus
 from meme_mcp.auth.pat_web import WEB_TTL_DAYS, regenerate_web, revoke_web
@@ -44,7 +45,7 @@ def register_pat_routes(app: FastAPI) -> None:
                 "account.html",
                 {
                     "csrf_token": csrf_token,
-                    "friend_login": login,
+                    "friend_login": display_login(login),
                     "pat_status": _status_payload(status),
                     "pat_expires_in_days": _status_expires_in_days(status),
                     "web_session": True,
@@ -57,16 +58,16 @@ def register_pat_routes(app: FastAPI) -> None:
     async def issue_token(request: Request, payload: dict[str, object]) -> JSONResponse:
         friend = _session_friend(app, request)
         require_csrf(request)
-        app.state.pat_admin_limiter.hit(friend.github_login)
+        app.state.pat_admin_limiter.hit(friend.principal)
         plaintext = regenerate_web(
             store=app.state.pat_store,
-            friend_login=friend.github_login,
+            friend_login=friend.principal,
             pepper=app.state.pat_hash_pepper_value,
             capability=payload.get("scope"),
             ttl_days=payload.get("ttl_days"),
             audit_sink=app.state.audit_sink,
         )
-        status = app.state.pat_store.current_status(friend.github_login)
+        status = app.state.pat_store.current_status(friend.principal)
         # The one-time plaintext rides in this body; forbid any browser/proxy
         # caching so the secret cannot be replayed from a cache (R9).
         return JSONResponse(
@@ -78,13 +79,13 @@ def register_pat_routes(app: FastAPI) -> None:
     async def revoke_token(request: Request) -> JSONResponse:
         friend = _session_friend(app, request)
         require_csrf(request)
-        app.state.pat_admin_limiter.hit(friend.github_login)
+        app.state.pat_admin_limiter.hit(friend.principal)
         revoked = revoke_web(
             store=app.state.pat_store,
-            friend_login=friend.github_login,
+            friend_login=friend.principal,
             audit_sink=app.state.audit_sink,
         )
-        status = app.state.pat_store.current_status(friend.github_login)
+        status = app.state.pat_store.current_status(friend.principal)
         return JSONResponse(
             make_success({"revoked": revoked, "token_status": _status_payload(status)})
         )

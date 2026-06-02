@@ -40,7 +40,7 @@ def test_regenerate_web_issues_bounded_token_and_audits(tmp_path: Path) -> None:
         audit_sink=sink,
     )
 
-    assert verify_pat(store, plaintext, "pepper") == ("alice", "readwrite")
+    assert verify_pat(store, plaintext, "pepper") == ("github:alice", "readwrite")
     status = store.current_status("alice")
     assert status.expires_at == fixed_now + timedelta(days=90)
     assert sink.events == [
@@ -67,7 +67,7 @@ def test_regenerate_web_supports_read_scope_30_day_expiry(tmp_path: Path) -> Non
         audit_sink=None,
     )
 
-    assert verify_pat(store, plaintext, "pepper") == ("alice", "read")
+    assert verify_pat(store, plaintext, "pepper") == ("github:alice", "read")
     assert store.current_status("alice").expires_at == fixed_now + timedelta(days=30)
 
 
@@ -153,5 +153,5 @@ def test_audit_failure_does_not_block(tmp_path: Path) -> None:
         audit_sink=RaisingSink(),
     )
 
-    assert verify_pat(store, plaintext, "pepper") == ("alice", "read")
+    assert verify_pat(store, plaintext, "pepper") == ("github:alice", "read")
     assert revoke_web(store=store, friend_login="alice", audit_sink=RaisingSink()) is True

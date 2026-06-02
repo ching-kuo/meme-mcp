@@ -9,6 +9,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from meme_mcp.auth.authorization import principal_match_values
+
 DEFAULT_TTL = timedelta(hours=24)
 
 
@@ -134,16 +136,18 @@ class PendingUploadStore:
 
     def get(self, upload_id: str, friend_login: str) -> PendingUpload:
         now_iso = self._clock().isoformat()
+        values = principal_match_values(friend_login)
+        placeholders = ", ".join("?" * len(values))
         with self._connect() as conn:
             row = conn.execute(
-                """
+                f"""
                 SELECT id, friend_login, image_path, metadata_json, slot_definitions_json,
                        exact_hash, perceptual_hash, duplicate_action, duplicate_template_id,
                        suspect_flags_json
                 FROM pending_uploads
-                WHERE id = ? AND friend_login = ? AND expires_at > ?
+                WHERE id = ? AND friend_login IN ({placeholders}) AND expires_at > ?
                 """,
-                (upload_id, friend_login, now_iso),
+                (upload_id, *values, now_iso),
             ).fetchone()
         if row is None:
             raise KeyError(upload_id)
@@ -172,16 +176,19 @@ class PendingUploadStore:
         another friend's pending row. Unlike delete(upload_id), this is scoped
         to the owning login.
         """
+        values = principal_match_values(friend_login)
+        placeholders = ", ".join("?" * len(values))
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT image_path FROM pending_uploads WHERE id = ? AND friend_login = ?",
-                (upload_id, friend_login),
+                f"SELECT image_path FROM pending_uploads "
+                f"WHERE id = ? AND friend_login IN ({placeholders})",
+                (upload_id, *values),
             ).fetchone()
             if row is None:
                 return None
             conn.execute(
-                "DELETE FROM pending_uploads WHERE id = ? AND friend_login = ?",
-                (upload_id, friend_login),
+                f"DELETE FROM pending_uploads WHERE id = ? AND friend_login IN ({placeholders})",
+                (upload_id, *values),
             )
         return str(row[0])
 

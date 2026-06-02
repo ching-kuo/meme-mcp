@@ -28,6 +28,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from meme_mcp.audit.sink import JsonlAuditSink
 from meme_mcp.auth.allowlist import FileAllowlist
+from meme_mcp.auth.authorization import display_login, is_authorized, normalize_principal
 from meme_mcp.auth.depends import require_write
 from meme_mcp.auth.pat import SQLitePatStore, expires_at_for_login
 from meme_mcp.auth.session import (
@@ -445,7 +446,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "landing.html",
             {
                 "web_session": login is not None,
-                "friend_login": login,
+                "friend_login": display_login(login) if login else None,
                 "pat_expires_in_days": _pat_expires_in_days(app, login) if login else None,
             },
         )
@@ -498,7 +499,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ):
             return RedirectResponse("/auth/login?next=/browse", status_code=303)
         friend = friend_from_request_or_header(app, request, authorization)
-        app.state.find_limiter.hit(friend.github_login)
+        app.state.find_limiter.hit(friend.principal)
         query = q.strip()
         template_rows = _template_rows(app, query)
         return templates.TemplateResponse(
@@ -507,8 +508,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "query": query,
                 "templates": template_rows,
-                "friend_login": friend.github_login,
-                "pat_expires_in_days": _pat_expires_in_days(app, friend.github_login),
+                "friend_login": display_login(friend.principal),
+                "pat_expires_in_days": _pat_expires_in_days(app, friend.principal),
                 "web_session": has_web_session(app, request),
             },
         )
@@ -529,7 +530,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "upload.html",
             {
                 "csrf_token": csrf_token,
-                "friend_login": login,
+                "friend_login": display_login(login),
                 "pat_expires_in_days": _pat_expires_in_days(app, login),
                 "web_session": True,
                 # Drives the egress toggle: when the feature is off, the page must
@@ -570,7 +571,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             str(code_verifier) if code_verifier is not None else None,
         )
         login = str(user.get("login", "")).strip()
-        if not login or not app.state.web_allowlist.is_allowlisted(login):
+        try:
+            principal = normalize_principal(login) if login else ""
+        except ValueError:
+            principal = ""
+        if not principal or not is_authorized(
+            principal,
+            allowlist=app.state.web_allowlist,
+            pin_store=getattr(app.state, "pin_store", None),
+        ):
             # Render the explanatory page without establishing a session; the
             # actor stays unauthenticated. A JSON 403 would be opaque to a
             # human arriving in a browser (KTD9).
@@ -592,7 +601,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Re-validating defends against a tampered session value (KTD9).
         target = safe_next(request.session.get("post_login_next"))
         request.session.clear()
-        request.session["github_login"] = login
+        # The session key is unchanged for back-compat, but it now carries the
+        # namespaced principal (github:<login>); session_login normalizes either
+        # form on read.
+        request.session["github_login"] = principal
         return RedirectResponse(target, status_code=303)
 
     @app.post("/auth/logout")
@@ -613,7 +625,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
         friend = friend_from_request_or_header(app, request, authorization)
-        app.state.find_limiter.hit(friend.github_login)
+        app.state.find_limiter.hit(friend.principal)
         rows = _template_rows(app, q.strip())
         return JSONResponse(make_success({"templates": [_template_payload(row) for row in rows]}))
 
@@ -645,7 +657,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "query", "reason": "required"}])
         filters_raw = payload.get("filters", {})
         filters = filters_raw if isinstance(filters_raw, dict) else {}
-        return JSONResponse(AppMCPBackend(app).find(query, filters, friend.github_login))
+        return JSONResponse(AppMCPBackend(app).find(query, filters, friend.principal))
 
     @app.post("/api/mcp/generate")
     async def mcp_generate(
@@ -663,7 +675,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         slot_fills = [str(fill) for fill in slot_fills_raw]
         dry_run = bool(payload.get("dry_run", False))
         return JSONResponse(
-            AppMCPBackend(app).generate(template_id, slot_fills, dry_run, friend.github_login)
+            AppMCPBackend(app).generate(template_id, slot_fills, dry_run, friend.principal)
         )
 
     @app.post("/api/uploads/analyze")
@@ -680,7 +692,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             declared_mime=str(payload.get("mime", "")),
             filename=str(payload.get("filename", "upload")),
             title_hint=payload.get("title_hint"),
-            friend_login=friend.github_login,
+            friend_login=friend.principal,
             deps=_upload_deps(app),
             identify_online=bool(payload.get("identify_online", False)),
         )
@@ -708,7 +720,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> JSONResponse:
         friend = require_write(friend_from_header(app, authorization))
         try:
-            pending = app.state.pending_uploads.get(upload_id, friend.github_login)
+            pending = app.state.pending_uploads.get(upload_id, friend.principal)
         except KeyError as exc:
             raise MemeMCPError(ErrorCode.NOT_FOUND, []) from exc
         metadata_raw = payload.get("metadata")
@@ -750,7 +762,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not signed_ok:
             friend = friend_from_request_or_header(app, request, authorization)
             rendered_hash = f"{prefix}{Path(filename).stem}"
-            if not app.state.receipts.exists_for_friend(rendered_hash, friend.github_login):
+            if not app.state.receipts.exists_for_friend(rendered_hash, friend.principal):
                 raise MemeMCPError(ErrorCode.NOT_FOUND, [])
         root = Path(app.state.settings.image_store_fs_path).resolve()
         path = (root / prefix / filename).resolve()
@@ -779,7 +791,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Metered like /browse so a friend cannot enumerate every template ID
         # through the detail route while the gallery and /api/templates stay
         # rate-limited.
-        app.state.find_limiter.hit(friend.github_login)
+        app.state.find_limiter.hit(friend.principal)
         try:
             template = app.state.templates.get(template_id)
         except KeyError as exc:
@@ -799,8 +811,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "template": template,
                 "origin": origin,
                 "origin_source_url_safe": origin_source_url_safe,
-                "friend_login": friend.github_login,
-                "pat_expires_in_days": _pat_expires_in_days(app, friend.github_login),
+                "friend_login": display_login(friend.principal),
+                "pat_expires_in_days": _pat_expires_in_days(app, friend.principal),
                 "web_session": has_web_session(app, request),
             },
         )

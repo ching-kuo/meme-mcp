@@ -66,7 +66,7 @@ def test_pat_cli_issue_prints_verifiable_token(tmp_path, capsys) -> None:
 
     store = SQLitePatStore(tmp_path / "meme.db")
     assert verify_pat(store, token, app_settings.pat_hash_pepper.get_secret_value()) == (
-        "friend",
+        "github:friend",
         "readwrite",
     )
 
@@ -82,7 +82,7 @@ def test_pat_cli_issue_respects_ttl_and_scope_flags(tmp_path, capsys) -> None:
 
     store = SQLitePatStore(tmp_path / "meme.db")
     verified = verify_pat(store, token, app_settings.pat_hash_pepper.get_secret_value())
-    assert verified == ("friend", "read")
+    assert verified == ("github:friend", "read")
     [record] = [r for r in list_pats(store) if r.revoked_at is None]
     assert record.expires_at is not None
     # ttl_days=30 with a small tolerance for the 1-2 second test latency.

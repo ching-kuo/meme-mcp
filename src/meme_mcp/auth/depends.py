@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from meme_mcp.auth.authorization import (
+    SupportsAllowlist,
+    SupportsPinLookup,
+    is_authorized,
+    normalize_principal,
+)
 from meme_mcp.auth.pat import (
     DEFAULT_CAPABILITY,
     Capability,
@@ -14,12 +20,15 @@ from meme_mcp.errors import ErrorCode, MemeMCPError
 
 @dataclass(frozen=True)
 class Friend:
-    github_login: str
+    # Provider-namespaced principal: ``github:<login>`` or ``google:<sub>``.
+    principal: str
     capability: Capability = DEFAULT_CAPABILITY
 
 
 def require_operator(user: Friend, operator_login: str) -> Friend:
-    if user.github_login != operator_login:
+    # The operator is configured as a bare GitHub login; normalize it so it
+    # compares against the namespaced principal a Friend now carries.
+    if user.principal != normalize_principal(operator_login):
         raise MemeMCPError(ErrorCode.FORBIDDEN, [{"field": "user", "reason": "operator_required"}])
     return user
 
@@ -36,8 +45,9 @@ def require_write(friend: Friend) -> Friend:
 def require_pat(
     authorization: str | None,
     pat_store: InMemoryPatStore | SQLitePatStore,
-    allowlist: set[str],
+    allowlist: SupportsAllowlist,
     pepper: str,
+    pin_store: SupportsPinLookup | None = None,
 ) -> Friend:
     if authorization is None or not authorization.startswith("Bearer "):
         raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "authorization", "reason": "bearer"}])
@@ -48,10 +58,10 @@ def require_pat(
             ErrorCode.UNAUTHORIZED,
             [{"field": "authorization", "reason": "invalid"}],
         )
-    login, capability = result
-    if login not in allowlist:
+    principal, capability = result
+    if not is_authorized(principal, allowlist=allowlist, pin_store=pin_store):
         raise MemeMCPError(
             ErrorCode.FORBIDDEN_NOT_ALLOWLISTED,
-            [{"field": "github_login", "reason": "not_allowlisted"}],
+            [{"field": "principal", "reason": "not_allowlisted"}],
         )
-    return Friend(login, capability)
+    return Friend(principal, capability)
