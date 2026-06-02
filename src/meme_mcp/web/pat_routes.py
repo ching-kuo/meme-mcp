@@ -7,7 +7,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.responses import Response
 
-from meme_mcp.auth.authorization import display_login
+from meme_mcp.auth.authorization import display_label
 from meme_mcp.auth.depends import Friend
 from meme_mcp.auth.pat import PatStatus
 from meme_mcp.auth.pat_web import WEB_TTL_DAYS, regenerate_web, revoke_web
@@ -45,7 +45,7 @@ def register_pat_routes(app: FastAPI) -> None:
                 "account.html",
                 {
                     "csrf_token": csrf_token,
-                    "friend_login": display_login(login),
+                    "friend_login": display_label(login, app.state.pin_store),
                     "pat_status": _status_payload(status),
                     "pat_expires_in_days": _status_expires_in_days(status),
                     "web_session": True,

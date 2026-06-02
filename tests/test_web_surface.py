@@ -100,8 +100,10 @@ def test_landing_page_renders_sign_in_for_anonymous(tmp_path) -> None:
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    # Anonymous visitor is offered GitHub login, not the app shell.
-    assert 'href="/auth/login?next=/browse"' in response.text
+    # Anonymous visitor is offered GitHub login, not the app shell. The button
+    # targets provider=github explicitly so it bypasses the chooser when Google
+    # sign-in is enabled.
+    assert 'href="/auth/login?provider=github&next=/browse"' in response.text
     assert 'href="/upload"' not in response.text
 
 
@@ -347,3 +349,58 @@ def test_template_api_searches_and_previews_without_persistence(tmp_path) -> Non
     data_url = preview.json()["data"]["data_url"]
     assert data_url.startswith("data:image/png;base64,")
     assert base64.b64decode(data_url.split(",", 1)[1]).startswith(b"\x89PNG")
+
+
+# --- U7: provider-aware display + Google sign-in button -----------------------
+
+
+def _google_app(tmp_path):
+    from pydantic import SecretStr
+
+    settings = good_settings(tmp_path).model_copy(
+        update={
+            "google_oauth_enabled": True,
+            "google_client_id": "gid",
+            "google_client_secret": SecretStr("gsecret"),
+            "google_redirect_uri": "http://localhost:8000/auth/google/callback",
+        }
+    )
+    return create_app(settings)
+
+
+def test_landing_shows_google_button_only_when_enabled(tmp_path) -> None:
+    off = TestClient(create_app(good_settings(tmp_path)))
+    assert "/auth/google/login" not in off.get("/").text
+
+    on = TestClient(_google_app(tmp_path))
+    assert "/auth/google/login" in on.get("/").text
+
+
+def test_signed_in_google_friend_sees_gmail_label_not_sub(tmp_path) -> None:
+    app = _google_app(tmp_path)
+    app.state.pin_store.create_pin("sub-A", "alice@gmail.com")
+    app.state.allowlist.add("google:alice@gmail.com")
+    client = TestClient(app)
+    client.cookies.set("session", _session_cookie(app, "google:sub-A"))
+    # The landing page renders "signed in as {label}" for a web session.
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "alice@gmail.com" in response.text
+    assert "sub-A" not in response.text
+
+
+def test_restricted_page_is_provider_neutral_without_operator_handle(tmp_path) -> None:
+    # The Google rejection path passes operator_github_login=None; the page must
+    # render the generic guidance and never the GitHub-login-specific wording.
+    from tests.test_google_oauth_session import FakeGoogleOAuth, _google_settings
+
+    app = create_app(_google_settings(tmp_path))
+    app.state.google_oauth = FakeGoogleOAuth(
+        sub="s1", email="stranger@gmail.com", email_verified=True
+    )
+    client = TestClient(app)
+    client.get("/auth/google/login", follow_redirects=False)
+    response = client.get("/auth/google/callback", follow_redirects=False)
+    assert response.status_code == 403
+    assert "add your GitHub login" not in response.text
+    assert "add you to the allowlist" not in response.text  # the operator-handle suffix

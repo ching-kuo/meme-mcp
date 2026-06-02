@@ -28,7 +28,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from meme_mcp.audit.sink import JsonlAuditSink
 from meme_mcp.auth.allowlist import FileAllowlist
-from meme_mcp.auth.authorization import display_login, is_authorized, normalize_principal
+from meme_mcp.auth.authorization import display_label, is_authorized, normalize_principal
 from meme_mcp.auth.depends import require_write
 from meme_mcp.auth.google_oauth import GoogleOAuth
 from meme_mcp.auth.google_pins import SQLiteGooglePinStore
@@ -456,8 +456,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "landing.html",
             {
                 "web_session": login is not None,
-                "friend_login": display_login(login) if login else None,
+                "friend_login": display_label(login, app.state.pin_store) if login else None,
                 "pat_expires_in_days": _pat_expires_in_days(app, login) if login else None,
+                "google_oauth_enabled": (
+                    app.state.settings.google_oauth_enabled
+                    if hasattr(app.state, "settings")
+                    else False
+                ),
             },
         )
 
@@ -518,7 +523,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "query": query,
                 "templates": template_rows,
-                "friend_login": display_login(friend.principal),
+                "friend_login": display_label(friend.principal, app.state.pin_store),
                 "pat_expires_in_days": _pat_expires_in_days(app, friend.principal),
                 "web_session": has_web_session(app, request),
             },
@@ -540,7 +545,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "upload.html",
             {
                 "csrf_token": csrf_token,
-                "friend_login": display_login(login),
+                "friend_login": display_label(login, app.state.pin_store),
                 "pat_expires_in_days": _pat_expires_in_days(app, login),
                 "web_session": True,
                 # Drives the egress toggle: when the feature is off, the page must
@@ -878,7 +883,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "template": template,
                 "origin": origin,
                 "origin_source_url_safe": origin_source_url_safe,
-                "friend_login": display_login(friend.principal),
+                "friend_login": display_label(friend.principal, app.state.pin_store),
                 "pat_expires_in_days": _pat_expires_in_days(app, friend.principal),
                 "web_session": has_web_session(app, request),
             },

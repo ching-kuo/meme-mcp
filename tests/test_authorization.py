@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from meme_mcp.auth.authorization import (
-    display_login,
+    display_label,
     is_authorized,
     normalize_principal,
     principal_match_values,
@@ -69,11 +69,17 @@ def test_match_values_google_has_no_bare_form() -> None:
     assert principal_match_values("google:11769") == ("google:11769",)
 
 
-# --- display_login -------------------------------------------------------------
+# --- display_label -------------------------------------------------------------
 
 
-def test_display_login_strips_github_prefix() -> None:
-    assert display_login("github:alice") == "alice"
+def test_display_label_strips_github_prefix() -> None:
+    assert display_label("github:alice") == "alice"
+
+
+def test_display_label_resolves_google_sub_to_pinned_mailbox() -> None:
+    pins = _StubPinStore(sub11769="alice@gmail.com")
+    # Never the raw google:<sub>; resolves to the pinned mailbox.
+    assert display_label("google:sub11769", pins) == "alice@gmail.com"
 
 
 # --- is_authorized -------------------------------------------------------------

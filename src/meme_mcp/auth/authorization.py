@@ -102,15 +102,20 @@ def principal_match_values(value: str) -> tuple[str, ...]:
     return tuple(values)
 
 
-def display_login(principal: str) -> str:
-    """Human-facing label for a principal (GitHub only, for now).
+def display_label(principal: str, pin_store: SupportsPinLookup | None = None) -> str:
+    """Human-facing label for a principal.
 
-    Strips the ``github:`` prefix so templates show the bare login as before.
-    Google principals (``google:<sub>``) are resolved to their mailbox label in
-    U7 via the pin store; here they fall back to the subject so nothing leaks a
-    raw ``provider:`` string into the UI.
+    GitHub principals show the bare login (the ``github:`` prefix stripped).
+    Google principals (``google:<sub>``) resolve to their pinned mailbox via the
+    pin store, never the raw ``sub``. Falls back to the bare subject only when no
+    pin is found (a logged-in Google friend always has a pin, so this is a
+    defensive tail, not a normal path).
     """
-    _, _, subject = principal.partition(":")
+    provider, _, subject = principal.partition(":")
+    if provider == "google" and pin_store is not None:
+        email = pin_store.email_for_sub(subject)
+        if email is not None:
+            return email
     return subject or principal
 
 
