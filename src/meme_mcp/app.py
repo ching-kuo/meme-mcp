@@ -379,6 +379,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             client_secret=settings.github_client_secret.get_secret_value(),
             redirect_uri=settings.github_redirect_uri,
         )
+        # Null object when Google sign-in is off (KTD); the real client is built
+        # once here so missing/malformed config fails fast at startup, not at the
+        # first /auth/google/login.
+        app.state.google_oauth = _make_google_oauth(settings)
         public_app_base_url = resolve_public_base_url(settings)
         # Stored so AppMCPBackend.generate can build absolute rendered_url values
         # off the same origin advertised in OAuth metadata.
@@ -956,6 +960,28 @@ def _duplicate_index(app: FastAPI) -> DuplicateIndex:
     for template in app.state.templates.list_rows():
         index.add(template.template_id, template.exact_hash, template.perceptual_hash)
     return index
+
+
+def _make_google_oauth(settings: Settings) -> object:
+    """Build the Authlib Google client when enabled, else the unavailable sentinel.
+
+    Imported lazily so the Authlib client tree is only loaded when Google sign-in
+    is actually configured (mirrors the reverse-image client gating).
+    """
+    from meme_mcp.auth.google_oauth import GoogleOAuthUnavailable
+
+    if not settings.google_oauth_enabled:
+        return GoogleOAuthUnavailable()
+    from meme_mcp.auth.google_oauth import GoogleOAuthClient
+
+    return GoogleOAuthClient(
+        client_id=settings.google_client_id or "",
+        client_secret=(
+            settings.google_client_secret.get_secret_value()
+            if settings.google_client_secret
+            else ""
+        ),
+    )
 
 
 def _make_reverse_image_client(settings: Settings) -> object | None:

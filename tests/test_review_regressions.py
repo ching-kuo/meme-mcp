@@ -226,6 +226,31 @@ def test_public_base_url_origin_conflict_fails_fast(tmp_path) -> None:
         )
 
 
+def test_google_oauth_disabled_installs_unavailable_sentinel(tmp_path) -> None:
+    from meme_mcp.auth.google_oauth import GoogleOAuthUnavailable
+
+    app = create_app(settings(tmp_path))
+    assert isinstance(app.state.google_oauth, GoogleOAuthUnavailable)
+
+
+def test_google_oauth_enabled_registers_authlib_client(tmp_path) -> None:
+    # Registration is config-only (no network); the real client is installed.
+    from meme_mcp.auth.google_oauth import GoogleOAuthClient
+
+    app = create_app(
+        settings(
+            tmp_path,
+            github_redirect_uri="https://meme.igene.tw/auth/callback",
+            public_base_url="https://meme.igene.tw",
+            google_oauth_enabled=True,
+            google_client_id="gid",
+            google_client_secret=SecretStr("gsecret"),
+            google_redirect_uri="https://meme.igene.tw/auth/google/callback",
+        )
+    )
+    assert isinstance(app.state.google_oauth, GoogleOAuthClient)
+
+
 def test_malformed_github_redirect_uri_fails_fast(tmp_path) -> None:
     # A redirect URI that does not end in /auth/callback would make the base-URL
     # derivation a silent no-op and bake a broken path into the OAuth metadata;

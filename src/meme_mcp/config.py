@@ -77,6 +77,16 @@ class Settings(BaseSettings):
     reverse_image_enabled: bool = False
     google_vision_credentials_path: str | None = None
 
+    # Google OAuth sign-in (optional second provider, OFF by default). Mirrors the
+    # reverse-image gating convention: when disabled, only GitHub login is offered
+    # and absence of these values never breaks the GitHub path. When enabled, all
+    # three are required and google_redirect_uri must end in /auth/google/callback
+    # and resolve to the app's canonical public origin (see validate_at_startup).
+    google_oauth_enabled: bool = False
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = None
+    google_redirect_uri: str | None = None
+
     embedding_base_url: str = "https://api.openai.com/v1"
     embedding_api_key: SecretStr
     embedding_model: str = "text-embedding-3-small"
@@ -170,8 +180,48 @@ def validate_at_startup(settings: Settings) -> None:
         _validate_vision_credentials(settings.google_vision_credentials_path, problems)
     if settings.public_base_url is not None:
         _validate_public_base_url(settings, problems)
+    if settings.google_oauth_enabled:
+        _validate_google_oauth(settings, problems)
     if problems:
         raise ConfigError("; ".join(problems))
+
+
+def _validate_google_oauth(settings: Settings, problems: list[str]) -> None:
+    """Fail fast on an incomplete or origin-mismatched Google OAuth config.
+
+    When enabled, all three Google fields are required and the redirect URI must
+    end in ``/auth/google/callback`` AND resolve to the app's canonical public
+    origin -- the callback route is served by this app, so a redirect URI on a
+    different origin/base path would boot a dead Google config.
+    """
+    missing = [
+        name
+        for name, value in {
+            "GOOGLE_CLIENT_ID": settings.google_client_id,
+            "GOOGLE_CLIENT_SECRET": settings.google_client_secret,
+            "GOOGLE_REDIRECT_URI": settings.google_redirect_uri,
+        }.items()
+        if value is None
+    ]
+    if missing:
+        problems.extend(f"{name} is required when GOOGLE_OAUTH_ENABLED is true" for name in missing)
+        return
+    redirect = (settings.google_redirect_uri or "").rstrip("/")
+    if not redirect.endswith("/auth/google/callback"):
+        problems.append("GOOGLE_REDIRECT_URI must end with /auth/google/callback")
+        return
+    base = redirect.removesuffix("/auth/google/callback").rstrip("/")
+    try:
+        canonical = resolve_public_base_url(settings)
+    except ConfigError:
+        # The github/public-base origin is itself invalid; that error is already
+        # accumulated elsewhere, so do not pile on a confusing secondary message.
+        return
+    if _origin_key(base) != _origin_key(canonical):
+        problems.append(
+            f"GOOGLE_REDIRECT_URI origin {_origin_key(base)} must match the app's "
+            f"public origin {_origin_key(canonical)}"
+        )
 
 
 def _origin_key(url: str) -> str:

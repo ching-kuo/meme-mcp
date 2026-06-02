@@ -203,6 +203,59 @@ def test_public_base_url_matching_origin_passes() -> None:
     validate_at_startup(settings)
 
 
+def test_google_oauth_disabled_validates_without_credentials() -> None:
+    # Default-off: startup succeeds with no Google env (parity with reverse-image).
+    validate_at_startup(good_settings())
+
+
+def test_google_oauth_enabled_with_all_fields_passes() -> None:
+    validate_at_startup(
+        good_settings(
+            github_redirect_uri="https://meme.example/auth/callback",
+            google_oauth_enabled=True,
+            google_client_id="gid",
+            google_client_secret=SecretStr("gsecret"),
+            google_redirect_uri="https://meme.example/auth/google/callback",
+        )
+    )
+
+
+def test_google_oauth_enabled_missing_field_fails() -> None:
+    settings = good_settings(
+        github_redirect_uri="https://meme.example/auth/callback",
+        google_oauth_enabled=True,
+        google_client_id="gid",
+        google_redirect_uri="https://meme.example/auth/google/callback",
+        # google_client_secret omitted
+    )
+    with pytest.raises(ConfigError, match="GOOGLE_CLIENT_SECRET"):
+        validate_at_startup(settings)
+
+
+def test_google_oauth_redirect_uri_must_end_with_callback_path() -> None:
+    settings = good_settings(
+        github_redirect_uri="https://meme.example/auth/callback",
+        google_oauth_enabled=True,
+        google_client_id="gid",
+        google_client_secret=SecretStr("gsecret"),
+        google_redirect_uri="https://meme.example/auth/callback",
+    )
+    with pytest.raises(ConfigError, match="/auth/google/callback"):
+        validate_at_startup(settings)
+
+
+def test_google_oauth_redirect_origin_must_match_public_origin() -> None:
+    settings = good_settings(
+        github_redirect_uri="https://meme.example/auth/callback",
+        google_oauth_enabled=True,
+        google_client_id="gid",
+        google_client_secret=SecretStr("gsecret"),
+        google_redirect_uri="https://other.example/auth/google/callback",
+    )
+    with pytest.raises(ConfigError, match="must match the app's"):
+        validate_at_startup(settings)
+
+
 def test_session_cookie_secure_follows_canonical_origin() -> None:
     # Local dev (unset, http://localhost redirect) => not Secure, so OAuth state
     # round-trips on localhost.
