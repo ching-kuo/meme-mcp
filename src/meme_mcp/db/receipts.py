@@ -4,7 +4,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from meme_mcp.auth.authorization import principal_match_values
+from meme_mcp.auth.authorization import principal_in_clause
 
 
 class ReceiptStore:
@@ -40,8 +40,7 @@ class ReceiptStore:
     def exists_for_friend(self, rendered_hash: str, friend_login: str) -> bool:
         # Match the namespaced principal AND a legacy bare-login row so a GitHub
         # friend keeps access to renders recorded before the namespace change.
-        values = principal_match_values(friend_login)
-        placeholders = ", ".join("?" * len(values))
+        placeholders, values = principal_in_clause(friend_login)
         with self._connect() as conn:
             row = conn.execute(
                 f"SELECT 1 FROM generated_receipts "

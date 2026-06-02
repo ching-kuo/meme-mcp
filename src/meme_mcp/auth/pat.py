@@ -9,7 +9,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
-from meme_mcp.auth.authorization import normalize_principal, principal_match_values
+from meme_mcp.auth.authorization import (
+    normalize_principal,
+    principal_in_clause,
+    principal_match_values,
+)
 
 Capability = Literal["read", "readwrite"]
 PatStatusState = Literal["none", "active", "expired", "revoked"]
@@ -104,8 +108,7 @@ class SQLitePatStore:
         # so a reissue supersedes the friend's pre-namespace PAT and the
         # single-active-PAT invariant holds across the namespace boundary.
         principal = normalize_principal(friend_login)
-        values = principal_match_values(principal)
-        placeholders = ", ".join("?" * len(values))
+        placeholders, values = principal_in_clause(principal)
         with self._connect() as conn:
             conn.execute(
                 f"UPDATE pats SET revoked_at = ? "
@@ -164,8 +167,7 @@ class SQLitePatStore:
 
     def revoke_active(self, friend_login: str) -> bool:
         now = self._clock()
-        values = principal_match_values(normalize_principal(friend_login))
-        placeholders = ", ".join("?" * len(values))
+        placeholders, values = principal_in_clause(friend_login)
         with self._connect() as conn:
             row = conn.execute(
                 f"""
@@ -189,8 +191,7 @@ class SQLitePatStore:
 
     def current_status(self, friend_login: str) -> PatStatus:
         now = self._clock()
-        values = principal_match_values(normalize_principal(friend_login))
-        placeholders = ", ".join("?" * len(values))
+        placeholders, values = principal_in_clause(friend_login)
         with self._connect() as conn:
             row = conn.execute(
                 f"""
@@ -339,8 +340,7 @@ def expires_at_for_login(store: SQLitePatStore, login: str) -> datetime | None:
     expiry banner; PAT-authenticated requests can surface a "renew soon" warning
     without paying a second pat_hash lookup.
     """
-    values = principal_match_values(normalize_principal(login))
-    placeholders = ", ".join("?" * len(values))
+    placeholders, values = principal_in_clause(login)
     with store._connect() as conn:
         row = conn.execute(
             f"""

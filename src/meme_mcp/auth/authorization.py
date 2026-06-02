@@ -102,6 +102,17 @@ def principal_match_values(value: str) -> tuple[str, ...]:
     return tuple(values)
 
 
+def principal_in_clause(value: str) -> tuple[str, tuple[str, ...]]:
+    """SQL ``IN`` placeholders + bind values for every stored form of a principal.
+
+    Returns e.g. ``("?, ?", ("github:bob", "bob"))`` so a parameterized query can
+    match the namespaced principal and its legacy bare row in one clause without
+    each store hand-rolling the placeholder string.
+    """
+    values = principal_match_values(value)
+    return ", ".join("?" * len(values)), values
+
+
 def display_label(principal: str, pin_store: SupportsPinLookup | None = None) -> str:
     """Human-facing label for a principal.
 

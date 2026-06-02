@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from meme_mcp.auth.authorization import principal_match_values
+from meme_mcp.auth.authorization import principal_in_clause
 
 DEFAULT_TTL = timedelta(hours=24)
 
@@ -136,8 +136,7 @@ class PendingUploadStore:
 
     def get(self, upload_id: str, friend_login: str) -> PendingUpload:
         now_iso = self._clock().isoformat()
-        values = principal_match_values(friend_login)
-        placeholders = ", ".join("?" * len(values))
+        placeholders, values = principal_in_clause(friend_login)
         with self._connect() as conn:
             row = conn.execute(
                 f"""
@@ -176,8 +175,7 @@ class PendingUploadStore:
         another friend's pending row. Unlike delete(upload_id), this is scoped
         to the owning login.
         """
-        values = principal_match_values(friend_login)
-        placeholders = ", ".join("?" * len(values))
+        placeholders, values = principal_in_clause(friend_login)
         with self._connect() as conn:
             row = conn.execute(
                 f"SELECT image_path FROM pending_uploads "

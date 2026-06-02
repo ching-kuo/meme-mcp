@@ -277,22 +277,24 @@ def _run_pat(args: argparse.Namespace, settings: Settings) -> int:
 def _run_pin(args: argparse.Namespace, settings: Settings) -> int:
     db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
     store = SQLiteGooglePinStore(db_path)
+    def _print_pins(rows: list[tuple[str, str, str]]) -> None:
+        for sub, email, created_at in rows:
+            print(f"{email}\tgoogle:{sub}\t{created_at}")
+
     if args.pin_command == "show":
         canonical = canonical_email(args.email)
         matches = [pin for pin in store.all_pins() if pin[1] == canonical]
         if not matches:
             print(f"no pin for {args.email}")
-            return 0
-        for sub, email, created_at in matches:
-            print(f"{email}\tgoogle:{sub}\t{created_at}")
+        else:
+            _print_pins(matches)
         return 0
     if args.pin_command == "list":
         pins = store.all_pins()
         if not pins:
             print("no pins")
-            return 0
-        for sub, email, created_at in pins:
-            print(f"{email}\tgoogle:{sub}\t{created_at}")
+        else:
+            _print_pins(pins)
         return 0
     if args.pin_command == "revoke":
         identifier = args.identifier
