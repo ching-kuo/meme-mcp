@@ -117,9 +117,21 @@ def test_switch_preserves_query_round_trip(tmp_path) -> None:
 def test_switch_open_redirect_falls_back(tmp_path) -> None:
     client = TestClient(create_app(good_settings(tmp_path)))
 
-    for bad in ("//evil.com", "https://evil.com"):
+    # Includes percent-encoded and scheme-bearing forms so the request-decoding
+    # path (request.query_params decodes before safe_lang_return sees it) is
+    # exercised, not just the already-decoded literals.
+    attacker_forms = (
+        "//evil.com",
+        "https://evil.com",
+        "%2F%2Fevil.com",  # decodes to //evil.com
+        "%2f%2fevil.com",
+        "/%5Cevil",  # decodes to /\evil (backslash trick)
+        "data:text/html,evil",
+        "https%3A%2F%2Fevil.com",
+    )
+    for bad in attacker_forms:
         response = client.get(f"/lang/en?next={bad}", follow_redirects=False)
-        assert response.headers["location"] == "/"
+        assert response.headers["location"] == "/", f"open redirect not blocked: {bad}"
 
 
 def test_cookie_attributes_on_localhost(tmp_path) -> None:

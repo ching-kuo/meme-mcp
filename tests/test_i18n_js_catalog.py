@@ -55,6 +55,23 @@ def test_js_catalog_json_escapes_script_breakout(monkeypatch) -> None:
     assert json.loads(rendered)["js.x"] == "</script><!--"
 
 
+def test_blob_cannot_break_out_in_rendered_page(tmp_path, monkeypatch) -> None:
+    # Render-level guard: a mixed-case </ScRiPt> payload (HTML tag matching is
+    # case-insensitive) must not produce a second closing tag in the actual page.
+    monkeypatch.setattr(
+        core, "MESSAGES", {"js.x": {"en": "</ScRiPt><sCript>alert(1)", "zh-TW": "x"}}
+    )
+    client = TestClient(create_app(good_settings(tmp_path)))
+
+    text = client.get("/", headers={"Accept-Language": "en"}).text
+
+    blobs = BLOB_RE.findall(text)
+    assert len(blobs) == 1, "catalog value broke out into a second script element"
+    assert "</ScRiPt>" not in blobs[0]
+    assert "\\u003c" in blobs[0]
+    assert json.loads(blobs[0])["js.x"] == "</ScRiPt><sCript>alert(1)"
+
+
 # ---------------------------------------------------------------------------
 # Rendered blob + script ordering
 # ---------------------------------------------------------------------------

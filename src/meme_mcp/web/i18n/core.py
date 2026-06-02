@@ -101,13 +101,15 @@ def _interpolate(template: str, kwargs: dict[str, object]) -> str:
     """Apply ``str.format`` defensively; return the raw string on any mismatch.
 
     A missing placeholder (``KeyError``), a positional/index slip
-    (``IndexError``), or a malformed spec (``ValueError``) degrades to the
-    unformatted string rather than raising -- a display bug, never a 500.
+    (``IndexError``), a malformed spec (``ValueError``), or a type-mismatched
+    conversion (``TypeError`` -- e.g. a ``{x:d}`` spec applied to a non-int)
+    degrades to the unformatted string rather than raising -- a display bug,
+    never a 500.
     """
 
     try:
         return template.format(**kwargs)
-    except (KeyError, IndexError, ValueError):
+    except (KeyError, IndexError, ValueError, TypeError):
         return template
 
 

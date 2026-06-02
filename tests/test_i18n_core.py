@@ -114,6 +114,14 @@ def test_t_robust_to_extra_kwarg(monkeypatch: pytest.MonkeyPatch) -> None:
     assert t("x", "en", name="Ada") == "no placeholders"
 
 
+def test_t_robust_to_type_mismatched_spec(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A numeric format spec applied to a non-int raises TypeError in str.format;
+    # it must degrade to the raw string, not 500.
+    monkeypatch.setattr(core, "MESSAGES", {"x": {"en": "n={n:d}", "zh-TW": "n={n:d}"}})
+
+    assert t("x", "en", n="not-an-int") == "n={n:d}"
+
+
 # ---------------------------------------------------------------------------
 # plural()
 # ---------------------------------------------------------------------------
