@@ -30,6 +30,7 @@ from meme_mcp.audit.sink import JsonlAuditSink
 from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.authorization import display_login, is_authorized, normalize_principal
 from meme_mcp.auth.depends import require_write
+from meme_mcp.auth.google_pins import SQLiteGooglePinStore
 from meme_mcp.auth.pat import SQLitePatStore, expires_at_for_login
 from meme_mcp.auth.session import (
     friend_from_header,
@@ -357,6 +358,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         run_migrations(settings)
         db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
         app.state.pat_store = SQLitePatStore(db_path)
+        # Google sub->email pins. Held by app.state so the three front doors read
+        # live pin state per request (the is_authorized google branch consults it).
+        app.state.pin_store = SQLiteGooglePinStore(db_path)
         app.state.receipts = ReceiptStore(db_path)
         app.state.outcomes = OutcomeEventStore(db_path)
         app.state.templates = SQLiteTemplateRepository(db_path)
@@ -405,6 +409,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             AppMCPBackend(app),
             allowed_hosts=settings.mcp_allowed_hosts,
             allowed_origins=settings.mcp_allowed_origins,
+            pin_store=app.state.pin_store,
         )
         auth_settings = app.state.mcp_server.settings.auth
         if auth_settings is not None and auth_settings.resource_server_url is not None:

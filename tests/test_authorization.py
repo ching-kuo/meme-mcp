@@ -86,10 +86,36 @@ def test_is_authorized_github_consults_allowlist_with_bare_login() -> None:
 
 
 def test_is_authorized_google_denied_without_pin_store() -> None:
-    # The google: branch is completed in U6; until a pin store is supplied a
-    # Google principal is never authorized.
+    # Until a pin store is supplied a Google principal is never authorized.
     allow = _StubAllowlist("google:alice@gmail.com")
     assert is_authorized("google:11769", allowlist=allow) is False
+
+
+class _StubPinStore:
+    def __init__(self, **sub_to_email: str) -> None:
+        self._pins = sub_to_email
+
+    def email_for_sub(self, sub: str) -> str | None:
+        return self._pins.get(sub)
+
+
+def test_is_authorized_google_pinned_and_allowlisted() -> None:
+    allow = _StubAllowlist("google:alice@gmail.com")
+    pins = _StubPinStore(sub11769="alice@gmail.com")
+    assert is_authorized("google:sub11769", allowlist=allow, pin_store=pins) is True
+
+
+def test_is_authorized_google_pinned_but_not_allowlisted_denied() -> None:
+    # Pin exists but the pinned mailbox is no longer allowlisted (de-invited).
+    allow = _StubAllowlist()
+    pins = _StubPinStore(sub11769="alice@gmail.com")
+    assert is_authorized("google:sub11769", allowlist=allow, pin_store=pins) is False
+
+
+def test_is_authorized_google_unpinned_sub_denied() -> None:
+    allow = _StubAllowlist("google:alice@gmail.com")
+    pins = _StubPinStore()  # no pin for this sub
+    assert is_authorized("google:sub11769", allowlist=allow, pin_store=pins) is False
 
 
 # --- require_operator (normalized comparison) ----------------------------------

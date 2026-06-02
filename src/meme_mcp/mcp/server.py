@@ -122,6 +122,7 @@ def create_mcp_server(
     backend: MCPBackend | None = None,
     allowed_hosts: list[str] | None = None,
     allowed_origins: list[str] | None = None,
+    pin_store: SupportsPinLookup | None = None,
 ) -> FastMCP:
     # The Streamable HTTP transport runs a DNS-rebinding guard that rejects any
     # Host/Origin not on its allowlist with 421. FastMCP only auto-populates that
@@ -141,7 +142,7 @@ def create_mcp_server(
     mcp = FastMCP(
         "meme-mcp",
         instructions="Find and render private meme templates.",
-        token_verifier=PatTokenVerifier(pat_store, allowlist, pepper),
+        token_verifier=PatTokenVerifier(pat_store, allowlist, pepper, pin_store),
         json_response=True,
         stateless_http=True,
         streamable_http_path="/",

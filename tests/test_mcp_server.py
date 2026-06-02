@@ -64,6 +64,31 @@ async def test_pat_token_verifier_scopes_derive_from_capability(tmp_path) -> Non
     assert readwrite_access.scopes == ["meme:read", "meme:write"]
 
 
+async def test_pat_token_verifier_authorizes_google_pat_over_transport(tmp_path) -> None:
+    """AE4 + R12: a Google friend's PAT (subject google:<sub>) authenticates over
+    the MCP transport identically to a GitHub friend's, resolving authorization
+    through the pin store; deleting the pin denies the very next request.
+    """
+    from meme_mcp.auth.allowlist import FileAllowlist
+    from meme_mcp.auth.google_pins import SQLiteGooglePinStore
+
+    store = SQLitePatStore(tmp_path / "auth.db")
+    pins = SQLiteGooglePinStore(tmp_path / "pins.db")
+    pins.create_pin("sub-A", "alice@gmail.com")
+    allow = FileAllowlist(tmp_path / "allowlist.txt")
+    allow.add("google:alice@gmail.com")
+    token = issue_pat(store, "google:sub-A", "pepper")
+
+    verifier = PatTokenVerifier(store, allow, "pepper", pins)
+    access = await verifier.verify_token(token)
+    assert access is not None
+    assert access.client_id == "google:sub-A"
+
+    # R12: terminal pin eviction denies the next transport request (no caching).
+    pins.delete_by_sub("sub-A")
+    assert await verifier.verify_token(token) is None
+
+
 def test_create_mcp_server_registers_official_fastmcp_tools(tmp_path) -> None:
     store = SQLitePatStore(tmp_path / "auth.db")
     server = create_mcp_server(store, {"alice"}, "pepper", "http://localhost:8000")

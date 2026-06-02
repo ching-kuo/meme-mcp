@@ -132,5 +132,17 @@ def is_authorized(
         # is_authorized passes the bare login; the allowlist scopes it to GitHub
         # (bare and ``github:`` entries) once it is provider-aware (U3).
         return bool(subject) and allowlist.is_allowlisted(subject)
-    # google: branch is implemented in U6 (pin lookup + allowlist on the mailbox).
+    if provider == "google":
+        # A Google principal is google:<sub>. Resolve the immutable sub to its
+        # pinned mailbox, then authorize that mailbox against the allowlist. A
+        # missing pin store (Google off) or an unpinned sub is unauthorized. The
+        # pinned email -- the operator's original invite -- is what is checked, so
+        # a friend whose Gmail was renamed is still authorized (drift survives on
+        # the sub).
+        if pin_store is None or not subject:
+            return False
+        email = pin_store.email_for_sub(subject)
+        if email is None:
+            return False
+        return allowlist.is_allowlisted(f"google:{email}")
     return False
