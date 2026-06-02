@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block body %}
+  <main class="landing">
+    <h1>{{ t("login.heading") }}</h1>
+    <p>{{ t("login.prompt") }}</p>
+    <p class="cta-row">
+      <a class="cta cta-primary" href="/auth/login?provider=github&next={{ next_target|urlencode }}">{{ t("login.github") }}</a>
+      <a class="cta" href="/auth/google/login?next={{ next_target|urlencode }}">{{ t("login.google") }}</a>
+    </p>
+  </main>
+{% endblock %}

@@ -55,6 +55,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "with a bearer PAT. See the README for client snippets.",
         "zh-TW": "。用戶端程式碼範例請見 README。",
     },
+    # --- login.html (provider chooser) ---------------------------------------
+    "login.heading": {"en": "Sign in", "zh-TW": "登入"},
+    "login.prompt": {
+        "en": "Choose how you would like to sign in.",
+        "zh-TW": "請選擇登入方式。",
+    },
+    "login.github": {"en": "Sign in with GitHub", "zh-TW": "使用 GitHub 登入"},
+    "login.google": {"en": "Sign in with Google", "zh-TW": "使用 Google 登入"},
     # --- restricted.html -----------------------------------------------------
     "restricted.heading": {"en": "Access restricted", "zh-TW": "存取受限"},
     "restricted.body": {

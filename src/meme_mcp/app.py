@@ -30,6 +30,7 @@ from meme_mcp.audit.sink import JsonlAuditSink
 from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.authorization import display_login, is_authorized, normalize_principal
 from meme_mcp.auth.depends import require_write
+from meme_mcp.auth.google_oauth import GoogleOAuth
 from meme_mcp.auth.google_pins import SQLiteGooglePinStore
 from meme_mcp.auth.pat import SQLitePatStore, expires_at_for_login
 from meme_mcp.auth.session import (
@@ -549,9 +550,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.get("/auth/login")
-    async def auth_login(request: Request) -> RedirectResponse:
+    async def auth_login(request: Request) -> Response:
         if not hasattr(app.state, "settings"):
             raise MemeMCPError(ErrorCode.UNAUTHORIZED, [])
+        # When Google sign-in is enabled, /auth/login is a provider chooser so a
+        # protected-page redirect (/browse, /upload) can reach either provider;
+        # an explicit ?provider=github starts the GitHub flow from the chooser.
+        # GitHub-only deploys are unchanged (straight to GitHub).
+        if (
+            app.state.settings.google_oauth_enabled
+            and request.query_params.get("provider") != "github"
+        ):
+            return templates.TemplateResponse(
+                request,
+                "login.html",
+                {
+                    "next_target": safe_next(request.query_params.get("next")),
+                    "web_session": False,
+                    "friend_login": None,
+                    "pat_expires_in_days": None,
+                },
+            )
         state = secrets.token_urlsafe(24)
         verifier = secrets.token_urlsafe(48)
         request.session["oauth_state"] = state
@@ -613,6 +632,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # The session key is unchanged for back-compat, but it now carries the
         # namespaced principal (github:<login>); session_login normalizes either
         # form on read.
+        request.session["github_login"] = principal
+        return RedirectResponse(target, status_code=303)
+
+    @app.get("/auth/google/login")
+    async def auth_google_login(request: Request) -> Response:
+        # Authlib generates and stores state, nonce, and the PKCE S256 challenge
+        # in the session; the redirect URI is the canonical serving origin's
+        # /auth/google/callback (validated at startup to match the public origin).
+        if not hasattr(app.state, "settings"):
+            raise MemeMCPError(ErrorCode.UNAUTHORIZED, [])
+        request.session["post_login_next"] = safe_next(request.query_params.get("next"))
+        oauth: GoogleOAuth = app.state.google_oauth
+        return await oauth.authorize_redirect(request, app.state.settings.google_redirect_uri)
+
+    @app.get("/auth/google/callback")
+    async def auth_google_callback(request: Request) -> Response:
+        if not hasattr(app.state, "settings"):
+            raise MemeMCPError(ErrorCode.UNAUTHORIZED, [])
+        # authorize_access_token validates state, the id_token, and the nonce;
+        # the authz-bearing claims are read from the validated id_token, never a
+        # separate /userinfo fetch.
+        oauth: GoogleOAuth = app.state.google_oauth
+        identity = await oauth.resolve_identity(request)
+        # First gate (always): strictly-boolean email_verified AND an @gmail.com
+        # address (email_verified is only authoritative for Gmail). Reject with no
+        # session before any allowlist or pin work. The string forms Google has
+        # historically emitted ("true"/"false") are rejected by the `is True`
+        # check (R15).
+        email = (identity.email or "").strip().lower()
+        if identity.email_verified is not True or not email.endswith("@gmail.com"):
+            return _google_restricted(app, request)
+        principal = _resolve_google_principal(app, identity.subject, email)
+        if principal is None:
+            return _google_restricted(app, request)
+        target = safe_next(request.session.get("post_login_next"))
+        # Regenerate the session on success (OWASP session-fixation). authorize_
+        # access_token already consumed Authlib's in-flight state/nonce keys, so
+        # clearing here is safe.
+        request.session.clear()
         request.session["github_login"] = principal
         return RedirectResponse(target, status_code=303)
 
@@ -965,6 +1023,59 @@ def _duplicate_index(app: FastAPI) -> DuplicateIndex:
     for template in app.state.templates.list_rows():
         index.add(template.template_id, template.exact_hash, template.perceptual_hash)
     return index
+
+
+def _google_restricted(app: FastAPI, request: Request) -> Response:
+    """403 restricted page for a rejected Google sign-in, no session established.
+
+    Passes ``operator_github_login=None`` so the Google path never leaks the
+    operator's GitHub handle (the provider-agnostic wording lands in U7).
+    """
+    return cast(
+        Response,
+        app.state.web_templates.TemplateResponse(
+            request,
+            "restricted.html",
+            {
+                "operator_github_login": None,
+                "pat_expires_in_days": None,
+                "friend_login": None,
+                "web_session": False,
+            },
+            status_code=403,
+        ),
+    )
+
+
+def _resolve_google_principal(app: FastAPI, sub: str, email: str) -> str | None:
+    """Pin-first authorization for a verified Gmail sign-in (U6).
+
+    Returning friend (a pin exists for ``sub``): authorize on the immutable sub
+    via the shared predicate -- the pinned email (the operator's invite) is what
+    is checked, so a Gmail rename does not 403. First-timer (no pin): require the
+    claim email to be currently allowlisted, then create the pin; the ``email
+    UNIQUE`` constraint enforces first-sign-in-wins (a second sub for an
+    already-pinned email is rejected). Returns the ``google:<sub>`` principal on
+    success, else None.
+    """
+    if not sub:
+        return None
+    principal = f"google:{sub}"
+    pin_store = app.state.pin_store
+    allowlist = app.state.web_allowlist
+    if pin_store.email_for_sub(sub) is not None:
+        # Returning friend: resolve authorization by the sub-pin, NOT the live
+        # claim email (the drift case).
+        if is_authorized(principal, allowlist=allowlist, pin_store=pin_store):
+            return principal
+        return None
+    # First sign-in: the verified claim email must be currently allowlisted.
+    if not allowlist.is_allowlisted(f"google:{email}"):
+        return None
+    if not pin_store.create_pin(sub, email):
+        # email UNIQUE rejected the pin: already bound to another sub.
+        return None
+    return principal
 
 
 def _make_google_oauth(settings: Settings) -> object:
