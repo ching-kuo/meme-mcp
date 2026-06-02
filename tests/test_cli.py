@@ -483,3 +483,90 @@ def test_gc_uploads_s3_backend_retains_template_referenced_blob(tmp_path) -> Non
 
         assert _blob_exists(store, path)
         assert PendingUploadStore(db).expired() == []
+
+
+# --- U8: provider-aware CLI ---------------------------------------------------
+
+
+def _pin_store(tmp_path):
+    from pathlib import Path
+
+    from meme_mcp.auth.google_pins import SQLiteGooglePinStore
+    from meme_mcp.db.engine import sqlite_path
+
+    s = settings(tmp_path)
+    return SQLiteGooglePinStore(sqlite_path(s.database_url, Path(s.storage_dir) / "meme.db"))
+
+
+def test_allowlist_cli_adds_google_namespaced_entry(tmp_path, capsys) -> None:
+    s = settings(tmp_path)
+    assert run(["allowlist", "add", "google:friend@gmail.com"], s) == 0
+    assert run(["allowlist", "add", "bob"], s) == 0
+    assert run(["allowlist", "list"], s) == 0
+    listed = capsys.readouterr().out
+    assert "google:friend@gmail.com" in listed
+    assert "bob" in listed
+
+
+def test_allowlist_cli_rejects_bare_email(tmp_path, capsys) -> None:
+    s = settings(tmp_path)
+    assert run(["allowlist", "add", "friend@gmail.com"], s) == 2
+    assert "google:friend@gmail.com" in capsys.readouterr().out
+
+
+def test_allowlist_cli_provider_flag_prefixes(tmp_path, capsys) -> None:
+    s = settings(tmp_path)
+    assert run(["allowlist", "add", "friend@gmail.com", "--provider", "google"], s) == 0
+    run(["allowlist", "list"], s)
+    assert "google:friend@gmail.com" in capsys.readouterr().out
+
+
+def test_pat_cli_issue_for_pinned_google_friend(tmp_path, capsys) -> None:
+    s = settings(tmp_path)
+    _pin_store(tmp_path).create_pin("sub-A", "alice@gmail.com")
+    assert run(["pat", "issue", "alice@gmail.com"], s) == 0
+    token = capsys.readouterr().out.strip()
+    store = SQLitePatStore(tmp_path / "meme.db")
+    assert verify_pat(store, token, s.pat_hash_pepper.get_secret_value()) == (
+        "google:sub-A",
+        "readwrite",
+    )
+
+
+def test_pat_cli_issue_unpinned_google_fails(tmp_path, capsys) -> None:
+    s = settings(tmp_path)
+    assert run(["pat", "issue", "stranger@gmail.com"], s) == 2
+    assert "sign in with Google" in capsys.readouterr().out
+
+
+def test_pin_cli_show_and_revoke(tmp_path, capsys) -> None:
+    s = settings(tmp_path)
+    pins = _pin_store(tmp_path)
+    pins.create_pin("sub-A", "alice@gmail.com")
+    assert run(["pin", "show", "alice@gmail.com"], s) == 0
+    assert "google:sub-A" in capsys.readouterr().out
+    assert run(["pin", "revoke", "alice@gmail.com"], s) == 0
+    assert "revoked" in capsys.readouterr().out
+    assert pins.email_for_sub("sub-A") is None
+
+
+def test_allowlist_remove_google_deletes_pin(tmp_path) -> None:
+    # R13: removing the invite also evicts the pin so a re-invite cannot
+    # reactivate the previously pinned sub.
+    s = settings(tmp_path)
+    run(["allowlist", "add", "google:alice@gmail.com"], s)
+    pins = _pin_store(tmp_path)
+    pins.create_pin("sub-A", "alice@gmail.com")
+    assert run(["allowlist", "remove", "google:alice@gmail.com"], s) == 0
+    assert pins.email_for_sub("sub-A") is None
+
+
+def test_pat_revoke_google_sub_after_pin_gone(tmp_path, capsys) -> None:
+    s = settings(tmp_path)
+    pins = _pin_store(tmp_path)
+    pins.create_pin("sub-A", "alice@gmail.com")
+    run(["pat", "issue", "alice@gmail.com"], s)
+    capsys.readouterr()
+    pins.delete_by_sub("sub-A")  # pin gone; email->sub no longer resolves
+    assert run(["pat", "revoke", "google:sub-A"], s) == 0
+    assert "revoked" in capsys.readouterr().out

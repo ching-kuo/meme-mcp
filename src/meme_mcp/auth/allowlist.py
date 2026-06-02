@@ -9,7 +9,7 @@ from pathlib import Path
 _GMAIL_DOMAINS = ("gmail.com", "googlemail.com")
 
 
-def _canonical_email(email: str) -> str:
+def canonical_email(email: str) -> str:
     """Canonical mailbox for allowlist comparison (Gmail-aware).
 
     Lowercases the whole address; for Gmail/googlemail, strips dots from the
@@ -57,7 +57,7 @@ class FileAllowlist:
         if provider == "github":
             return subject.strip().lower() in github_entries
         if provider == "google":
-            return _canonical_email(subject) in google_entries
+            return canonical_email(subject) in google_entries
         return False
 
     def __contains__(self, value: object) -> bool:
@@ -79,7 +79,7 @@ class FileAllowlist:
             elif provider.lower() == "github":
                 github.add(subject.strip().lower())
             elif provider.lower() == "google":
-                google.add(_canonical_email(subject))
+                google.add(canonical_email(subject))
         return github, google
 
     def entries(self) -> list[str]:

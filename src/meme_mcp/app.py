@@ -27,7 +27,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from meme_mcp.audit.sink import JsonlAuditSink
-from meme_mcp.auth.allowlist import FileAllowlist
+from meme_mcp.auth.allowlist import FileAllowlist, canonical_email
 from meme_mcp.auth.authorization import display_label, is_authorized, normalize_principal
 from meme_mcp.auth.depends import require_write
 from meme_mcp.auth.google_oauth import GoogleOAuth
@@ -1074,10 +1074,13 @@ def _resolve_google_principal(app: FastAPI, sub: str, email: str) -> str | None:
         if is_authorized(principal, allowlist=allowlist, pin_store=pin_store):
             return principal
         return None
-    # First sign-in: the verified claim email must be currently allowlisted.
-    if not allowlist.is_allowlisted(f"google:{email}"):
+    # First sign-in: the verified claim email must be currently allowlisted. Pin
+    # the CANONICAL mailbox so a later `allowlist remove`/`pin revoke` (R13) can
+    # match it by the operator's invited address regardless of dot/+ variants.
+    canonical = canonical_email(email)
+    if not allowlist.is_allowlisted(f"google:{canonical}"):
         return None
-    if not pin_store.create_pin(sub, email):
+    if not pin_store.create_pin(sub, canonical):
         # email UNIQUE rejected the pin: already bound to another sub.
         return None
     return principal
