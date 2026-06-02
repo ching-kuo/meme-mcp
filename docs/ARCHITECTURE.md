@@ -254,6 +254,63 @@ white panels with inherited text and went unreadable in dark mode).
   The page otherwise renders only the non-secret status (`current_status`): state badge, scope,
   expiry, last-used.
 
+## Bilingual UI (i18n)
+
+The web UI renders in English or Traditional Chinese (`zh-TW`). The whole layer lives in
+`web/i18n/` and adds no runtime dependency and no build step (KTD1): `catalog.py` is a typed
+`MESSAGES: dict[str, dict[str, str]]` keyed by a dotted message id, each carrying an `en` and a
+`zh-TW` string, and it is the single source of truth for both server-rendered templates and the
+client-side JS strings. `core.py` is the pure engine — `resolve_locale`, `t`, `plural`,
+`js_catalog`, and two lint helpers — with no Starlette coupling beyond a type-only import.
+
+- **Locale precedence (one place only):** `resolve_locale(request)` reads the `lang` cookie first
+  and honors it when it names a supported locale; otherwise it negotiates `Accept-Language`
+  (`negotiate_accept_language`: `zh*` → `zh-TW`, `en*` → `en`, `q=0` dropped per RFC 7231, no match
+  → `None`); otherwise it returns `DEFAULT = "en"`. The manual switch is the load-bearing mechanism
+  and auto-detect is best-effort: `Accept-Language` is the browser's advertised language, not the
+  OS, so a `zh-TW` reader on an en-locale browser lands on English first and is served by the
+  always-visible switch, not by detection.
+- **Injection via context processor (no per-route plumbing, KTD3):** `_i18n_context` in `app.py` is
+  attached to the shared `Jinja2Templates` instance (the same one `pat_routes.py` reuses via
+  `app.state.web_templates`), so every `TemplateResponse` receives `t`/`plural` bound to the
+  resolved locale plus `locale`, `supported_locales`, and `js_catalog_json` — the per-route context
+  dicts are untouched. `LocaleVaryMiddleware` adds `Vary: Cookie, Accept-Language` to HTML
+  responses so a future CDN keys cached pages on the locale signals.
+- **`t()` fallback and interpolation:** lookup resolves `MESSAGES[key][locale]`, falling back to the
+  `en` string and then to the literal key (R5 — a defensive path the guard tests catch, never a
+  shipped state, since `check_completeness` requires both locales for every key). Interpolation uses
+  `str.format` wrapped to degrade to the unformatted string on a typo/mismatch rather than 500.
+  Catalog values may use **named placeholders only** (`{count}`); `lint_placeholders` rejects
+  positional/attribute/index access, closing the format-string injection surface (KTD4).
+- **Manual switch:** `GET /lang/{locale}` validates the locale against `SUPPORTED`, sets the `lang`
+  cookie (`Path=/`, `Max-Age` ~1yr, `SameSite=Lax`, `HttpOnly`, `Secure` off only on localhost —
+  mirroring the session cookie), and 303-redirects to a validated relative target. `safe_lang_return`
+  in `web/csrf.py` is a thin parameterized delegate of `safe_next` (same anti-open-redirect core,
+  one implementation) with the switch's own all-rendered-pages allowlist (including the landing `/`,
+  which the login allowlist omits) and query preservation so a switch on a search page keeps the
+  query. The switch is a plain GET that sets a non-sensitive preference cookie, so it needs no CSRF
+  token; the trade-off (a cross-site GET can force a wrong UI language, one-click-correctable) is an
+  explicitly accepted risk. The switcher control (`base.html`) renders before/outside the
+  `web_session` nav guard with own-script autonym labels, so it is identical and comprehensible on
+  anonymous and signed-in pages alike.
+- **Client JS (KTD6):** `base.html` emits the active locale's `js.*` catalog subset as a
+  `<script type="application/json" id="i18n-catalog">` blob plus a tiny bootstrap that parses it into
+  `window.I18N` and exposes a `t(key, vars)` mirroring the server interpolation contract — both in
+  `<head>` before the deferred `account.js`/`upload.js`, so `window.I18N` is defined when they run.
+  `account.js`/`upload.js` read every user-facing string through `t()`; account token status enum
+  values (`state`/`scope`/`none`/`never`) localize at the display layer from the same `js.token.*`
+  keys the server uses, so first paint and AJAX re-render agree (the API contract and stored values
+  are unchanged). The blob serializer escapes every `<` to `<` (`_js_catalog_json`) so a catalog
+  value containing `</script>` cannot break out of the tag; `JSON.parse` restores it.
+- **Coverage guards:** mechanical tests keep the catalog in lockstep (`check_completeness`), forbid
+  raw keys in rendered output, check every catalog key is referenced (orphan check), and grep both
+  templates and JS for known pre-existing English literals left outside a `t(...)`/`I18N` lookup —
+  the load-bearing guards against a half-translated UI, since presence/completeness tests cannot
+  catch a string silently left hardcoded. Translation *correctness* (vs. mere key presence) is gated
+  by a native `zh-TW` review before shipping, not by the mechanical tests. Scope is UI chrome only —
+  friend-authored template names, descriptions, and tags are left as authored, and locale-aware date
+  formatting is deferred.
+
 ## Reverse-image enrichment
 
 `reverse_image/client.py` (`GoogleVisionClient`) is an optional, deploy-gated step inserted into

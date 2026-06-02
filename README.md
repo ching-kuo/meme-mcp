@@ -171,6 +171,21 @@ service, `mcp-remote@0.1.38` under Node 26 intermittently failed with
 and endpoint returned `200 OK` via plain `curl`. Running the same `mcp-remote`
 command under Node 24/22 succeeded without server changes.
 
+## Bilingual UI (en / zh-TW)
+
+The web UI is available in English and Traditional Chinese (`zh-TW`). A language
+switch is shown on every page (labelled with each language's own name, so it is
+usable even if you cannot read the current one); the choice is stored in a
+`lang` cookie that persists across sessions and wins over the browser's
+`Accept-Language` header on every later request. On a first visit with no cookie,
+the language is best-effort auto-detected from `Accept-Language` (this reflects
+the browser's advertised language, not the OS, so the always-visible switch is
+the real guarantee). Translations live in a single dict catalog
+(`src/meme_mcp/web/i18n/catalog.py`) that serves both server-rendered templates
+and client-side JS strings; no build step or new runtime dependency is added.
+Only UI chrome is translated — template names, descriptions, tags, and other
+friend-authored content are left as authored.
+
 ## Development verification
 
 ```bash
