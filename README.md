@@ -46,10 +46,13 @@ parity: browse, generate, upload, self-service PATs, and MCP client auth.
   `sub` to the invited mailbox; PATs and audit bind to `google:<sub>`, not the email, so a Gmail
   rename does not lock them out. The first verified, allowlisted sign-in for an invited email wins
   the pin.
-- **Wrong/poisoned pin remediation:** `meme-mcp pin show <email>` to inspect the pinned `sub`, then
-  `meme-mcp pin revoke <email>` (or `meme-mcp allowlist remove google:<email>`) to evict it, then
-  re-invite and confirm the new `sub` on the friend's next sign-in. Eviction is terminal: a
-  re-invite requires a fresh first sign-in and cannot reactivate the old `sub`.
+- **Wrong/poisoned pin remediation:** `meme-mcp pin show <email>` inspects the pinned `sub`;
+  `meme-mcp pin revoke <email>` evicts it. `pin revoke` is a *rotation* tool — it deletes the pin
+  but leaves the invite, so the next sign-in re-pins (confirm the intended `sub` with `pin show`,
+  and re-revoke if the wrong account won again). To **deny access entirely**, remove the invite with
+  `meme-mcp allowlist remove google:<email>` (this deletes the pin too); the account stays out until
+  you re-add the invite. A deleted pin is never silently re-authorized — re-admitting always takes a
+  fresh interactive sign-in.
 
 ### Reverse-image enrichment (optional, off by default)
 

@@ -62,6 +62,18 @@ def test_r16_canonicalization_is_symmetric_on_the_stored_entry(tmp_path: Path) -
     assert allow.is_allowlisted("google:alice@googlemail.com") is True
 
 
+def test_google_alias_invite_is_removable_by_canonical_form(tmp_path: Path) -> None:
+    # Regression: an alias invite must be stored canonically so a de-invite by the
+    # plain mailbox actually removes it (otherwise the invite silently survives and
+    # keeps authorizing the account after removal).
+    allow = FileAllowlist(tmp_path / "allowlist.txt")
+    allow.add("google:a.l.i.c.e+foo@gmail.com")
+    assert allow.is_allowlisted("google:alice@gmail.com") is True
+    allow.remove("google:alice@gmail.com")
+    assert allow.is_allowlisted("google:alice@gmail.com") is False
+    assert allow.entries() == []
+
+
 def test_add_and_remove_roundtrip(tmp_path: Path) -> None:
     allow = FileAllowlist(tmp_path / "allowlist.txt")
     allow.add("google:Friend@Gmail.com")

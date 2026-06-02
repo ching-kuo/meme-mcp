@@ -96,8 +96,22 @@ class FileAllowlist:
             if line.strip() and not line.startswith("#")
         })
 
-    def add(self, entry: str) -> None:
+    def _canonical_entry(self, entry: str) -> str:
+        """Stored form of an entry: a ``google:`` mailbox is canonicalized so add
+        and remove agree with ``is_allowlisted`` matching.
+
+        Without this, an alias invite (``google:a.l.i.c.e+x@gmail.com``) would be
+        stored verbatim but `remove google:alice@gmail.com` -- an exact-string
+        delete -- would miss it, leaving a live invite behind after a de-invite.
+        """
         value = entry.strip().lower()
+        provider, sep, subject = value.partition(":")
+        if sep and provider == "google":
+            return f"google:{canonical_email(subject)}"
+        return value
+
+    def add(self, entry: str) -> None:
+        value = self._canonical_entry(entry)
         if not value:
             return
         allowed = set(self.entries())
@@ -106,7 +120,7 @@ class FileAllowlist:
 
     def remove(self, entry: str) -> None:
         allowed = set(self.entries())
-        allowed.discard(entry.strip().lower())
+        allowed.discard(self._canonical_entry(entry))
         self._write(sorted(allowed))
 
     def _write(self, allowed: list[str]) -> None:

@@ -219,9 +219,15 @@ offered and the GitHub path is untouched.
   operator-friendly, with Gmail canonicalization (lowercase, strip local-part dots, drop `+suffix`)
   applied identically to the stored entry and the claim.
 
-- **Terminal revocation and the residual race (KTD).** `pin revoke` and `allowlist remove
-  google:<email>` both **delete the pin row**, so re-inviting an email requires a fresh first
-  sign-in and cannot reactivate a prior `sub` (R13). The accepted residual risk: because Gmail
+- **Terminal revocation and the residual race (KTD).** Both `pin revoke` and `allowlist remove
+  google:<email>` **delete the pin row**; the deleted pin is never silently re-authorized, so
+  re-establishing access always takes a fresh interactive sign-in (R13). The two differ by intent:
+  `allowlist remove` is the **de-invite / kick-out** path — it removes the invite *and* the pin, so
+  the account is denied for as long as the invite is absent (re-admitting requires the operator to
+  re-add the invite). `pin revoke` deletes the pin but **leaves the invite**, so it is a *rotation*
+  tool (evict a wrong first-sign-in-wins pin): the next sign-in re-pins, and if the invite still
+  stands the same `sub` can re-win it — the residual race re-applies until the operator confirms the
+  intended `sub` via `pin show`. The accepted residual risk: because Gmail
   addresses can be reclaimed, whoever first presents a verified, allowlisted Gmail wins the pin; the
   `@gmail.com` gate, terminal revocation, and operator inspection (`pin show`/`pin list`) are the
   mitigations, and the documented remediation for a wrong pin is revoke-pin → re-invite → confirm
