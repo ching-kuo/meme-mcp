@@ -5,6 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>meme-mcp</title>
     <link rel="stylesheet" href="/static/styles.css">
+    {# Active-locale JS catalog (KTD6). Parsed into window.I18N by the bootstrap
+       below, which also exposes t(key, vars) mirroring the server interpolation
+       contract. Emitted in <head> before the page's deferred account.js/upload.js
+       so window.I18N is defined when they run. #}
+    <script type="application/json" id="i18n-catalog">{{ js_catalog_json }}</script>
+    <script>
+      (function () {
+        var el = document.getElementById("i18n-catalog");
+        window.I18N = el ? JSON.parse(el.textContent) : {};
+        window.t = function (key, vars) {
+          var value = (window.I18N && window.I18N[key] != null) ? window.I18N[key] : key;
+          if (vars) {
+            value = value.replace(/\{(\w+)\}/g, function (match, name) {
+              return Object.prototype.hasOwnProperty.call(vars, name) ? vars[name] : match;
+            });
+          }
+          return value;
+        };
+      })();
+    </script>
     {% block head %}{% endblock %}
   </head>
   <body>

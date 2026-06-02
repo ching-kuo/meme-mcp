@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import secrets
 import time
 import warnings
@@ -18,6 +19,7 @@ from fastapi import FastAPI, Header, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 from PIL import Image
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.sessions import SessionMiddleware
@@ -55,7 +57,7 @@ from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pe
 from meme_mcp.vlm.client import VLMClient
 from meme_mcp.vlm.sanitize import sanitize_url
 from meme_mcp.web.csrf import ensure_csrf_token, require_csrf, safe_lang_return, safe_next
-from meme_mcp.web.i18n import COOKIE_NAME, SUPPORTED, plural, resolve_locale, t
+from meme_mcp.web.i18n import COOKIE_NAME, SUPPORTED, js_catalog, plural, resolve_locale, t
 from meme_mcp.web.pat_routes import register_pat_routes
 from meme_mcp.web.upload_routes import register_upload_routes
 
@@ -229,7 +231,22 @@ def _i18n_context(request: Request) -> dict[str, object]:
         "locale": locale,
         "supported_locales": SUPPORTED,
         "plural": partial(plural, locale=locale),
+        "js_catalog_json": _js_catalog_json(locale),
     }
+
+
+def _js_catalog_json(locale: str) -> Markup:
+    """Serialize the active locale's JS catalog for embedding in a <script> tag.
+
+    Jinja's HTML autoescaping does not protect inside a ``<script>`` element, so
+    every ``<`` is escaped to ``\\u003c`` before embedding (KTD6). That neutralizes
+    ``</script>``, ``<!--``, and ``<script`` breakout sequences while remaining
+    valid JSON (``JSON.parse`` restores the ``<``). Wrapped in ``Markup`` so Jinja
+    emits it verbatim instead of re-escaping the quotes.
+    """
+
+    raw = json.dumps(js_catalog(locale), ensure_ascii=False)
+    return Markup(raw.replace("<", "\\u003c"))
 
 
 def _header_value(scope: Scope, name: bytes) -> int | None:

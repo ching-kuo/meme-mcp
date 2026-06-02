@@ -247,4 +247,131 @@ MESSAGES: dict[str, dict[str, str]] = {
     "js.token.never": {"en": "never", "zh-TW": "從未"},
     "js.copy": {"en": "Copy", "zh-TW": "複製"},
     "js.copy.done": {"en": "Copied", "zh-TW": "已複製"},
+    # account.js dynamic strings
+    "js.account.generate": {"en": "Generate", "zh-TW": "產生"},
+    "js.account.regenerate": {"en": "Regenerate", "zh-TW": "重新產生"},
+    "js.account.confirm_regenerate": {
+        "en": "Regenerate this token? The old token dies immediately.",
+        "zh-TW": "要重新產生這個權杖嗎？舊的權杖會立即失效。",
+    },
+    "js.account.confirm_revoke": {
+        "en": "Revoke the active token now?",
+        "zh-TW": "要立即撤銷使用中的權杖嗎？",
+    },
+    # upload.js error contract
+    "js.upload.error.rejected": {
+        "en": "This image was rejected (size, type, or it looked malformed). "
+        "Use a PNG, JPEG, or WebP under 10 MB.",
+        "zh-TW": "這張圖片被拒絕（大小、格式，或看起來已損毀）。"
+        "請使用 10 MB 以下的 PNG、JPEG 或 WebP。",
+    },
+    "js.upload.error.duplicate_with_id": {
+        "en": "This image already exists as template {id}.",
+        "zh-TW": "這張圖片已存在，範本為 {id}。",
+    },
+    "js.upload.error.duplicate": {
+        "en": "This image already exists as a template.",
+        "zh-TW": "這張圖片已存在於某個範本中。",
+    },
+    "js.upload.error.rate_limited": {
+        "en": "You have uploaded too many images recently. Try again later.",
+        "zh-TW": "你最近上傳的圖片太多了，請稍後再試。",
+    },
+    "js.upload.error.suspect": {
+        "en": "The proposed metadata was flagged as suspect. Review and "
+        "acknowledge it before approving.",
+        "zh-TW": "建議的描述資料被標記為可疑。請先檢視並確認後再核准。",
+    },
+    "js.upload.error.name_required": {
+        "en": "A name is required, and it cannot be the placeholder default.",
+        "zh-TW": "名稱為必填，且不能是預設的佔位文字。",
+    },
+    "js.upload.error.invalid": {
+        "en": "Some fields were invalid: {reasons}.",
+        "zh-TW": "部分欄位無效：{reasons}。",
+    },
+    "js.upload.error.invalid_fallback_reason": {
+        "en": "check your input",
+        "zh-TW": "請檢查你的輸入",
+    },
+    "js.upload.error.forbidden": {
+        "en": "Your session security check failed. Reload the page and try again.",
+        "zh-TW": "你的工作階段安全檢查失敗。請重新整理頁面後再試。",
+    },
+    "js.upload.error.not_found": {
+        "en": "This upload is no longer available. Start over.",
+        "zh-TW": "這個上傳已不存在，請重新開始。",
+    },
+    "js.upload.error.vlm_unavailable": {
+        "en": "The description service is unavailable right now, so fields were "
+        "left blank. You can still fill them in and approve.",
+        "zh-TW": "描述服務目前無法使用，因此欄位留白。你仍可自行填寫並核准。",
+    },
+    "js.upload.error.generic": {
+        "en": "Something went wrong. Please try again.",
+        "zh-TW": "發生錯誤，請再試一次。",
+    },
+    "js.upload.error.too_large": {
+        "en": "That file is larger than 10 MB. Choose a smaller image.",
+        "zh-TW": "這個檔案大於 10 MB，請選擇較小的圖片。",
+    },
+    "js.upload.error.timeout": {
+        "en": "Analysis timed out in your browser before the server responded. "
+        "Check your connection and try again. (This is a client timeout, not "
+        "the description service being unavailable.)",
+        "zh-TW": "在伺服器回應之前，分析就在你的瀏覽器中逾時了。請檢查連線後再試。"
+        "（這是用戶端逾時，不是描述服務無法使用。）",
+    },
+    "js.upload.error.network": {
+        "en": "Could not reach the server. Try again.",
+        "zh-TW": "無法連線到伺服器，請再試一次。",
+    },
+    # upload.js analyze / origin / review status
+    "js.upload.analyzing.online_title": {
+        "en": "Looking up this meme online…",
+        "zh-TW": "正在線上查詢這個迷因…",
+    },
+    "js.upload.analyzing.online_hint": {
+        "en": "Checking the web to identify it, then describing it. This can take "
+        "up to a minute.",
+        "zh-TW": "正在搜尋網路以辨識它，接著產生描述。這可能需要長達一分鐘。",
+    },
+    "js.upload.origin.success": {
+        "en": "Identified online. Edit if anything looks off.",
+        "zh-TW": "已在線上辨識。如有不符請自行編輯。",
+    },
+    "js.upload.origin.no_match": {
+        "en": "Could not confidently identify this meme online. Add its name and "
+        "source if you know them.",
+        "zh-TW": "無法在線上確定辨識這個迷因。若你知道其名稱與來源，請自行填寫。",
+    },
+    "js.upload.origin.skipped": {
+        "en": "Online identification was not used. Add the meme's origin if you know it.",
+        "zh-TW": "未使用線上辨識。若你知道這個迷因的出處，請自行填寫。",
+    },
+    "js.upload.slots.none": {"en": "No slots proposed.", "zh-TW": "沒有建議的文字欄位。"},
+    "js.upload.duplicate_warning": {
+        "en": "This looks similar to an existing template ({id}). You can still "
+        "approve it if it is genuinely different.",
+        "zh-TW": "這與現有範本（{id}）相似。如果確實不同，你仍可核准。",
+    },
+    "js.upload.suspect_ack": {
+        "en": "The proposed metadata was flagged ({flags}). I have reviewed it and "
+        "want to approve anyway.",
+        "zh-TW": "建議的描述資料被標記（{flags}）。我已檢視並仍要核准。",
+    },
+    "js.upload.done.saved": {
+        "en": 'Saved "{name}" to the library.',
+        "zh-TW": "已將「{name}」儲存到範本庫。",
+    },
+    "js.upload.done.searchable": {
+        "en": '"{name}" is now searchable and ready to render.',
+        "zh-TW": "「{name}」現在可供搜尋並可用於產生迷因。",
+    },
+    "js.upload.session_expired": {
+        "en": "Session expired. Your edits are still here - log in in a new tab, "
+        "come back, and submit again. ",
+        "zh-TW": "工作階段已過期。你的編輯仍在這裡 - 請在新分頁登入後返回，再重新送出。",
+    },
+    "js.upload.session_expired_login": {"en": "Log in", "zh-TW": "登入"},
 }

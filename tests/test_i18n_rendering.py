@@ -137,8 +137,17 @@ def _seed_template(app) -> None:
 
 
 def _assert_no_raw_keys(text: str) -> None:
-    # A t() fallback to the literal key would leak the dotted id into the page.
+    # A server-side t() fallback to the literal key would leak the dotted id into
+    # the page. The #i18n-catalog blob legitimately carries js.* keys as JSON
+    # property names (KTD6), and a server key can be a substring of a js key
+    # (account.generate -> js.account.generate), so strip the blob before
+    # checking server keys.
+    text = re.sub(
+        r'<script type="application/json" id="i18n-catalog">.*?</script>', "", text, flags=re.DOTALL
+    )
     for key in MESSAGES:
+        if key.startswith("js."):
+            continue
         assert key not in text, f"raw catalog key leaked into render: {key}"
 
 

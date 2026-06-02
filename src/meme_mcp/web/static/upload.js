@@ -187,38 +187,31 @@
     var code = envelope && envelope.error_code;
     switch (code) {
       case "UPLOAD_REJECTED":
-        return (
-          "This image was rejected (size, type, or it looked malformed). " +
-          "Use a PNG, JPEG, or WebP under 10 MB."
-        );
+        return t("js.upload.error.rejected");
       case "DUPLICATE_TEMPLATE":
         var dupId = duplicateTemplateId(envelope);
         return dupId
-          ? "This image already exists as template " + dupId + "."
-          : "This image already exists as a template.";
+          ? t("js.upload.error.duplicate_with_id", { id: dupId })
+          : t("js.upload.error.duplicate");
       case "RATE_LIMITED":
-        return "You have uploaded too many images recently. Try again later.";
+        return t("js.upload.error.rate_limited");
       case "VLM_OUTPUT_SUSPECT":
-        return (
-          "The proposed metadata was flagged as suspect. Review and " +
-          "acknowledge it before approving."
-        );
+        return t("js.upload.error.suspect");
       case "INVALID_INPUT":
         if (reasonsText(envelope).indexOf("name_required") !== -1) {
-          return "A name is required, and it cannot be the placeholder default.";
+          return t("js.upload.error.name_required");
         }
-        return "Some fields were invalid: " + (reasonsText(envelope) || "check your input") + ".";
+        return t("js.upload.error.invalid", {
+          reasons: reasonsText(envelope) || t("js.upload.error.invalid_fallback_reason")
+        });
       case "FORBIDDEN":
-        return "Your session security check failed. Reload the page and try again.";
+        return t("js.upload.error.forbidden");
       case "NOT_FOUND":
-        return "This upload is no longer available. Start over.";
+        return t("js.upload.error.not_found");
       case "VLM_UNAVAILABLE":
-        return (
-          "The description service is unavailable right now, so fields were " +
-          "left blank. You can still fill them in and approve."
-        );
+        return t("js.upload.error.vlm_unavailable");
       default:
-        return "Something went wrong. Please try again.";
+        return t("js.upload.error.generic");
     }
   }
 
@@ -246,10 +239,7 @@
       return;
     }
     if (file.size > MAX_UPLOAD_BYTES) {
-      setMessage(
-        els.pickError,
-        "That file is larger than 10 MB. Choose a smaller image."
-      );
+      setMessage(els.pickError, t("js.upload.error.too_large"));
       return;
     }
     state.file = file;
@@ -365,11 +355,8 @@
     if (identifyOnline) {
       // The combined wait is rate-limit + Vision (~8s) + VLM (~60s), so set the
       // extended-wait copy when an online lookup will run.
-      setText("[data-analyzing-title]", "Looking up this meme online…");
-      setText(
-        "[data-analyzing-hint]",
-        "Checking the web to identify it, then describing it. This can take up to a minute."
-      );
+      setText("[data-analyzing-title]", t("js.upload.analyzing.online_title"));
+      setText("[data-analyzing-hint]", t("js.upload.analyzing.online_hint"));
     }
     show(els.spinner);
 
@@ -407,14 +394,9 @@
       enterReview(envelope.data);
     } catch (err) {
       if (err && err.name === "AbortError") {
-        setMessage(
-          els.analyzeError,
-          "Analysis timed out in your browser before the server responded. " +
-            "Check your connection and try again. (This is a client timeout, " +
-            "not the description service being unavailable.)"
-        );
+        setMessage(els.analyzeError, t("js.upload.error.timeout"));
       } else {
-        setMessage(els.analyzeError, "Could not reach the server. Try again.");
+        setMessage(els.analyzeError, t("js.upload.error.network"));
       }
     } finally {
       window.clearTimeout(timer);
@@ -475,11 +457,11 @@
     }
     var msg = "";
     if (status === "success") {
-      msg = "Identified online. Edit if anything looks off.";
+      msg = t("js.upload.origin.success");
     } else if (status === "no_match" || status === "low_confidence") {
-      msg = "Could not confidently identify this meme online. Add its name and source if you know them.";
+      msg = t("js.upload.origin.no_match");
     } else if (status === "skipped" || status === "unavailable") {
-      msg = "Online identification was not used. Add the meme's origin if you know it.";
+      msg = t("js.upload.origin.skipped");
     }
     els.originStatus.textContent = msg;
   }
@@ -503,7 +485,7 @@
     els.slotList.textContent = "";
     if (!slots.length) {
       var empty = document.createElement("li");
-      empty.textContent = "No slots proposed.";
+      empty.textContent = t("js.upload.slots.none");
       els.slotList.appendChild(empty);
       return;
     }
@@ -521,9 +503,7 @@
     if (duplicate.action === "warn" && duplicate.template_id) {
       setMessage(
         els.duplicateWarning,
-        "This looks similar to an existing template (" +
-          duplicate.template_id +
-          "). You can still approve it if it is genuinely different."
+        t("js.upload.duplicate_warning", { id: duplicate.template_id })
       );
     } else {
       hide(els.duplicateWarning);
@@ -534,10 +514,7 @@
     // VLM suspect flags BLOCK approval until acknowledged (R12).
     state.suspectFlags = flags;
     if (flags.length) {
-      els.ackLabel.textContent =
-        "The proposed metadata was flagged (" +
-        flags.join(", ") +
-        "). I have reviewed it and want to approve anyway.";
+      els.ackLabel.textContent = t("js.upload.suspect_ack", { flags: flags.join(", ") });
       show(els.ackRow);
       els.ackCheckbox.checked = false;
       els.approveBtn.disabled = true;
@@ -617,7 +594,7 @@
       }
       enterDone(metadata.name);
     } catch (err) {
-      setMessage(els.approveError, "Could not reach the server. Try again.");
+      setMessage(els.approveError, t("js.upload.error.network"));
       els.approveBtn.disabled = state.suspectFlags.length ? !els.ackCheckbox.checked : false;
       els.discardBtn.disabled = false;
     }
@@ -627,8 +604,8 @@
     // The template now references the blob; clear the pending id so the
     // beforeunload guard and resume affordance no longer fire.
     setPendingId(null);
-    setMessage(els.successMessage, 'Saved "' + name + '" to the library.');
-    setMessage(els.successSub, '"' + name + '" is now searchable and ready to render.');
+    setMessage(els.successMessage, t("js.upload.done.saved", { name: name }));
+    setMessage(els.successSub, t("js.upload.done.searchable", { name: name }));
     els.browseLink.href = "/browse?q=" + encodeURIComponent(name);
     hide(els.reviewStep);
     show(els.doneStep);
@@ -684,12 +661,10 @@
     if (!target) {
       return;
     }
-    target.textContent =
-      "Session expired. Your edits are still here - log in in a new tab, " +
-      "come back, and submit again. ";
+    target.textContent = t("js.upload.session_expired");
     var link = document.createElement("a");
     link.href = "/auth/login?next=/upload";
-    link.textContent = "Log in";
+    link.textContent = t("js.upload.session_expired_login");
     target.appendChild(link);
     show(target);
   }
