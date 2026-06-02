@@ -64,6 +64,10 @@ def test_no_signals_defaults_to_en() -> None:
         ("en", "en"),
         # q-weights establish ordering: en outranks zh here.
         ("zh;q=0.3,en;q=0.9", "en"),
+        # q=0 means "not acceptable" -> dropped, falls through to no-match.
+        ("zh;q=0", None),
+        ("zh-TW;q=0,en;q=0", None),
+        ("en;q=0.5,zh;q=0", "en"),
         ("fr-FR", None),
         ("fr-FR,de;q=0.8", None),
     ],

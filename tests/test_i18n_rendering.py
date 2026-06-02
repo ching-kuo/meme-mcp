@@ -286,7 +286,7 @@ def test_orphan_key_check() -> None:
 # text in the templates (they now live in the catalog). Catches a literal
 # silently left hardcoded, which the no-raw-key and completeness tests miss.
 UNCONVERTED_LITERALS = {
-    "base.html": ["Renew it in account settings", "Signed in as"],
+    "base.html": ["Renew it in account settings", "Signed in as", 'aria-label="Primary"'],
     "landing.html": ["For MCP clients", "Sign in with GitHub", "Browse templates"],
     "restricted.html": ["Access restricted", "Back to browse"],
     "browse.html": ["Template library", "ready to render", "Search templates"],
@@ -297,6 +297,8 @@ UNCONVERTED_LITERALS = {
         "Proposed metadata",
         "Stored image differs",
         "Looking at your image",
+        "Selected image preview",
+        'aria-label="Progress"',
     ],
 }
 

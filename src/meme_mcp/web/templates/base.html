@@ -44,9 +44,9 @@
       </svg>
       {% for loc in supported_locales %}
         {% if loc == locale %}
-          <span class="lang-switch__option" aria-current="true">{{ autonyms[loc] }}</span>
+          <span class="lang-switch__option" aria-current="true">{{ autonyms.get(loc, loc) }}</span>
         {% else %}
-          <a class="lang-switch__option" href="/lang/{{ loc }}?next={{ here | urlencode }}">{{ autonyms[loc] }}</a>
+          <a class="lang-switch__option" href="/lang/{{ loc }}?next={{ here | urlencode }}">{{ autonyms.get(loc, loc) }}</a>
         {% endif %}
       {% endfor %}
     </div>
@@ -59,7 +59,7 @@
     {% endif %}
     {% if web_session %}
       {% set path = request.url.path %}
-      <nav class="site-nav" aria-label="Primary">
+      <nav class="site-nav" aria-label="{{ t('nav.aria_primary') }}">
         <a href="/browse"{% if path == "/browse" %} aria-current="page"{% endif %}>{{ t("nav.browse") }}</a>
         <a href="/upload"{% if path == "/upload" %} aria-current="page"{% endif %}>{{ t("nav.upload") }}</a>
         <a href="/account"{% if path == "/account" %} aria-current="page"{% endif %}>{{ t("nav.account") }}</a>

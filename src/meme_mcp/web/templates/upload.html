@@ -17,7 +17,7 @@
       {{ t("upload.helper") }}
     </p>
 
-    <nav class="upload-steps" aria-label="Progress">
+    <nav class="upload-steps" aria-label="{{ t('upload.steps.aria_label') }}">
       <ol>
         <li class="upload-stepper-item upload-stepper-item--pick" data-key="pick" aria-current="step">
           <span class="upload-stepper-dot" aria-hidden="true"></span>{{ t("upload.step.pick") }}
@@ -50,7 +50,7 @@
       <p class="upload-notice upload-notice--error" data-pick-error hidden role="alert"></p>
 
       <div class="upload-filecard" data-filecard hidden>
-        <img class="upload-filecard__thumb" alt="Selected image preview" data-thumb-img>
+        <img class="upload-filecard__thumb" alt="{{ t('upload.img.preview_alt') }}" data-thumb-img>
         <div class="upload-filecard__meta">
           <div class="upload-filecard__name" data-file-name></div>
           <div class="upload-filecard__dims">
@@ -90,7 +90,7 @@
 
       <form class="upload-form upload-review" data-review-form>
         <div class="upload-review__preview">
-          <div class="preview"><img alt="Selected image preview" data-preview-img></div>
+          <div class="preview"><img alt="{{ t('upload.img.preview_alt') }}" data-preview-img></div>
           <p class="upload-review__caption helper">
             <span data-file-name></span>
             <span data-file-dims></span>

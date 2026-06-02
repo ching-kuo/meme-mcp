@@ -66,6 +66,10 @@ def negotiate_accept_language(header: str | None) -> str | None:
                     quality = float(value.strip())
                 except ValueError:
                     quality = 0.0
+        # q=0 means "not acceptable" (RFC 7231 §5.3.1): drop it so an explicitly
+        # rejected language is never selected, falling through to DEFAULT.
+        if quality <= 0:
+            continue
         # -quality sorts highest-quality first; index keeps equal-q entries in
         # header order.
         weighted.append((-quality, index, tag))

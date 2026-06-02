@@ -21,6 +21,7 @@ MESSAGES: dict[str, dict[str, str]] = {
     "nav.browse": {"en": "Browse", "zh-TW": "瀏覽"},
     "nav.upload": {"en": "Upload", "zh-TW": "上傳"},
     "nav.account": {"en": "Account", "zh-TW": "帳號"},
+    "nav.aria_primary": {"en": "Primary", "zh-TW": "主要導覽"},
     # --- PAT-expiry banner (base.html) ---------------------------------------
     "banner.pat_expiry.one": {
         "en": "Your PAT expires in {count} day.",
@@ -153,6 +154,8 @@ MESSAGES: dict[str, dict[str, str]] = {
     "account.revoke.button": {"en": "Revoke active token", "zh-TW": "撤銷使用中的權杖"},
     # --- upload.html ---------------------------------------------------------
     "upload.heading": {"en": "Upload a template", "zh-TW": "上傳範本"},
+    "upload.steps.aria_label": {"en": "Progress", "zh-TW": "進度"},
+    "upload.img.preview_alt": {"en": "Selected image preview", "zh-TW": "已選取的圖片預覽"},
     "upload.noscript": {
         "en": "This page needs JavaScript. The upload flow previews your image, "
         "analyzes it, and lets you edit the proposed metadata entirely in the "

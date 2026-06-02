@@ -103,9 +103,15 @@ def test_unknown_locale_sets_no_cookie(tmp_path) -> None:
 def test_switch_preserves_query_round_trip(tmp_path) -> None:
     client = TestClient(create_app(good_settings(tmp_path)))
 
-    response = client.get("/lang/zh-TW?next=/browse?q=cats", follow_redirects=False)
+    # The switcher template emits a single percent-encoded next value; exercise
+    # that exact form so the Starlette decode + safe_lang_return query
+    # preservation are tested together, including a multi-param query that an
+    # unencoded value would silently truncate.
+    response = client.get(
+        "/lang/zh-TW?next=%2Fbrowse%3Fq%3Dcats%26tag%3Dci", follow_redirects=False
+    )
 
-    assert response.headers["location"] == "/browse?q=cats"
+    assert response.headers["location"] == "/browse?q=cats&tag=ci"
 
 
 def test_switch_open_redirect_falls_back(tmp_path) -> None:
