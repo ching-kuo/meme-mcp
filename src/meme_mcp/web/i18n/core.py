@@ -150,11 +150,7 @@ def js_catalog(locale: str) -> dict[str, str]:
     excluded to keep the embedded ``window.I18N`` blob tight (KTD6).
     """
 
-    return {
-        key: (entry.get(locale) or entry.get(DEFAULT) or key)
-        for key, entry in MESSAGES.items()
-        if key.startswith("js.")
-    }
+    return {key: t(key, locale) for key in MESSAGES if key.startswith("js.")}
 
 
 def _field_names(value: str) -> list[str]:
