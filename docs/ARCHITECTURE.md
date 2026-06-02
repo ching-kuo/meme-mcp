@@ -117,6 +117,18 @@ Two auth surfaces share one tree:
   The token exchange targets
   `https://github.com/login/oauth/access_token` and the user-profile fetch targets
   `https://api.github.com/user` — two distinct hosts, not a shared `base_url` client.
+- The Streamable HTTP transport is mounted at `/mcp` (real endpoint `/mcp/`). A bare `/mcp` is
+  normalized to `/mcp/` in-process by `McpSlashNormalizeMiddleware` so the mount serves it
+  without a 307 (which `mcp-remote` cannot follow on POST). The app lifespan
+  (`_app_lifespan`) runs the FastMCP `session_manager` for the app's lifetime; a mounted
+  sub-app's own lifespan is not run by Starlette, so without this the transport raises "Task
+  group is not initialized" on first request.
+- The transport runs a DNS-rebinding guard that 421s any Host/Origin not on its allowlist.
+  FastMCP only auto-allows localhost, so a public deploy passes its gateway host via
+  `MCP_ALLOWED_HOSTS` / `MCP_ALLOWED_ORIGINS` (JSON arrays, wired through `create_mcp_server`'s
+  `allowed_hosts`/`allowed_origins`); without them every authenticated request 421s. Bearer-PAT
+  auth is the real access control — no ambient browser credentials exist to rebind — so the
+  allowlist is defense-in-depth.
 - MCP (`/mcp` and `/api/mcp/*`) uses a static PAT in `Authorization: Bearer …`. Verification is
   HMAC-SHA-256 with a server-side pepper. The verifier emits `meme:read` for every valid PAT
   and adds `meme:write` only when the PAT was issued with `readwrite` capability. The MCP

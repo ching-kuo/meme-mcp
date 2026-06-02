@@ -36,6 +36,10 @@ def settings(tmp_path, **overrides: object) -> Settings:
         "vlm_api_key": SecretStr("vlm-key"),
         "vlm_model": "vlm-model",
         "embedding_api_key": SecretStr("embedding-key"),
+        # TestClient sends Host: testserver; allow it so MCP transport requests
+        # reach the handler instead of being rejected by the rebinding guard.
+        "mcp_allowed_hosts": ["testserver"],
+        "mcp_allowed_origins": ["http://testserver"],
     }
     data.update(overrides)
     return Settings(**data)
@@ -99,6 +103,64 @@ def test_app_wires_web_mcp_ready_and_authenticated_renders(tmp_path) -> None:
     assert dry_run.json()["data"]["rendered_url"] is None
     assert client.get(result.rendered_url, headers=authed).status_code == 200
     assert client.get(result.rendered_url).status_code == 401
+
+
+def test_bare_mcp_path_is_not_a_307_redirect(tmp_path) -> None:
+    # The MCP transport is mounted at /mcp with its inner route at /, so its
+    # real endpoint is /mcp/. A bare /mcp must be served in-process (not
+    # 307-redirected to /mcp/), since mcp-remote cannot replay a POST body
+    # across the redirect and fails with code 307.
+    app = create_app(settings(tmp_path))
+    token = issue_pat(app.state.pat_store, "alice", app.state.pat_hash_pepper_value)
+    app.state.allowlist.add("alice")
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}",
+    }
+    initialize = {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "probe", "version": "0"},
+        },
+    }
+    # The context-manager form runs the app lifespan, which starts the MCP
+    # session manager's task group; without it the transport raises "Task group
+    # is not initialized" on first request.
+    with TestClient(app) as client:
+        bare = client.post("/mcp", headers=headers, json=initialize, follow_redirects=False)
+        # 200 proves the authenticated initialize reached the Streamable HTTP
+        # handler: bare /mcp was not 307-redirected (mcp-remote can't replay a
+        # POST across it) AND the session-manager task group was started by the
+        # app lifespan (otherwise the handler raises -> 500).
+        assert bare.status_code == 200
+        slashed = client.post("/mcp/", headers=headers, json=initialize, follow_redirects=False)
+        assert slashed.status_code == 200
+
+
+def test_mcp_transport_rejects_disallowed_host(tmp_path) -> None:
+    # The DNS-rebinding guard must 421 a Host that is not on mcp_allowed_hosts,
+    # even for an authenticated request. settings() only allowlists "testserver".
+    app = create_app(settings(tmp_path))
+    token = issue_pat(app.state.pat_store, "alice", app.state.pat_hash_pepper_value)
+    app.state.allowlist.add("alice")
+    with TestClient(app) as client:
+        rejected = client.post(
+            "/mcp/",
+            headers={
+                "Accept": "application/json, text/event-stream",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+                "Host": "evil.example.com",
+            },
+            json={"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {}},
+            follow_redirects=False,
+        )
+        assert rejected.status_code == 421
 
 
 def test_pat_auth_uses_file_allowlist_written_by_operator_cli(tmp_path) -> None:

@@ -147,6 +147,11 @@ Claude Desktop through `mcp-remote`:
 }
 ```
 
+Both `/mcp` and `/mcp/` reach the transport; the server normalizes the bare path
+in-process. (Against an older deploy that 307-redirects bare `/mcp`, use the
+trailing-slash form `…/mcp/`, since `mcp-remote` cannot replay a POST across the
+redirect.)
+
 ## Development verification
 
 ```bash

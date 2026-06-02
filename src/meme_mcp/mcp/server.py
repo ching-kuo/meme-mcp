@@ -7,6 +7,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from meme_mcp.auth.pat import SQLitePatStore, verify_pat
 from meme_mcp.envelope import Envelope
@@ -108,7 +109,23 @@ def create_mcp_server(
     allowlist: Container[str],
     pepper: str,
     backend: MCPBackend | None = None,
+    allowed_hosts: list[str] | None = None,
+    allowed_origins: list[str] | None = None,
 ) -> FastMCP:
+    # The Streamable HTTP transport runs a DNS-rebinding guard that rejects any
+    # Host/Origin not on its allowlist with 421. FastMCP only auto-populates that
+    # allowlist for a localhost bind, so a public deployment behind a gateway
+    # (Host like meme.igene.tw) must pass its own hosts explicitly or every
+    # authenticated request 421s. Bearer-PAT auth already blocks browser-driven
+    # rebinding (no ambient credentials); the allowlist is defense-in-depth.
+    hosts = (
+        allowed_hosts if allowed_hosts is not None else ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+    )
+    origins = (
+        allowed_origins
+        if allowed_origins is not None
+        else ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
+    )
     mcp = FastMCP(
         "meme-mcp",
         instructions="Find and render private meme templates.",
@@ -116,6 +133,11 @@ def create_mcp_server(
         json_response=True,
         stateless_http=True,
         streamable_http_path="/",
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=hosts,
+            allowed_origins=origins,
+        ),
         auth=AuthSettings.model_validate(
             {
                 "issuer_url": "http://localhost:8000",

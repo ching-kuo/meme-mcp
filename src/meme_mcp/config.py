@@ -61,7 +61,22 @@ class Settings(BaseSettings):
 
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 8000
-    mcp_allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:8000"])
+    # Streamable HTTP DNS-rebinding allowlists. These are list[str] settings, so
+    # env values are JSON arrays, e.g. MCP_ALLOWED_HOSTS='["meme.igene.tw"]' (a
+    # bare scalar raises SettingsError). A public deploy MUST set its gateway
+    # Host/Origin here or every authenticated MCP request is rejected with 421;
+    # validate_at_startup fails fast if a non-local deploy keeps these defaults.
+    # Defaults mirror FastMCP's localhost auto-allowlist (IPv4 + IPv6 loopback).
+    mcp_allowed_hosts: list[str] = Field(
+        default_factory=lambda: ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+    )
+    mcp_allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://127.0.0.1:*",
+            "http://localhost:*",
+            "http://[::1]:*",
+        ]
+    )
 
     rate_find_per_min: int = 60
     rate_generate_per_min: int = 30
@@ -72,6 +87,12 @@ class Settings(BaseSettings):
 
 def _secret_value(secret: SecretStr | None) -> str:
     return secret.get_secret_value() if secret else ""
+
+
+def _is_loopback_host(entry: str) -> bool:
+    """True if an allowed-host entry only matches a loopback address."""
+    base = entry[:-2] if entry.endswith(":*") else entry
+    return base in ("127.0.0.1", "localhost", "[::1]")
 
 
 def validate_at_startup(settings: Settings) -> None:
@@ -85,6 +106,13 @@ def validate_at_startup(settings: Settings) -> None:
             settings.pat_hash_pepper
         ):
             problems.append("PAT_HASH_PEPPER must be at least 32 chars and non-placeholder")
+        # A non-local bind serves a public Host; if every allowed host is still a
+        # loopback default the MCP transport 421s all real traffic at runtime, so
+        # fail fast instead. (Set MCP_ALLOWED_HOSTS to the gateway host.)
+        if all(_is_loopback_host(host) for host in settings.mcp_allowed_hosts):
+            problems.append(
+                "MCP_ALLOWED_HOSTS must include the public gateway host when MCP_HOST is non-local"
+            )
     if settings.image_store_backend == "s3":
         missing = [
             name

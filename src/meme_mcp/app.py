@@ -4,6 +4,8 @@ import base64
 import hashlib
 import secrets
 import warnings
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, cast
@@ -122,6 +124,52 @@ class BodySizeGuardMiddleware:
         await response(scope, receive, send)
 
 
+@asynccontextmanager
+async def _app_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Drive the mounted MCP transport's session manager for the app's lifetime.
+
+    ``streamable_http_app()`` returns a sub-app whose own lifespan runs
+    ``session_manager.run()`` (which starts the task group every request needs).
+    Mounting a sub-app does not run its lifespan, so without this the transport
+    raises "Task group is not initialized" on first request. The session manager
+    is exposed for exactly this multi-app mounting case; it exists once
+    ``streamable_http_app()`` has been called, which create_app does at mount
+    time. When the app is built without settings there is no MCP server to run.
+    """
+    mcp_server = getattr(app.state, "mcp_server", None)
+    if mcp_server is None:
+        yield
+        return
+    async with mcp_server.session_manager.run():
+        yield
+
+
+class McpSlashNormalizeMiddleware:
+    """Resolve a bare ``/mcp`` request to the mounted ``/mcp/`` endpoint in-process.
+
+    The MCP Streamable HTTP app is mounted at ``/mcp`` with its own route at
+    ``/``, so its real endpoint is ``/mcp/``. Starlette's Mount answers a bare
+    ``/mcp`` (no trailing slash) with a 307 redirect to ``/mcp/``. Clients like
+    ``mcp-remote`` do not replay the POST body across that redirect and fail
+    with a 307 error, so we rewrite the path before routing instead -- no HTTP
+    redirect, both ``/mcp`` and ``/mcp/`` reach the transport. Only the exact
+    bare path is touched; ``/mcp/...`` sub-paths pass through untouched.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope.get("path") == "/mcp":
+            updates: dict[str, object] = {"path": "/mcp/"}
+            # Only rewrite raw_path when it matches the bare form; a proxy may
+            # have set it to something else, and Mount routes on path anyway.
+            if scope.get("raw_path") == b"/mcp":
+                updates["raw_path"] = b"/mcp/"
+            scope = {**scope, **updates}
+        await self.app(scope, receive, send)
+
+
 def _header_value(scope: Scope, name: bytes) -> int | None:
     for key, value in scope.get("headers", []):
         if key == name:
@@ -199,7 +247,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         validate_at_startup(settings)
     Image.MAX_IMAGE_PIXELS = 40 * 1024 * 1024
     warnings.simplefilter("error", Image.DecompressionBombWarning)
-    app = FastAPI(title="meme-mcp")
+    app = FastAPI(title="meme-mcp", lifespan=_app_lifespan)
     web_dir = Path(__file__).parent / "web"
     templates = Jinja2Templates(directory=web_dir / "templates")
     app.mount("/static", StaticFiles(directory=web_dir / "static"), name="static")
@@ -257,8 +305,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.allowlist,
             app.state.pat_hash_pepper_value,
             AppMCPBackend(app),
+            allowed_hosts=settings.mcp_allowed_hosts,
+            allowed_origins=settings.mcp_allowed_origins,
         )
         app.mount("/mcp", app.state.mcp_server.streamable_http_app())
+        # Rewrite bare /mcp -> /mcp/ before routing so the mount serves it
+        # directly instead of 307-redirecting (which mcp-remote can't follow on
+        # POST). add_middleware prepends, so this runs before SessionMiddleware
+        # and routing.
+        app.add_middleware(McpSlashNormalizeMiddleware)
 
     @app.exception_handler(MemeMCPError)
     async def meme_error_handler(_request: Request, exc: MemeMCPError) -> JSONResponse:

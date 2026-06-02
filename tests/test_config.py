@@ -1,5 +1,6 @@
 import pytest
 from pydantic import SecretStr
+from pydantic_settings import SettingsError
 
 from meme_mcp.config import ConfigError, Settings, validate_at_startup
 
@@ -34,6 +35,30 @@ def test_non_loopback_rejects_dev_secret() -> None:
     settings = good_settings(mcp_host="0.0.0.0", session_secret=SecretStr("dev-placeholder"))
     with pytest.raises(ConfigError, match="SESSION_SECRET"):
         validate_at_startup(settings)
+
+
+def test_non_loopback_requires_public_allowed_host() -> None:
+    # A public bind that keeps the loopback-only default allowlist would 421 all
+    # real MCP traffic at runtime; validate_at_startup must reject it up front.
+    settings = good_settings(mcp_host="0.0.0.0")
+    with pytest.raises(ConfigError, match="MCP_ALLOWED_HOSTS"):
+        validate_at_startup(settings)
+
+
+def test_non_loopback_passes_with_public_allowed_host() -> None:
+    validate_at_startup(good_settings(mcp_host="0.0.0.0", mcp_allowed_hosts=["meme.igene.tw"]))
+
+
+def test_mcp_allowed_hosts_env_parses_json_array(monkeypatch) -> None:
+    monkeypatch.setenv("MCP_ALLOWED_HOSTS", '["meme.igene.tw", "meme.igene.tw:*"]')
+    assert good_settings().mcp_allowed_hosts == ["meme.igene.tw", "meme.igene.tw:*"]
+
+
+def test_mcp_allowed_hosts_env_rejects_bare_scalar(monkeypatch) -> None:
+    # list[str] settings are JSON-decoded from env; a bare scalar is invalid.
+    monkeypatch.setenv("MCP_ALLOWED_HOSTS", "meme.igene.tw")
+    with pytest.raises(SettingsError):
+        good_settings()
 
 
 def test_s3_requires_s3_fields() -> None:
