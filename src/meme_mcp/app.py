@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from typing import Protocol, cast
-from urllib.parse import urlencode, urlsplit, urlunsplit
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import FastAPI, Header, Request
@@ -36,7 +36,12 @@ from meme_mcp.auth.session import (
     has_web_session,
     session_login,
 )
-from meme_mcp.config import ConfigError, Settings, validate_at_startup
+from meme_mcp.config import (
+    Settings,
+    resolve_public_base_url,
+    session_cookie_secure,
+    validate_at_startup,
+)
 from meme_mcp.db.engine import sqlite_path
 from meme_mcp.db.migrations import run_migrations
 from meme_mcp.db.outcomes import VALID_OUTCOMES, OutcomeEventStore
@@ -321,23 +326,6 @@ _IMAGE_CONTENT_TYPES = {
 }
 
 
-def _public_app_base_url(github_redirect_uri: str) -> str:
-    """Derive the externally visible app base URL from the GitHub callback URL.
-
-    The callback path must end in ``/auth/callback`` (the route the app actually
-    serves); otherwise ``removesuffix`` would be a silent no-op and bake the full
-    callback path into the advertised OAuth issuer/resource URLs, so fail fast.
-    """
-    parsed = urlsplit(github_redirect_uri)
-    path = parsed.path.rstrip("/")
-    if not path.endswith("/auth/callback"):
-        raise ConfigError(
-            f"GITHUB_REDIRECT_URI must end with /auth/callback: {github_redirect_uri}"
-        )
-    base_path = path.removesuffix("/auth/callback").rstrip("/")
-    return urlunsplit((parsed.scheme, parsed.netloc, base_path, "", ""))
-
-
 def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is not None:
         validate_at_startup(settings)
@@ -356,7 +344,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             SessionMiddleware,
             secret_key=settings.session_secret.get_secret_value(),
             same_site="lax",
-            https_only=not settings.github_redirect_uri.startswith("http://localhost"),
+            https_only=session_cookie_secure(settings),
         )
         # Added after SessionMiddleware so it is the OUTERMOST layer
         # (add_middleware prepends): it rejects oversized analyze bodies on
@@ -390,7 +378,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             client_secret=settings.github_client_secret.get_secret_value(),
             redirect_uri=settings.github_redirect_uri,
         )
-        public_app_base_url = _public_app_base_url(settings.github_redirect_uri)
+        public_app_base_url = resolve_public_base_url(settings)
         # Stored so AppMCPBackend.generate can build absolute rendered_url values
         # off the same origin advertised in OAuth metadata.
         app.state.public_app_base_url = public_app_base_url
@@ -473,9 +461,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response = RedirectResponse(target, status_code=303)
         if locale not in SUPPORTED:
             return response
-        secure = settings is not None and not settings.github_redirect_uri.startswith(
-            "http://localhost"
-        )
+        secure = settings is not None and session_cookie_secure(settings)
         response.set_cookie(
             COOKIE_NAME,
             locale,

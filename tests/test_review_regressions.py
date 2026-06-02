@@ -195,6 +195,36 @@ def test_mcp_public_oauth_metadata_uses_public_host_and_root_well_known(tmp_path
         }
 
 
+def test_public_base_url_overrides_redirect_derivation_for_metadata_and_signing(tmp_path) -> None:
+    # PUBLIC_BASE_URL is used verbatim as the canonical origin: it feeds both the
+    # advertised OAuth resource metadata and the render-URL signing origin, even
+    # when GITHUB_REDIRECT_URI uses a different (sub)path on the same origin.
+    app = create_app(
+        settings(
+            tmp_path,
+            github_redirect_uri="https://meme.igene.tw/auth/callback",
+            public_base_url="https://meme.igene.tw",
+        )
+    )
+    assert app.state.public_app_base_url == "https://meme.igene.tw"
+    spec = TemplateSpec("drake", image_bytes(), [{"position": "top"}])
+    result = render_meme(spec, ["hi"], app.state.image_store, app.state.public_app_base_url)
+    assert result.rendered_url.startswith("https://meme.igene.tw/renders/")
+
+
+def test_public_base_url_origin_conflict_fails_fast(tmp_path) -> None:
+    # PUBLIC_BASE_URL on a different origin than GITHUB_REDIRECT_URI would silently
+    # re-sign render URLs against a new origin; create_app must refuse to boot.
+    with pytest.raises(ConfigError, match="conflicts with"):
+        create_app(
+            settings(
+                tmp_path,
+                github_redirect_uri="https://meme.igene.tw/auth/callback",
+                public_base_url="https://other.example",
+            )
+        )
+
+
 def test_malformed_github_redirect_uri_fails_fast(tmp_path) -> None:
     # A redirect URI that does not end in /auth/callback would make the base-URL
     # derivation a silent no-op and bake a broken path into the OAuth metadata;
