@@ -32,17 +32,17 @@
     </div>
     {% if pat_expires_in_days is not none and pat_expires_in_days >= 0 and pat_expires_in_days < 7 %}
       <div class="banner banner-warning" role="status">
-        Your PAT expires in {{ pat_expires_in_days }} day{{ "" if pat_expires_in_days == 1 else "s" }}.
-        Signed in as {{ friend_login }}.
-        <a href="/account">Renew it in account settings</a> to avoid losing access.
+        {{ plural(pat_expires_in_days, "banner.pat_expiry") }}
+        {{ t("common.signed_in_as", login=friend_login) }}
+        <a href="/account">{{ t("banner.renew_link") }}</a> {{ t("banner.renew_suffix") }}
       </div>
     {% endif %}
     {% if web_session %}
       {% set path = request.url.path %}
       <nav class="site-nav" aria-label="Primary">
-        <a href="/browse"{% if path == "/browse" %} aria-current="page"{% endif %}>Browse</a>
-        <a href="/upload"{% if path == "/upload" %} aria-current="page"{% endif %}>Upload</a>
-        <a href="/account"{% if path == "/account" %} aria-current="page"{% endif %}>Account</a>
+        <a href="/browse"{% if path == "/browse" %} aria-current="page"{% endif %}>{{ t("nav.browse") }}</a>
+        <a href="/upload"{% if path == "/upload" %} aria-current="page"{% endif %}>{{ t("nav.upload") }}</a>
+        <a href="/account"{% if path == "/account" %} aria-current="page"{% endif %}>{{ t("nav.account") }}</a>
       </nav>
     {% endif %}
     {% block body %}{% endblock %}

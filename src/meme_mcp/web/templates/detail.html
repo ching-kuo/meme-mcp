@@ -1,19 +1,19 @@
 {% extends "base.html" %}
 {% block body %}
   <main class="detail">
-    <a class="detail__back" href="/browse">&larr; Template library</a>
+    <a class="detail__back" href="/browse">&larr; {{ t("detail.back") }}</a>
 
     <article class="detail__hero">
       <div class="detail__media">
         <img
           class="detail__img"
           src="/templates/{{ template.template_id }}/image"
-          alt="{{ template.name }} template"
+          alt="{{ t('browse.card.alt', name=template.name) }}"
           decoding="async"
         >
         {% if template.slot_definitions %}
           <span class="detail__slot-count">
-            {{ template.slot_definitions|length }} slot{{ "" if template.slot_definitions|length == 1 else "s" }}
+            {{ plural(template.slot_definitions|length, "browse.slot") }}
           </span>
         {% endif %}
       </div>
@@ -39,30 +39,30 @@
     </article>
 
     <section class="detail__panel">
-      <h2 class="detail__panel-title">Attributes</h2>
+      <h2 class="detail__panel-title">{{ t("detail.attrs.heading") }}</h2>
       <dl class="detail__attrs">
         {% if template.metadata.get("emotion") %}
           <div class="detail__attr">
-            <dt>Emotion</dt>
+            <dt>{{ t("detail.attr.emotion") }}</dt>
             <dd>{{ template.metadata.get("emotion") }}</dd>
           </div>
         {% endif %}
         {% if template.metadata.get("usage_context") %}
           <div class="detail__attr">
-            <dt>Usage context</dt>
+            <dt>{{ t("detail.attr.usage_context") }}</dt>
             <dd>{{ template.metadata.get("usage_context") }}</dd>
           </div>
         {% endif %}
         <div class="detail__attr">
-          <dt>Format</dt>
+          <dt>{{ t("detail.attr.format") }}</dt>
           <dd>{{ template.metadata.get("format") or "static" }}</dd>
         </div>
         <div class="detail__attr">
-          <dt>Library</dt>
+          <dt>{{ t("detail.attr.library") }}</dt>
           <dd>{{ template.source }}</dd>
         </div>
         <div class="detail__attr">
-          <dt>Slug</dt>
+          <dt>{{ t("detail.attr.slug") }}</dt>
           <dd><code>{{ template.slug }}</code></dd>
         </div>
       </dl>
@@ -70,14 +70,14 @@
 
     <section class="detail__panel">
       <h2 class="detail__panel-title">
-        Slots
+        {{ t("detail.slots.heading") }}
         <span class="detail__panel-meta">{{ template.slot_definitions|length }}</span>
       </h2>
       {% if template.slot_definitions %}
         <ol class="detail__slots">
           {% for slot in template.slot_definitions %}
             <li class="detail__slot">
-              <span class="detail__slot-name">{{ slot.get("name") or slot.get("position") or ("Slot " ~ loop.index) }}</span>
+              <span class="detail__slot-name">{{ slot.get("name") or slot.get("position") or t("detail.slot.fallback", index=loop.index) }}</span>
               {% if slot.get("position") %}
                 <span class="detail__slot-pos">{{ slot.get("position") }}</span>
               {% endif %}
@@ -85,7 +85,7 @@
           {% endfor %}
         </ol>
       {% else %}
-        <p class="detail__empty">This template has no editable slots.</p>
+        <p class="detail__empty">{{ t("detail.slots.empty") }}</p>
       {% endif %}
     </section>
 
@@ -95,11 +95,11 @@
          provenance link ("Source"). The Attributes "Library" row above is the
          corpus tag (memegen/friend) -- distinct from this reference link. #}
       <section class="detail__panel">
-        <h2 class="detail__panel-title">{{ "Origin" if origin_name else "Source" }}</h2>
+        <h2 class="detail__panel-title">{{ t("detail.origin.title") if origin_name else t("detail.source.title") }}</h2>
         <dl class="detail__attrs">
           {% if origin_name %}
             <div class="detail__attr">
-              <dt>Identified as</dt>
+              <dt>{{ t("detail.origin.identified_as") }}</dt>
               <dd>{{ origin_name }}</dd>
             </div>
           {% endif %}
@@ -107,7 +107,7 @@
             {# Only a server-validated https URL renders, and only as a link.
                A URL that failed the gate is shown nothing -- never as text. #}
             <div class="detail__attr">
-              <dt>{{ "Source" if origin_name else "Reference" }}</dt>
+              <dt>{{ t("detail.origin.source") if origin_name else t("detail.origin.reference") }}</dt>
               <dd>
                 <a href="{{ origin_source_url_safe }}" target="_blank" rel="noopener noreferrer">
                   {{ origin_source_url_safe }}
@@ -120,18 +120,18 @@
     {% endif %}
 
     <details class="detail__fingerprint">
-      <summary>Fingerprint</summary>
+      <summary>{{ t("detail.fingerprint.summary") }}</summary>
       <dl class="detail__attrs">
         <div class="detail__attr">
-          <dt>Exact hash</dt>
+          <dt>{{ t("detail.fingerprint.exact") }}</dt>
           <dd><code>{{ template.exact_hash }}</code></dd>
         </div>
         <div class="detail__attr">
-          <dt>Perceptual hash</dt>
+          <dt>{{ t("detail.fingerprint.perceptual") }}</dt>
           <dd><code>{{ template.perceptual_hash }}</code></dd>
         </div>
         <div class="detail__attr">
-          <dt>Image path</dt>
+          <dt>{{ t("detail.fingerprint.image_path") }}</dt>
           <dd><code>{{ template.image_path }}</code></dd>
         </div>
       </dl>

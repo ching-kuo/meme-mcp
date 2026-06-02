@@ -7,72 +7,72 @@
 {% block body %}
   <main class="account" data-token-state="{{ pat_status.state }}">
     <header class="account__header">
-      <p class="masthead__eyebrow">Account</p>
-      <h1>MCP access token</h1>
+      <p class="masthead__eyebrow">{{ t("account.eyebrow") }}</p>
+      <h1>{{ t("account.heading") }}</h1>
       <p class="account__lede">{{ friend_login }}</p>
     </header>
 
     <section class="token-panel" aria-labelledby="token-status-heading">
       <div class="token-panel__status">
-        <h2 id="token-status-heading">Current token</h2>
-        <span class="token-badge token-badge--{{ pat_status.state }}" data-token-state-label>{{ pat_status.state }}</span>
+        <h2 id="token-status-heading">{{ t("account.current_token") }}</h2>
+        <span class="token-badge token-badge--{{ pat_status.state }}" data-token-state-label>{{ t("js.token.state." ~ pat_status.state) }}</span>
       </div>
       <dl class="token-facts">
         <div>
-          <dt>Scope</dt>
-          <dd data-token-scope>{{ pat_status.scope or "none" }}</dd>
+          <dt>{{ t("account.scope") }}</dt>
+          <dd data-token-scope>{{ t("js.token.scope." ~ pat_status.scope) if pat_status.scope else t("js.token.none") }}</dd>
         </div>
         <div>
-          <dt>Expires</dt>
-          <dd data-token-expires>{{ pat_status.expires_at or "none" }}</dd>
+          <dt>{{ t("account.expires") }}</dt>
+          <dd data-token-expires>{{ pat_status.expires_at or t("js.token.none") }}</dd>
         </div>
         <div>
-          <dt>Last used</dt>
-          <dd data-token-last-used>{{ pat_status.last_used_at or "never" }}</dd>
+          <dt>{{ t("account.last_used") }}</dt>
+          <dd data-token-last-used>{{ pat_status.last_used_at or t("js.token.never") }}</dd>
         </div>
       </dl>
     </section>
 
     <section class="token-panel" aria-labelledby="token-form-heading">
-      <h2 id="token-form-heading">{{ "Regenerate" if pat_status.state == "active" else "Generate" }} token</h2>
+      <h2 id="token-form-heading">{{ t("account.regenerate_heading") if pat_status.state == "active" else t("account.generate_heading") }}</h2>
       <form class="token-form" data-token-form>
         <label>
-          Scope
+          {{ t("account.scope") }}
           <select name="scope">
-            <option value="read">read</option>
-            <option value="readwrite">readwrite</option>
+            <option value="read">{{ t("js.token.scope.read") }}</option>
+            <option value="readwrite">{{ t("js.token.scope.readwrite") }}</option>
           </select>
         </label>
         <label>
-          Expiry
+          {{ t("account.expiry_label") }}
           <select name="ttl_days">
             {% for days in web_ttl_days %}
-              <option value="{{ days }}"{{ " selected" if days == 90 else "" }}>{{ days }} days</option>
+              <option value="{{ days }}"{{ " selected" if days == 90 else "" }}>{{ t("account.expiry_days", days=days) }}</option>
             {% endfor %}
           </select>
         </label>
-        <button type="submit" data-token-submit>{{ "Regenerate" if pat_status.state == "active" else "Generate" }}</button>
+        <button type="submit" data-token-submit>{{ t("account.regenerate") if pat_status.state == "active" else t("account.generate") }}</button>
       </form>
       <p class="token-note" data-regenerate-note{% if pat_status.state != "active" %} hidden{% endif %}>
-        Regenerating kills the old token immediately.
+        {{ t("account.regenerate_note") }}
       </p>
     </section>
 
     <section class="token-reveal" data-token-reveal hidden aria-live="polite">
       <div>
-        <h2>Copy this token now</h2>
-        <p>This plaintext token cannot be shown again after you leave or reload this page.</p>
+        <h2>{{ t("account.reveal.heading") }}</h2>
+        <p>{{ t("account.reveal.body") }}</p>
       </div>
       <div class="token-copy-row">
         <code data-token-plaintext></code>
-        <button type="button" data-copy-token>Copy</button>
+        <button type="button" data-copy-token>{{ t("js.copy") }}</button>
       </div>
     </section>
 
     <section class="token-panel token-panel--danger" aria-labelledby="token-revoke-heading">
-      <h2 id="token-revoke-heading">Revoke token</h2>
-      <p>Revoking the token does not sign you out of the web session.</p>
-      <button type="button" data-revoke-token{% if pat_status.state != "active" %} disabled{% endif %}>Revoke active token</button>
+      <h2 id="token-revoke-heading">{{ t("account.revoke.heading") }}</h2>
+      <p>{{ t("account.revoke.body") }}</p>
+      <button type="button" data-revoke-token{% if pat_status.state != "active" %} disabled{% endif %}>{{ t("account.revoke.button") }}</button>
     </section>
   </main>
 {% endblock %}

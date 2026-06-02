@@ -5,31 +5,28 @@
 {% block body %}
   <meta name="csrf-token" content="{{ csrf_token }}">
   <main class="upload-page" data-upload-root data-current="pick">
-    <h1>Upload a template</h1>
+    <h1>{{ t("upload.heading") }}</h1>
 
     <noscript>
       <p class="upload-notice upload-notice--error">
-        This page needs JavaScript. The upload flow previews your image,
-        analyzes it, and lets you edit the proposed metadata entirely in the
-        browser, so it cannot run with JavaScript disabled.
+        {{ t("upload.noscript") }}
       </p>
     </noscript>
 
     <p class="helper">
-      Accepted formats: PNG, JPEG, or WebP, up to 10 MB. After you analyze,
-      describing the image may take several seconds while the model inspects it.
+      {{ t("upload.helper") }}
     </p>
 
     <nav class="upload-steps" aria-label="Progress">
       <ol>
         <li class="upload-stepper-item upload-stepper-item--pick" data-key="pick" aria-current="step">
-          <span class="upload-stepper-dot" aria-hidden="true"></span>Pick
+          <span class="upload-stepper-dot" aria-hidden="true"></span>{{ t("upload.step.pick") }}
         </li>
         <li class="upload-stepper-item upload-stepper-item--review" data-key="review">
-          <span class="upload-stepper-dot" aria-hidden="true"></span>Review
+          <span class="upload-stepper-dot" aria-hidden="true"></span>{{ t("upload.step.review") }}
         </li>
         <li class="upload-stepper-item upload-stepper-item--done" data-key="done">
-          <span class="upload-stepper-dot" aria-hidden="true"></span>Done
+          <span class="upload-stepper-dot" aria-hidden="true"></span>{{ t("upload.step.done") }}
         </li>
       </ol>
     </nav>
@@ -38,10 +35,10 @@
       <label class="upload-dropzone" data-dropzone>
         <span class="upload-dropzone__icon" aria-hidden="true"></span>
         <span class="upload-dropzone__title upload-dropzone__title--idle">
-          Drag an image here, or click to choose
+          {{ t("upload.dropzone.idle") }}
         </span>
-        <span class="upload-dropzone__title upload-dropzone__title--drop">Drop to use this image</span>
-        <span class="upload-dropzone__hint">PNG, JPEG or WebP &mdash; up to 10 MB</span>
+        <span class="upload-dropzone__title upload-dropzone__title--drop">{{ t("upload.dropzone.drop") }}</span>
+        <span class="upload-dropzone__hint">{{ t("upload.dropzone.hint") }}</span>
         <input
           class="upload-dropzone__input"
           type="file"
@@ -66,32 +63,30 @@
       {% if reverse_image_enabled %}
         <label class="upload-identify" data-identify-row>
           <input type="checkbox" data-identify-toggle checked>
-          <span>Identify this meme online</span>
+          <span>{{ t("upload.identify.toggle") }}</span>
         </label>
         <p class="helper" data-identify-help>
-          Sends your image to Google to identify the meme and fill in its real
-          name and usage. Uncheck for private or original images you do not want
-          sent off this server.
+          {{ t("upload.identify.help") }}
         </p>
       {% endif %}
 
       <div class="upload-actions">
-        <button type="button" class="upload-btn" data-analyze-btn disabled>Analyze</button>
+        <button type="button" class="upload-btn" data-analyze-btn disabled>{{ t("upload.analyze") }}</button>
       </div>
     </section>
 
     <div class="upload-analyzing" data-spinner hidden role="status" aria-live="polite">
       <span class="upload-analyzing__bars" aria-hidden="true"><span></span><span></span><span></span></span>
-      <p class="upload-analyzing__title" data-analyzing-title>Looking at your image&hellip;</p>
-      <p class="upload-analyzing__hint" data-analyzing-hint>This usually takes 5&ndash;60 seconds.</p>
-      <p class="upload-analyzing__rm">Analyzing the image. This may take several seconds.</p>
+      <p class="upload-analyzing__title" data-analyzing-title>{{ t("upload.analyzing.title") }}</p>
+      <p class="upload-analyzing__hint" data-analyzing-hint>{{ t("upload.analyzing.hint") }}</p>
+      <p class="upload-analyzing__rm">{{ t("upload.analyzing.rm") }}</p>
       <div class="upload-analyzing__sweep" aria-hidden="true"></div>
     </div>
 
     <p class="upload-notice upload-notice--error" data-analyze-error hidden role="alert"></p>
 
     <section class="upload-step" data-step="review" hidden>
-      <h2 tabindex="-1">Proposed metadata</h2>
+      <h2 tabindex="-1">{{ t("upload.review.heading") }}</h2>
 
       <form class="upload-form upload-review" data-review-form>
         <div class="upload-review__preview">
@@ -101,50 +96,49 @@
             <span data-file-dims></span>
           </p>
           <details class="upload-disclosure">
-            <summary>Stored image differs</summary>
+            <summary>{{ t("upload.disclosure.summary") }}</summary>
             <p>
-              The stored template is EXIF-stripped and re-encoded, so the saved
-              image may differ slightly from the local preview shown here.
+              {{ t("upload.disclosure.body") }}
             </p>
           </details>
         </div>
 
         <div class="upload-review__fields">
           <label>
-            Name <span class="upload-req" aria-hidden="true">*</span>
+            {{ t("upload.field.name") }} <span class="upload-req" aria-hidden="true">*</span>
             <input type="text" name="name" data-field="name" required aria-required="true">
           </label>
           <label>
-            Description
+            {{ t("upload.field.description") }}
             <textarea name="description" data-field="description" rows="3"></textarea>
           </label>
           <label>
-            Emotion
+            {{ t("upload.field.emotion") }}
             <input type="text" name="emotion" data-field="emotion">
           </label>
           <label>
-            Usage context
+            {{ t("upload.field.usage_context") }}
             <input type="text" name="usage_context" data-field="usage_context">
           </label>
           <label>
-            Tags (comma-separated)
+            {{ t("upload.field.tags") }}
             <input type="text" name="tags" data-field="tags">
-            <span class="helper">Separate tags with commas. Do not put a comma inside a single tag.</span>
+            <span class="helper">{{ t("upload.field.tags_help") }}</span>
           </label>
           <label>
-            Origin name (optional)
+            {{ t("upload.field.origin_name") }}
             <input type="text" name="origin_name" data-field="origin_name">
             <span class="helper" data-origin-status></span>
           </label>
           <label>
-            Origin source URL (optional)
+            {{ t("upload.field.origin_url") }}
             <input type="url" name="origin_source_url" data-field="origin_source_url" placeholder="https://">
-            <span class="helper">Where this meme comes from. Only https links are kept.</span>
+            <span class="helper">{{ t("upload.field.origin_url_help") }}</span>
           </label>
         </div>
 
         <fieldset class="upload-slots">
-          <legend>Slots (read-only)</legend>
+          <legend>{{ t("upload.slots.legend") }}</legend>
           <ul data-slot-list></ul>
         </fieldset>
 
@@ -158,8 +152,8 @@
         <p class="upload-notice upload-notice--error" data-approve-error hidden role="alert"></p>
 
         <div class="upload-actions">
-          <button type="submit" class="upload-btn" data-approve-btn>Approve</button>
-          <button type="button" class="upload-btn upload-btn--ghost" data-discard-btn>Discard</button>
+          <button type="submit" class="upload-btn" data-approve-btn>{{ t("upload.approve") }}</button>
+          <button type="button" class="upload-btn upload-btn--ghost" data-discard-btn>{{ t("upload.discard") }}</button>
         </div>
       </form>
     </section>
@@ -168,17 +162,17 @@
       <p class="upload-notice upload-notice--success" data-success-message tabindex="-1"></p>
       <p class="upload-done__sub" data-success-sub></p>
       <div class="upload-done__actions">
-        <a class="upload-btn" data-browse-link href="/browse">View it in browse</a>
-        <a class="upload-btn upload-btn--ghost" href="/upload">Upload another</a>
+        <a class="upload-btn" data-browse-link href="/browse">{{ t("upload.done.browse") }}</a>
+        <a class="upload-btn upload-btn--ghost" href="/upload">{{ t("upload.done.another") }}</a>
       </div>
     </section>
 
     <div class="upload-resume" data-resume hidden>
       <p class="upload-notice upload-notice--info">
-        A previous upload was left in review. You can discard it and start over.
+        {{ t("upload.resume.notice") }}
       </p>
       <button type="button" class="upload-btn upload-btn--ghost" data-resume-discard>
-        Discard and start over
+        {{ t("upload.resume.discard") }}
       </button>
     </div>
   </main>

@@ -4,20 +4,20 @@
     <h1>meme-mcp</h1>
     <p class="tagline">{{ t("landing.tagline") }}</p>
     {% if web_session %}
-      <p>Signed in as <strong>{{ friend_login }}</strong>.</p>
+      <p>{{ t("common.signed_in_as", login=friend_login) }}</p>
       <p class="cta-row">
-        <a class="cta cta-primary" href="/browse">Browse templates</a>
-        <a class="cta" href="/upload">Upload a template</a>
+        <a class="cta cta-primary" href="/browse">{{ t("landing.cta.browse") }}</a>
+        <a class="cta" href="/upload">{{ t("landing.cta.upload") }}</a>
       </p>
     {% else %}
-      <p>Sign in with GitHub to browse the template library and contribute your own.</p>
+      <p>{{ t("landing.signin_prompt") }}</p>
       <p class="cta-row">
-        <a class="cta cta-primary" href="/auth/login?next=/browse">Sign in with GitHub</a>
+        <a class="cta cta-primary" href="/auth/login?next=/browse">{{ t("landing.cta.signin") }}</a>
       </p>
     {% endif %}
     <section class="landing-about">
-      <h2>For MCP clients</h2>
-      <p>Connect an agent to the hosted MCP endpoint at <code>/mcp</code> with a bearer PAT. See the README for client snippets.</p>
+      <h2>{{ t("landing.mcp.heading") }}</h2>
+      <p>{{ t("landing.mcp.body_prefix") }} <code>/mcp</code> {{ t("landing.mcp.body_suffix") }}</p>
     </section>
   </main>
 {% endblock %}
