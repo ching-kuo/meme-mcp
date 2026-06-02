@@ -37,6 +37,14 @@ def settings(tmp_path) -> Settings:
     )
 
 
+def test_gc_renders_cli_without_flag_inherits_retention(tmp_path, capsys) -> None:
+    # The cronjob invokes `gc-renders` with no flag; it must fall back to the
+    # configured RENDER_GC_TTL_DAYS and run a TTL sweep, not error out.
+    app_settings = settings(tmp_path)
+    assert run(["gc-renders"], app_settings) == 0
+    assert "render(s)" in capsys.readouterr().out
+
+
 def test_allowlist_cli_add_list_remove(tmp_path, capsys) -> None:
     app_settings = settings(tmp_path)
 

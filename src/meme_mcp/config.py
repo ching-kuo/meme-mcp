@@ -24,6 +24,18 @@ class Settings(BaseSettings):
     image_store_backend: Literal["filesystem", "s3"] = "filesystem"
     image_store_fs_path: str = "storage/images"
 
+    # Render-output retention, in days. Single source of truth: the gc-renders
+    # CLI sweeps blobs older than this (the cronjob runs `gc-renders` with no
+    # flag and inherits it), and it bounds render_url_ttl_seconds below so a
+    # signed URL can never outlive its blob. Default 30 days.
+    render_gc_ttl_days: int = 30
+
+    # TTL for the signed ``?exp=&sig=`` token on a generated render URL. Long
+    # enough that an MCP client can display the meme across a conversation.
+    # validate_at_startup rejects a value above render_gc_ttl_days so a live URL
+    # never points at an already-GC'd blob. Default 7 days.
+    render_url_ttl_seconds: int = 7 * 24 * 60 * 60
+
     s3_endpoint: str | None = None
     s3_bucket: str | None = None
     s3_access_key_id: SecretStr | None = None
@@ -103,6 +115,17 @@ def validate_at_startup(settings: Settings) -> None:
     # or any other startup side effect run.
     if not settings.github_redirect_uri.rstrip("/").endswith("/auth/callback"):
         problems.append("GITHUB_REDIRECT_URI must end with /auth/callback")
+    if settings.render_gc_ttl_days <= 0:
+        problems.append("RENDER_GC_TTL_DAYS must be > 0")
+    if settings.render_url_ttl_seconds <= 0:
+        problems.append("RENDER_URL_TTL_SECONDS must be > 0")
+    elif settings.render_url_ttl_seconds > settings.render_gc_ttl_days * 86400:
+        # A URL outliving its blob would 404 silently; refuse the config so the
+        # signed-URL TTL and the GC retention cannot drift apart.
+        problems.append(
+            "RENDER_URL_TTL_SECONDS must be <= RENDER_GC_TTL_DAYS in seconds "
+            "(a signed render URL must not outlive its GC'd blob)"
+        )
     if settings.mcp_host != "127.0.0.1":
         if len(_secret_value(settings.session_secret)) < 32 or "dev" in _secret_value(
             settings.session_secret

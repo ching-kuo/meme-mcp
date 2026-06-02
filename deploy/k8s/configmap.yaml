@@ -9,4 +9,7 @@ data:
   IMAGE_STORE_FS_PATH: "/data/images"
   STORAGE_DIR: "/data"
   DATABASE_URL: "sqlite+aiosqlite:////data/meme-mcp.db"
+  # Render retention: drives both the gc-renders sweep and the signed render-URL
+  # TTL ceiling. RENDER_URL_TTL_SECONDS (default 7d) must stay <= this in seconds.
+  RENDER_GC_TTL_DAYS: "30"
 

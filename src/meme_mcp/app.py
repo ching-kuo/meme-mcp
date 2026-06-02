@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import secrets
+import time
 import warnings
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -46,6 +47,7 @@ from meme_mcp.limits import WindowedRateLimiter
 from meme_mcp.mcp.server import create_mcp_server, tool_schemas
 from meme_mcp.rendering.image_store import make_image_store_from_settings
 from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_meme
+from meme_mcp.rendering.signing import sign_render_url, verify_render_signature
 from meme_mcp.upload.dedupe import DuplicateIndex
 from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pending
 from meme_mcp.vlm.client import VLMClient
@@ -637,11 +639,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         prefix: str,
         filename: str,
         authorization: str | None = Header(default=None),
+        exp: str | None = None,
+        sig: str | None = None,
     ) -> FileResponse:
-        friend = friend_from_request_or_header(app, request, authorization)
-        rendered_hash = f"{prefix}{Path(filename).stem}"
-        if not app.state.receipts.exists_for_friend(rendered_hash, friend.github_login):
-            raise MemeMCPError(ErrorCode.NOT_FOUND, [])
+        # A valid signed URL (handed back by `generate`) is its own capability,
+        # so an unauthenticated image client can load the PNG; absent or invalid
+        # signatures fall back to session/PAT auth plus the receipt-ownership
+        # check, which still gates ad-hoc fetches and the web detail page.
+        signed_ok = False
+        if exp and sig:
+            signed_ok = verify_render_signature(
+                f"{prefix}/{filename}",
+                exp,
+                sig,
+                app.state.settings.session_secret.get_secret_value(),
+                int(time.time()),
+            )
+        if not signed_ok:
+            friend = friend_from_request_or_header(app, request, authorization)
+            rendered_hash = f"{prefix}{Path(filename).stem}"
+            if not app.state.receipts.exists_for_friend(rendered_hash, friend.github_login):
+                raise MemeMCPError(ErrorCode.NOT_FOUND, [])
         root = Path(app.state.settings.image_store_fs_path).resolve()
         path = (root / prefix / filename).resolve()
         if not path.is_relative_to(root) or not path.exists():
@@ -776,8 +794,18 @@ class AppMCPBackend:
             spec, slot_fills, self.app.state.image_store, self.app.state.public_app_base_url
         )
         self.app.state.receipts.record(result.hash, template_id, actor)
+        settings = self.app.state.settings
+        # Sign the URL so the calling agent's image client can fetch the PNG
+        # without a credential (it cannot replay the Bearer PAT/session); the
+        # auth-gated route accepts the signature in lieu of auth.
+        signed_url = sign_render_url(
+            result.rendered_url,
+            settings.session_secret.get_secret_value(),
+            int(time.time()),
+            settings.render_url_ttl_seconds,
+        )
         return make_success(
-            _receipt(template_id, slot_fills, result.rendered_url, result.hash, result.alt_text)
+            _receipt(template_id, slot_fills, signed_url, result.hash, result.alt_text)
         )
 
     def record_outcome(self, template_id: str, outcome: str, actor: str) -> Envelope:

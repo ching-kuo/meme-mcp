@@ -67,6 +67,22 @@ def test_s3_requires_s3_fields() -> None:
         validate_at_startup(settings)
 
 
+def test_render_url_ttl_above_gc_retention_rejected() -> None:
+    # A signed URL must not outlive its GC'd blob: TTL > retention is refused.
+    settings = good_settings(render_gc_ttl_days=1, render_url_ttl_seconds=2 * 86400)
+    with pytest.raises(ConfigError, match="RENDER_URL_TTL_SECONDS"):
+        validate_at_startup(settings)
+
+
+def test_render_url_ttl_within_gc_retention_passes() -> None:
+    validate_at_startup(good_settings(render_gc_ttl_days=30, render_url_ttl_seconds=7 * 86400))
+
+
+def test_render_gc_ttl_days_must_be_positive() -> None:
+    with pytest.raises(ConfigError, match="RENDER_GC_TTL_DAYS"):
+        validate_at_startup(good_settings(render_gc_ttl_days=0))
+
+
 def test_secret_repr_is_redacted() -> None:
     assert repr(good_settings().github_client_secret) == "SecretStr('**********')"
 

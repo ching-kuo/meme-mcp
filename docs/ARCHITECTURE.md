@@ -22,6 +22,14 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
   prepends the public app base URL (the `_public_app_base_url` value, same origin as OAuth
   metadata) so `rendered_url` is an absolute `https://host/renders/...` link an MCP client can
   fetch without knowing the server host out of band.
+- `rendering/signing.py` signs that URL with a short-lived `?exp=&sig=` HMAC (key derived from
+  `session_secret` with a domain tag) before it goes into the `generate` receipt. The auth-gated
+  `GET /renders/...` route accepts a live signature *in lieu of* session/PAT auth, so an image
+  client (Claude Desktop, a browser `<img>`) that cannot replay the caller's Bearer PAT still
+  loads the PNG -- the presigned-URL model. Possession of the signed URL is the capability; the
+  TTL (`RENDER_URL_TTL_SECONDS`, default 7 days) is bounded at startup by `RENDER_GC_TTL_DAYS` so a
+  live URL never outlives its GC'd blob. Absent/invalid signatures fall back to auth + the
+  receipt-ownership check, which still gates the web detail page and ad-hoc fetches.
 - `retrieval/` ranks local template records using typed filters, term overlap, and name boosts.
   When an `outcome_lookup` callable is supplied (live MCP `find` calls thread
   `OutcomeEventStore.recent_used_count` through), templates with recent `used` events from
@@ -81,10 +89,12 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
   missing/malformed enrichment file degrades to relocation-only.
 - `cli/gc_renders.py` and the `meme-mcp gc-renders` CLI prune render outputs by TTL
   (`--ttl-days N`) or by max-byte budget (`--max-bytes N`, LRU by `generated_receipts.created_at`).
-  Scope is the receipts-table — template seed images have no receipt row and are never touched.
-  Each delete is guarded by a per-shard `portalocker` advisory lock so GC does not race a
+  With neither flag it falls back to `RENDER_GC_TTL_DAYS` (default 30) — the single retention knob
+  that also caps the signed render-URL TTL (`validate_at_startup`), so a URL can never outlive its
+  blob. Scope is the receipts-table — template seed images have no receipt row and are never
+  touched. Each delete is guarded by a per-shard `portalocker` advisory lock so GC does not race a
   concurrent `put`. Missing-blob-with-extant-receipt rows are pruned cleanly. The
-  `deploy/k8s/cronjob-gc-renders.yaml` manifest schedules a daily 30-day TTL sweep.
+  `deploy/k8s/cronjob-gc-renders.yaml` manifest schedules a daily sweep (no flag, inherits the knob).
 - `rendering/` reads each slot's `box` to derive pixel anchor, alignment, and box dimensions
   (see `_slot_anchor` in `rendering/pipeline.py`). `text_layout.select_wrap` picks the 1/2/3-line
   layout that fills ≥60% of box width while maximizing font size, and `fit_font` runs a

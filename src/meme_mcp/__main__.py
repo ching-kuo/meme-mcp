@@ -54,9 +54,15 @@ def run(argv: Sequence[str] | None = None, settings: Settings | None = None) -> 
             enrichment_path=enrichment,
         )
     if args.command == "gc-renders":
+        # Neither flag given (the cronjob's invocation) falls back to the
+        # configured retention, so the GC sweep and the signed-URL TTL ceiling
+        # read the same RENDER_GC_TTL_DAYS and cannot drift.
+        ttl_days = args.ttl_days
+        if ttl_days is None and args.max_bytes is None:
+            ttl_days = app_settings.render_gc_ttl_days
         return run_gc_renders(
             app_settings,
-            ttl_days=args.ttl_days,
+            ttl_days=ttl_days,
             max_bytes=args.max_bytes,
             dry_run=args.dry_run,
         )

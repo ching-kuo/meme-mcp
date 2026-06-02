@@ -17,7 +17,9 @@ spec:
           containers:
             - name: gc
               image: ghcr.io/ching-kuo/meme-mcp:latest
-              command: ["uv", "run", "meme-mcp", "gc-renders", "--ttl-days", "30"]
+              # No --ttl-days: the sweep inherits RENDER_GC_TTL_DAYS from the
+              # configmap, the same knob that bounds the signed render-URL TTL.
+              command: ["uv", "run", "meme-mcp", "gc-renders"]
               envFrom:
                 - configMapRef:
                     name: meme-mcp

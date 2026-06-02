@@ -6,7 +6,6 @@ from pathlib import Path
 
 from pydantic import SecretStr
 
-from meme_mcp.__main__ import run
 from meme_mcp.cli.gc_renders import run as run_gc
 from meme_mcp.config import Settings
 from meme_mcp.db.engine import sqlite_path
@@ -52,8 +51,10 @@ def _seed_render(
     return digest
 
 
-def test_gc_requires_ttl_or_max_bytes(tmp_path, capsys) -> None:
-    assert run(["gc-renders"], settings(tmp_path)) == 2
+def test_gc_run_requires_ttl_or_max_bytes(tmp_path, capsys) -> None:
+    # The run() entry point still rejects a call with neither bound; the CLI
+    # layer (test_cli) supplies RENDER_GC_TTL_DAYS so the cronjob need not.
+    assert run_gc(settings(tmp_path)) == 2
     assert "--ttl-days" in capsys.readouterr().out
 
 

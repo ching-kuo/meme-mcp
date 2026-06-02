@@ -94,4 +94,13 @@ def test_app_mcp_find_and_generate_use_persisted_templates(tmp_path) -> None:
     )
     assert rendered.status_code == 200
     rendered_url = rendered.json()["data"]["rendered_url"]
+    assert "sig=" in rendered_url and "exp=" in rendered_url
+    # The signed receipt URL is fetchable with auth AND, crucially, without any
+    # credential -- an image client cannot replay the caller's Bearer PAT.
     assert client.get(rendered_url, headers=headers).status_code == 200
+    assert client.get(rendered_url).status_code == 200
+    # A bad signature drops back to auth: rejected without a credential, but an
+    # authenticated owner can still fetch (an expired URL must not lock them out).
+    tampered = rendered_url.replace("sig=", "sig=x")
+    assert client.get(tampered).status_code == 401
+    assert client.get(tampered, headers=headers).status_code == 200

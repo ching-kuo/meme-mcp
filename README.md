@@ -96,7 +96,8 @@ Useful routes:
 - `POST /api/mcp/find`
 - `POST /api/mcp/generate`
 - `POST /api/mcp/record_outcome`
-- `GET /renders/{prefix}/{filename}`
+- `GET /renders/{prefix}/{filename}` (serves the PNG; accepts the signed `?exp=&sig=` token from a
+  `generate` receipt, or session/PAT auth + receipt ownership)
 
 ## Container image
 
@@ -190,7 +191,8 @@ Implemented:
 - persisted templates, receipts, pending uploads (with 24h TTL), and vectors
 - upload validation, EXIF-stripping re-encode, duplicate detection, VLM review fallback
 - optional reverse-image enrichment via Google Cloud Vision (deploy-gated, per-upload toggle)
-- content-addressed rendering, authenticated receipt fetch, path-traversal guard on `/renders/`
+- content-addressed rendering; render URLs carry a short-lived signed `?exp=&sig=` token (so image
+  clients can load them) and otherwise require auth + receipt ownership; path-traversal guard on `/renders/`
 - per-friend rate limiting on `find`/`generate`/`record_outcome` across both HTTP and MCP transports
 - embedding model-drift startup guard (refuses to boot if persisted vectors disagree with `EMBEDDING_MODEL`)
 - global `DecompressionBombWarning` escalation
