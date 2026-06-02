@@ -54,8 +54,8 @@ from meme_mcp.upload.dedupe import DuplicateIndex
 from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pending
 from meme_mcp.vlm.client import VLMClient
 from meme_mcp.vlm.sanitize import sanitize_url
-from meme_mcp.web.csrf import ensure_csrf_token, require_csrf, safe_next
-from meme_mcp.web.i18n import SUPPORTED, plural, resolve_locale, t
+from meme_mcp.web.csrf import ensure_csrf_token, require_csrf, safe_lang_return, safe_next
+from meme_mcp.web.i18n import COOKIE_NAME, SUPPORTED, plural, resolve_locale, t
 from meme_mcp.web.pat_routes import register_pat_routes
 from meme_mcp.web.upload_routes import register_upload_routes
 
@@ -65,6 +65,10 @@ from meme_mcp.web.upload_routes import register_upload_routes
 # memory (KTD11). validate_upload's 10 MB content check stays authoritative.
 MAX_ANALYZE_BODY_BYTES = 14 * 1024 * 1024
 _ANALYZE_PATHS = frozenset({"/api/uploads/analyze", "/upload/analyze"})
+
+# Language-preference cookie lifetime (~1 year). The choice is a non-sensitive
+# display preference (KTD5), so it persists long across sessions.
+LANG_COOKIE_MAX_AGE = 31536000
 
 
 class BodySizeGuardMiddleware:
@@ -440,6 +444,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "pat_expires_in_days": _pat_expires_in_days(app, login) if login else None,
             },
         )
+
+    @app.get("/lang/{locale}")
+    async def set_language(locale: str, request: Request) -> RedirectResponse:
+        # Manual override (KTD5): set the lang cookie and 303-redirect back to a
+        # validated relative target preserving its query. An unknown locale never
+        # writes a junk cookie -- it just redirects. The cookie mirrors the
+        # session-cookie policy (Secure off only on localhost) and is HttpOnly
+        # because JS reads the locale from the window.I18N blob, never the cookie.
+        target = safe_lang_return(request.query_params.get("next"))
+        response = RedirectResponse(target, status_code=303)
+        if locale not in SUPPORTED:
+            return response
+        secure = settings is not None and not settings.github_redirect_uri.startswith(
+            "http://localhost"
+        )
+        response.set_cookie(
+            COOKIE_NAME,
+            locale,
+            max_age=LANG_COOKIE_MAX_AGE,
+            path="/",
+            secure=secure,
+            httponly=True,
+            samesite="lax",
+        )
+        return response
 
     @app.get("/healthz")
     async def healthz() -> dict[str, bool]:

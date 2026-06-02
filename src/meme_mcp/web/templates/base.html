@@ -8,6 +8,28 @@
     {% block head %}{% endblock %}
   </head>
   <body>
+    {# Locale-independent language switch (KTD8): autonym labels so a visitor who
+       cannot read the active language still recognizes it. Rendered before and
+       outside the web_session guard so it is identical on anonymous and
+       signed-in pages. The active locale is a non-link span; inactive locales
+       link to /lang/<loc> carrying the current path+query as a single
+       percent-encoded next value so a switch never loses search/filter state. #}
+    {% set autonyms = {"en": "English", "zh-TW": "中文（繁體）"} %}
+    {% set here = request.url.path ~ ("?" ~ request.url.query if request.url.query else "") %}
+    <div class="lang-switch">
+      <svg class="lang-switch__globe" aria-hidden="true" viewBox="0 0 16 16" width="14" height="14">
+        <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor"></circle>
+        <path d="M1.5 8h13M8 1.5v13" fill="none" stroke="currentColor"></path>
+        <path d="M8 1.5c2 2 2 11 0 13M8 1.5c-2 2-2 11 0 13" fill="none" stroke="currentColor"></path>
+      </svg>
+      {% for loc in supported_locales %}
+        {% if loc == locale %}
+          <span class="lang-switch__option" aria-current="true">{{ autonyms[loc] }}</span>
+        {% else %}
+          <a class="lang-switch__option" href="/lang/{{ loc }}?next={{ here | urlencode }}">{{ autonyms[loc] }}</a>
+        {% endif %}
+      {% endfor %}
+    </div>
     {% if pat_expires_in_days is not none and pat_expires_in_days >= 0 and pat_expires_in_days < 7 %}
       <div class="banner banner-warning" role="status">
         Your PAT expires in {{ pat_expires_in_days }} day{{ "" if pat_expires_in_days == 1 else "s" }}.

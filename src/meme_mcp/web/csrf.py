@@ -33,6 +33,13 @@ DEFAULT_NEXT = "/browse"
 ALLOWED_NEXT_PATHS = frozenset({"/upload", "/browse", "/account"})
 TEMPLATE_DETAIL_PREFIX = "/templates/"
 
+# The language switch (KTD7) must work on every rendered page, including the
+# anonymous landing page "/" that the login-oriented ALLOWED_NEXT_PATHS omits.
+# Its default return is "/" (not /browse), and it preserves the query string so
+# switching language on a search/filter page does not discard the user's query.
+LANG_RETURN_PATHS = frozenset({"/", "/upload", "/browse", "/account"})
+LANG_DEFAULT_NEXT = "/"
+
 
 def _is_template_detail(path: str) -> bool:
     """True for a single-segment template detail path (``/templates/<id>``).
@@ -85,33 +92,63 @@ def require_csrf(request: Request) -> None:
         raise MemeMCPError(ErrorCode.FORBIDDEN, [{"field": "csrf", "reason": "mismatch"}])
 
 
-def safe_next(raw: object) -> str:
-    """Return a safe relative login-return path, or :data:`DEFAULT_NEXT`.
+def safe_next(
+    raw: object,
+    *,
+    allowlist: frozenset[str] = ALLOWED_NEXT_PATHS,
+    default: str = DEFAULT_NEXT,
+    keep_query: bool = False,
+) -> str:
+    """Return a safe relative return path, or ``default``.
 
     Accepts only a server-relative path with a single leading slash and no
     scheme or netloc. Rejects protocol-relative (``//``) and backslash
     (``/\\``) prefixes, leading control characters, and any absolute or
-    scheme-bearing URL. The accepted path must additionally be on the
-    :data:`ALLOWED_NEXT_PATHS` allowlist or be a template detail path
-    (``/templates/<id>``). Anything else falls back to :data:`DEFAULT_NEXT`.
-    Mirrors Django's ``url_has_allowed_host_and_scheme`` logic.
+    scheme-bearing URL. The accepted path must additionally be on ``allowlist``
+    or be a template detail path (``/templates/<id>``). Anything else falls back
+    to ``default``. Mirrors Django's ``url_has_allowed_host_and_scheme`` logic.
+
+    The ``allowlist`` / ``default`` / ``keep_query`` parameters let a second
+    consumer reuse this single anti-open-redirect core instead of duplicating
+    it (a duplicate would have to mirror every future security fix). The login
+    flow uses the defaults; :func:`safe_lang_return` passes the switch's own
+    allowlist and preserves the query. Open-redirect safety is unaffected by
+    ``keep_query``: scheme/netloc only ever appear at the start of a URL, so a
+    ``//evil.com`` sitting in the query of an allowlisted path stays a
+    same-origin query value, never a redirect target.
     """
 
     if not isinstance(raw, str) or not raw:
-        return DEFAULT_NEXT
+        return default
     # Reject any control or whitespace character outright (do NOT strip first):
     # browsers strip leading control/whitespace, so " /x", "\t/x", or "\x00//x"
     # could smuggle a scheme or netloc past the parser if normalized away.
     if any(ord(char) <= 0x20 or ord(char) == 0x7F for char in raw):
-        return DEFAULT_NEXT
+        return default
     # Must be a path-only reference: single leading slash, not protocol-relative
     # ("//") and not a backslash-prefixed ("/\\") trick that some browsers
     # normalize to a scheme-relative URL.
     if not raw.startswith("/") or raw.startswith(("//", "/\\")):
-        return DEFAULT_NEXT
+        return default
     parts = urlsplit(raw)
     if parts.scheme or parts.netloc:
-        return DEFAULT_NEXT
-    if parts.path not in ALLOWED_NEXT_PATHS and not _is_template_detail(parts.path):
-        return DEFAULT_NEXT
+        return default
+    if parts.path not in allowlist and not _is_template_detail(parts.path):
+        return default
+    if keep_query and parts.query:
+        return f"{parts.path}?{parts.query}"
     return parts.path
+
+
+def safe_lang_return(raw: object) -> str:
+    """Validate the language switch's ``next`` return target (KTD7).
+
+    A thin delegate of :func:`safe_next` parameterized with the switch's
+    all-rendered-pages allowlist (including the landing page ``/``), a ``/``
+    default, and query preservation so search/filter state survives a switch.
+    The input is the already-percent-decoded ``next`` query param; it is not
+    decoded again here. The restricted page's ``/auth/callback`` return is not
+    on the allowlist and so correctly falls back to ``/``.
+    """
+
+    return safe_next(raw, allowlist=LANG_RETURN_PATHS, default=LANG_DEFAULT_NEXT, keep_query=True)

@@ -145,6 +145,41 @@ a {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+/* --- Language switch ------------------------------------------------------ */
+.lang-switch {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: 64rem;
+  margin: 0 auto 0.75rem;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+.lang-switch__globe {
+  margin-right: 0.15rem;
+  color: var(--muted);
+}
+
+.lang-switch__option {
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--link);
+  /* CJK autonyms are full-width; do not let them wrap mid-label. */
+  white-space: nowrap;
+}
+
+.lang-switch__option:hover {
+  background: var(--surface-sunken);
+}
+
+.lang-switch__option[aria-current="true"] {
+  color: var(--text);
+  font-weight: 600;
+}
+
 /* --- Landing -------------------------------------------------------------- */
 .landing {
   max-width: 44rem;
