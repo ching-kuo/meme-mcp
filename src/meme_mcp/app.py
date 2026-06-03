@@ -583,6 +583,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "pat_expires_in_days": None,
                 },
             )
+        # As with the Google route, a speculative preload must not mint OAuth
+        # state (a stale state would fail the callback's state check).
+        if _is_prefetch(request):
+            return Response(status_code=204, headers={"Cache-Control": "no-store"})
         state = secrets.token_urlsafe(24)
         verifier = secrets.token_urlsafe(48)
         request.session["oauth_state"] = state
@@ -654,6 +658,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # /auth/google/callback (validated at startup to match the public origin).
         if not hasattr(app.state, "settings"):
             raise MemeMCPError(ErrorCode.UNAUTHORIZED, [])
+        # A speculative preload (Arc/Chromium) must not start the flow: it would
+        # rotate the state Authlib stores, so the clicked redirect's state would
+        # no longer match and the callback would 500 with a CSRF state mismatch.
+        if _is_prefetch(request):
+            return Response(status_code=204, headers={"Cache-Control": "no-store"})
         request.session["post_login_next"] = safe_next(request.query_params.get("next"))
         oauth: GoogleOAuth = app.state.google_oauth
         return await oauth.authorize_redirect(request, app.state.settings.google_redirect_uri)
@@ -1198,3 +1207,24 @@ def _receipt(
 def _pkce_challenge(verifier: str) -> str:
     digest = hashlib.sha256(verifier.encode()).digest()
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+
+
+def _is_prefetch(request: Request) -> bool:
+    """True for a speculative (prefetch/prerender) request.
+
+    Chromium browsers (Arc especially) preload links and send
+    ``Sec-Purpose: prefetch`` (or ``prefetch;prerender``); Firefox sends
+    ``X-Moz: prefetch``; older/Safari variants use ``Purpose``/``X-Purpose``.
+    Such a request must NOT start a sign-in flow: doing so rotates the OAuth
+    ``state`` stored in the session, so the redirect the user actually clicks can
+    carry a now-stale state and the callback fails with a CSRF state mismatch.
+    The OAuth-init routes return a cache-busting no-op for these so the GET is
+    safe to preload and only a real navigation initiates sign-in.
+    """
+    headers = request.headers
+    return (
+        "prefetch" in headers.get("sec-purpose", "").lower()
+        or headers.get("purpose", "").lower() == "prefetch"
+        or headers.get("x-purpose", "").lower() in {"prefetch", "preview"}
+        or headers.get("x-moz", "").lower() == "prefetch"
+    )

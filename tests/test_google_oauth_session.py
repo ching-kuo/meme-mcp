@@ -87,6 +87,52 @@ def test_anonymous_browse_redirects_to_chooser(tmp_path) -> None:
     assert bounce.headers["location"] == "/auth/login?next=/browse"
 
 
+# --- prefetch guard (Arc/Chromium speculative preload) ------------------------
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        {"Sec-Purpose": "prefetch"},
+        {"Sec-Purpose": "prefetch;prerender"},
+        {"Purpose": "prefetch"},
+        {"X-Moz": "prefetch"},
+    ],
+)
+def test_google_login_prefetch_is_a_noop(tmp_path, header) -> None:
+    # A speculative preload must not start the flow (it would rotate Authlib's
+    # session state and break the real click's callback). It returns 204 with
+    # no Location and a no-store header so the browser cannot reuse it.
+    app = _app(tmp_path)
+    client = TestClient(app)
+    resp = client.get("/auth/google/login", headers=header, follow_redirects=False)
+    assert resp.status_code == 204
+    assert "location" not in {k.lower() for k in resp.headers}
+    assert resp.headers["cache-control"] == "no-store"
+
+
+def test_github_login_prefetch_is_a_noop(tmp_path) -> None:
+    app = _app(tmp_path)
+    client = TestClient(app)
+    resp = client.get(
+        "/auth/login?provider=github",
+        headers={"Sec-Purpose": "prefetch"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 204
+    assert resp.headers["cache-control"] == "no-store"
+
+
+def test_real_navigation_still_starts_google_flow(tmp_path) -> None:
+    # No prefetch header: a genuine click initiates the OAuth redirect. Uses the
+    # fake seam so no real Authlib discovery/network call is made.
+    app = _app(tmp_path, FakeGoogleOAuth(sub="s1", email="alice@gmail.com"))
+    client = TestClient(app)
+    started = client.get("/auth/google/login", follow_redirects=False)
+    assert started.status_code in (302, 307)
+    assert "accounts.google.com" in started.headers["location"]
+
+
 # --- first gate: email_verified (R15); any verified Google mailbox -----------
 
 

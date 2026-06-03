@@ -122,6 +122,13 @@ Two auth surfaces share one tree:
   per-session token rather than a plain form. The session cookie has no explicit `max_age`, so it
   uses Starlette's 14-day default (a friend stays signed in for two weeks unless they sign out or
   are de-allowlisted, which is re-checked on every request).
+- **Prefetch guard on sign-in initiation.** Both OAuth-init GETs (`/auth/google/login` and the
+  GitHub branch of `/auth/login`) return a no-op `204` + `Cache-Control: no-store` for speculative
+  requests (`Sec-Purpose: prefetch`, `Purpose`/`X-Purpose`, `X-Moz: prefetch`) via `_is_prefetch`.
+  Aggressive link preloading (e.g. Arc) would otherwise re-run the init route and rotate the OAuth
+  `state` -- Authlib's `set_state_data` keeps only the latest `_state_google_*` -- so the redirect
+  the user actually clicked would carry a stale state and the callback would fail with a CSRF state
+  mismatch. The guard fires before any session write, so only a real navigation starts the flow.
 - **CSP: no inline scripts.** The gateway sets `Content-Security-Policy: default-src 'self'` (see
   `deploy/k8s/` / the infra `httproute`), which blocks inline `<script>` and inline event handlers
   at runtime even though they render fine in tests. All executable JS therefore lives in
