@@ -21,6 +21,7 @@ MESSAGES: dict[str, dict[str, str]] = {
     "nav.browse": {"en": "Browse", "zh-TW": "瀏覽"},
     "nav.upload": {"en": "Upload", "zh-TW": "上傳"},
     "nav.account": {"en": "Account", "zh-TW": "帳號"},
+    "nav.logout": {"en": "Sign out", "zh-TW": "登出"},
     "nav.aria_primary": {"en": "Primary", "zh-TW": "主要導覽"},
     # --- PAT-expiry banner (base.html) ---------------------------------------
     "banner.pat_expiry.one": {

@@ -145,6 +145,32 @@ a {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+/* Logout sits at the far right of the nav and mirrors the link styling, but as
+   a button it carries no default chrome (border/background) of its own. */
+.site-nav__logout {
+  margin-left: auto;
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.site-nav__logout:hover {
+  color: var(--text);
+  background: var(--surface-sunken);
+}
+
+.site-nav__logout:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* --- Language switch ------------------------------------------------------ */
 .lang-switch {
   display: flex;

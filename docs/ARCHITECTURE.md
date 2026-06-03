@@ -116,7 +116,12 @@ Two auth surfaces share one tree:
   landing page (no auth) that points anonymous visitors at GitHub login; an anonymous browser
   hitting `/browse` (no PAT header and no allowlisted session) is 303-redirected to
   `/auth/login?next=/browse`, the same pattern as `/upload`, rather than handed a JSON 401. A PAT
-  header still authenticates `/browse` programmatically. `/browse` renders a gallery whose cards
+  header still authenticates `/browse` programmatically. The signed-in nav carries a Sign-out
+  button (`POST /auth/logout`, which clears the session); like every state-changing request it is
+  CSRF-protected via the header-only `X-CSRF-Token`, so the button is a small `fetch` carrying the
+  per-session token rather than a plain form. The session cookie has no explicit `max_age`, so it
+  uses Starlette's 14-day default (a friend stays signed in for two weeks unless they sign out or
+  are de-allowlisted, which is re-checked on every request). `/browse` renders a gallery whose cards
   show a real preview served by `GET /templates/{template_id}/image` (auth-gated the same way;
   content type is taken from the stored file extension, not sniffed, so it renders under the
   gateway's `X-Content-Type-Options: nosniff`, and a missing template/blob is a 404). Each card

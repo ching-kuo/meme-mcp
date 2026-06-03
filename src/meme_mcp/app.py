@@ -458,6 +458,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "web_session": login is not None,
                 "friend_login": display_label(login, app.state.pin_store) if login else None,
                 "pat_expires_in_days": _pat_expires_in_days(app, login) if login else None,
+                # A signed-in visitor sees the nav here too, so the logout button
+                # needs a token; minted only when there is a real web session.
+                "csrf_token": ensure_csrf_token(request.session) if login is not None else None,
                 "google_oauth_enabled": (
                     app.state.settings.google_oauth_enabled
                     if hasattr(app.state, "settings")
@@ -517,6 +520,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.find_limiter.hit(friend.principal)
         query = q.strip()
         template_rows = _template_rows(app, query)
+        web_session = has_web_session(app, request)
         return templates.TemplateResponse(
             request,
             "browse.html",
@@ -525,7 +529,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "templates": template_rows,
                 "friend_login": display_label(friend.principal, app.state.pin_store),
                 "pat_expires_in_days": _pat_expires_in_days(app, friend.principal),
-                "web_session": has_web_session(app, request),
+                "web_session": web_session,
+                # Minted only for a real web session so the nav's logout button
+                # has a token; PAT-only requests get no nav and no stray cookie.
+                "csrf_token": ensure_csrf_token(request.session) if web_session else None,
             },
         )
 
@@ -876,6 +883,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         origin = template.metadata.get("origin")
         origin = origin if isinstance(origin, dict) else None
         origin_source_url_safe = sanitize_url(str(origin.get("source_url", ""))) if origin else ""
+        web_session = has_web_session(app, request)
         return templates.TemplateResponse(
             request,
             "detail.html",
@@ -885,7 +893,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "origin_source_url_safe": origin_source_url_safe,
                 "friend_login": display_label(friend.principal, app.state.pin_store),
                 "pat_expires_in_days": _pat_expires_in_days(app, friend.principal),
-                "web_session": has_web_session(app, request),
+                "web_session": web_session,
+                # See browse: token only for a real web session (nav logout).
+                "csrf_token": ensure_csrf_token(request.session) if web_session else None,
             },
         )
 

@@ -63,7 +63,34 @@
         <a href="/browse"{% if path == "/browse" %} aria-current="page"{% endif %}>{{ t("nav.browse") }}</a>
         <a href="/upload"{% if path == "/upload" %} aria-current="page"{% endif %}>{{ t("nav.upload") }}</a>
         <a href="/account"{% if path == "/account" %} aria-current="page"{% endif %}>{{ t("nav.account") }}</a>
+        {# Logout posts to /auth/logout, which requires the X-CSRF-Token header
+           (no form-field fallback), so this is a JS-driven button carrying the
+           per-session token in a data attribute rather than a plain form. #}
+        <button type="button" class="site-nav__logout" data-logout data-csrf="{{ csrf_token }}">{{ t("nav.logout") }}</button>
       </nav>
+      <script>
+        (function () {
+          var btn = document.querySelector("[data-logout]");
+          if (!btn) return;
+          btn.addEventListener("click", function () {
+            btn.disabled = true;
+            fetch("/auth/logout", {
+              method: "POST",
+              headers: { "X-CSRF-Token": btn.getAttribute("data-csrf") || "" },
+            }).then(function (response) {
+              // Only treat a 2xx as signed-out; on failure (e.g. stale token)
+              // re-enable the button rather than redirecting as if it worked.
+              if (response.ok) {
+                window.location.href = "/";
+              } else {
+                btn.disabled = false;
+              }
+            }).catch(function () {
+              btn.disabled = false;
+            });
+          });
+        })();
+      </script>
     {% endif %}
     {% block body %}{% endblock %}
   </body>

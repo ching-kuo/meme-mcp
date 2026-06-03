@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -241,3 +243,63 @@ def test_logout_rejected_with_wrong_csrf_header(tmp_path) -> None:
     assert response.status_code == 403
     assert response.json()["error_code"] == "FORBIDDEN"
     assert client.get("/browse").status_code == 200
+
+
+def _csrf_from_nav(html: str) -> str:
+    match = re.search(r'data-logout data-csrf="([^"]+)"', html)
+    assert match, "logout button with a CSRF token should render in the signed-in nav"
+    return match.group(1)
+
+
+def test_browse_nav_renders_logout_button_with_token(tmp_path) -> None:
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.github_oauth = FakeGitHubOAuth("friend")
+    (tmp_path / "allowlist.txt").write_text("friend\n", encoding="utf-8")
+    client = TestClient(app)
+    _login(client)
+
+    html = client.get("/browse").text
+
+    # The button carries the per-session token the JS handler sends as the
+    # X-CSRF-Token header (the route has no form-field fallback).
+    token = _csrf_from_nav(html)
+    assert token
+
+
+def test_landing_nav_logout_button_has_working_token(tmp_path) -> None:
+    # Regression: a signed-in visitor sees the nav on "/" too. If the landing
+    # context omits csrf_token, data-csrf renders empty and logout 403s.
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.github_oauth = FakeGitHubOAuth("friend")
+    (tmp_path / "allowlist.txt").write_text("friend\n", encoding="utf-8")
+    client = TestClient(app)
+    _login(client)
+
+    token = _csrf_from_nav(client.get("/").text)
+
+    response = client.post("/auth/logout", headers={CSRF_HEADER_NAME: token})
+    assert response.status_code == 200
+
+
+def test_logout_with_csrf_clears_session(tmp_path) -> None:
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.github_oauth = FakeGitHubOAuth("friend")
+    (tmp_path / "allowlist.txt").write_text("friend\n", encoding="utf-8")
+    client = TestClient(app)
+    _login(client)
+    token = _csrf_from_nav(client.get("/browse").text)
+
+    response = client.post("/auth/logout", headers={CSRF_HEADER_NAME: token})
+
+    assert response.status_code == 200
+    assert response.json()["data"]["logged_out"] is True
+    # Session cleared: /browse now bounces an unauthenticated browser to login.
+    after = client.get("/browse", follow_redirects=False)
+    assert after.status_code == 303
+    assert after.headers["location"] == "/auth/login?next=/browse"
