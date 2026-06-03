@@ -230,10 +230,17 @@ friends whose PAT will expire in fewer than 7 days.
 
 ## Allowlist administration
 
+Entries are provider-namespaced: a bare login or `github:<login>` invites a GitHub user;
+`google:<email>` invites a Google user (who pins to their immutable Google `sub` on first
+verified sign-in). Matching is provider-scoped, so a Google email can never satisfy a GitHub
+entry and vice versa.
+
 ```bash
-kubectl exec deploy/meme-mcp -- /app/.venv/bin/meme-mcp allowlist add github-login
+kubectl exec deploy/meme-mcp -- /app/.venv/bin/meme-mcp allowlist add github:octocat
+kubectl exec deploy/meme-mcp -- /app/.venv/bin/meme-mcp allowlist add google:friend@gmail.com
 kubectl exec deploy/meme-mcp -- /app/.venv/bin/meme-mcp allowlist list
-kubectl exec deploy/meme-mcp -- /app/.venv/bin/meme-mcp allowlist remove github-login
+# `remove google:<email>` is a full de-invite: it also deletes the sub pin.
+kubectl exec deploy/meme-mcp -- /app/.venv/bin/meme-mcp allowlist remove google:friend@gmail.com
 ```
 
 The allowlist file lives at `GITHUB_ALLOWLIST_PATH` (defaults under `STORAGE_DIR`) and is
@@ -245,15 +252,16 @@ Instead of the CLI writing a file on the PVC, you can manage the allowlist in-re
 `GITHUB_ALLOWLIST_PATH` at a ConfigMap mounted read-only:
 
 ```yaml
-# allowlist ConfigMap (one GitHub login per line; "#" comments allowed)
+# allowlist ConfigMap (one entry per line; "#" comments allowed)
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: meme-mcp-allowlist
 data:
   allowlist.txt: |
-    friend-one
-    friend-two
+    friend-one              # bare login == github:friend-one
+    github:friend-two
+    google:friend@gmail.com # Google invite (pins to sub on first sign-in)
 ---
 # in the Deployment: set GITHUB_ALLOWLIST_PATH: "/etc/meme-mcp/allowlist.txt" and add
 volumeMounts:
@@ -270,5 +278,8 @@ This keeps the allowlist reproducible and review-able, and survives a fresh PVC.
 kubelet hot-updates mounted ConfigMaps and the app re-reads the file per request, editing the
 ConfigMap and running `kubectl apply` changes access with no pod restart. The trade-off: the
 mount is read-only, so `meme-mcp allowlist add/remove` cannot be used -- edit the ConfigMap
-instead. `OPERATOR_GITHUB_LOGIN` is display-only (it names the operator on the restricted page)
-and does not by itself grant access, so the operator's login must also be in the allowlist.
+instead. Removing a `google:<email>` line de-invites the friend (access is blocked on the next
+request), but the `sub` pin remains in the database; run `meme-mcp pin revoke google:<sub>` to
+clear it if you want a re-invite to re-pin a fresh account. `OPERATOR_GITHUB_LOGIN` is
+display-only (it names the operator on the restricted page) and does not by itself grant access,
+so the operator's login must also be in the allowlist.
