@@ -111,12 +111,37 @@ def test_blob_and_bootstrap_precede_page_scripts(tmp_path) -> None:
     upload = client.get("/upload", headers={"Accept-Language": "en"})
     account = client.get("/account", headers={"Accept-Language": "en"})
 
+    # The t() bootstrap lives in external /static/base.js (deferred), not inline,
+    # so the gateway's strict CSP does not block it. Deferred scripts run in
+    # document order, so base.js's tag must precede the page script's tag for
+    # window.t to be defined when account.js/upload.js run.
     for page, script in ((upload, "/static/upload.js"), (account, "/static/account.js")):
         blob_at = page.text.index('id="i18n-catalog"')
-        boot_at = page.text.index("window.I18N")
+        boot_at = page.text.index("/static/base.js")
         script_at = page.text.index(script)
         assert blob_at < script_at, "catalog blob must precede the page script"
-        assert boot_at < script_at, "t() bootstrap must precede the page script"
+        assert boot_at < script_at, "base.js bootstrap must precede the page script"
+
+
+# Matches a <script> ... </script> with neither a src= attribute nor a
+# type="application/json" data marker -- i.e. an inline executable script, which
+# the gateway CSP ("default-src 'self'", no 'unsafe-inline') blocks at runtime.
+_INLINE_SCRIPT_RE = re.compile(
+    r"<script(?![^>]*\bsrc=)(?![^>]*application/json)[^>]*>", re.IGNORECASE
+)
+
+
+def test_rendered_pages_have_no_inline_scripts(tmp_path) -> None:
+    # CSP guard: every executable script must be an external /static file. An
+    # inline <script> renders fine in tests but is silently blocked in production
+    # behind the gateway CSP (this is how the logout button and the i18n
+    # bootstrap first broke). The JSON catalog data block is allowed (not executed).
+    client = _authed_client(tmp_path)
+
+    for path in ("/", "/browse", "/upload", "/account"):
+        text = client.get(path, headers={"Accept-Language": "en"}).text
+        offenders = _INLINE_SCRIPT_RE.findall(text)
+        assert not offenders, f"{path} has a CSP-blocked inline <script>: {offenders}"
 
 
 # ---------------------------------------------------------------------------

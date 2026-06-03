@@ -121,7 +121,15 @@ Two auth surfaces share one tree:
   CSRF-protected via the header-only `X-CSRF-Token`, so the button is a small `fetch` carrying the
   per-session token rather than a plain form. The session cookie has no explicit `max_age`, so it
   uses Starlette's 14-day default (a friend stays signed in for two weeks unless they sign out or
-  are de-allowlisted, which is re-checked on every request). `/browse` renders a gallery whose cards
+  are de-allowlisted, which is re-checked on every request).
+- **CSP: no inline scripts.** The gateway sets `Content-Security-Policy: default-src 'self'` (see
+  `deploy/k8s/` / the infra `httproute`), which blocks inline `<script>` and inline event handlers
+  at runtime even though they render fine in tests. All executable JS therefore lives in
+  `web/static/*.js` and is included with `<script src=... defer>`; `web/static/base.js` (loaded on
+  every page) holds the i18n `t()` bootstrap and the logout handler. The `<script
+  type="application/json" id="i18n-catalog">` block is data, not executed, so it is exempt. A
+  render guard (`test_rendered_pages_have_no_inline_scripts`) fails the build if an inline script
+  reappears. `/browse` renders a gallery whose cards
   show a real preview served by `GET /templates/{template_id}/image` (auth-gated the same way;
   content type is taken from the stored file extension, not sniffed, so it renders under the
   gateway's `X-Content-Type-Options: nosniff`, and a missing template/blob is a 404). Each card
