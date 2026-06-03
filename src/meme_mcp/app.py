@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import secrets
 import time
 import warnings
@@ -79,6 +80,11 @@ _ANALYZE_PATHS = frozenset({"/api/uploads/analyze", "/upload/analyze"})
 # Language-preference cookie lifetime (~1 year). The choice is a non-sensitive
 # display preference (KTD5), so it persists long across sessions.
 LANG_COOKIE_MAX_AGE = 31536000
+
+# Templates shown per /browse page. The full row set is loaded (it is also the
+# total-count source and the search reorder input), then sliced in Python; the
+# library is small enough that DB-side LIMIT/OFFSET buys nothing.
+BROWSE_PAGE_SIZE = 24
 
 
 class BodySizeGuardMiddleware:
@@ -504,6 +510,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def browse(
         request: Request,
         q: str = "",
+        page: str = "1",
         authorization: str | None = Header(default=None),
     ) -> Response:
         # A browser visitor with neither a PAT header nor a web session is sent
@@ -519,14 +526,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         friend = friend_from_request_or_header(app, request, authorization)
         app.state.find_limiter.hit(friend.principal)
         query = q.strip()
-        template_rows = _template_rows(app, query)
+        all_rows = _template_rows(app, query)
+        total_count = len(all_rows)
+        total_pages = max(1, math.ceil(total_count / BROWSE_PAGE_SIZE))
+        # Clamp out-of-range pages (page<1, page>last, ?page=999) to a real page
+        # so a bad link still renders the nearest valid window instead of 404ing.
+        # `page` is parsed by hand rather than typed `int` so a non-numeric
+        # ?page=foo (bots, prefetch) falls back to page 1 instead of a raw 422.
+        try:
+            requested_page = int(page)
+        except ValueError:
+            requested_page = 1
+        page_number = min(max(requested_page, 1), total_pages)
+        start = (page_number - 1) * BROWSE_PAGE_SIZE
+        page_rows = all_rows[start : start + BROWSE_PAGE_SIZE]
         web_session = has_web_session(app, request)
         return templates.TemplateResponse(
             request,
             "browse.html",
             {
                 "query": query,
-                "templates": template_rows,
+                "templates": page_rows,
+                "total_count": total_count,
+                "pagination": _browse_pagination(query, page_number, total_pages),
                 "friend_login": display_label(friend.principal, app.state.pin_store),
                 "pat_expires_in_days": _pat_expires_in_days(app, friend.principal),
                 "web_session": web_session,
@@ -1156,6 +1178,41 @@ def _upload_deps(app: FastAPI) -> UploadServiceDeps:
         duplicate_index=_duplicate_index(app),
         reverse_image_client=getattr(app.state, "reverse_image_client", None),
     )
+
+
+def _browse_page_url(query: str, page: int) -> str:
+    # Preserve the active search across page links and omit page=1 so the first
+    # page keeps the canonical /browse(?q=...) URL. Returns a plain str (never a
+    # Markup) so Jinja autoescapes the user-supplied `query` portion in href="".
+    params: dict[str, str | int] = {}
+    if query:
+        params["q"] = query
+    if page > 1:
+        params["page"] = page
+    suffix = urlencode(params)
+    return f"/browse?{suffix}" if suffix else "/browse"
+
+
+def _browse_pagination(
+    query: str, page: int, total_pages: int
+) -> dict[str, object] | None:
+    # None when a single page fits everything -- the template then renders no
+    # pager at all (the common case for a small library). Every page number is
+    # listed (no windowing/ellipsis): the library is small enough that the link
+    # row stays short; revisit if it grows past a few dozen pages.
+    if total_pages <= 1:
+        return None
+    return {
+        "page": page,
+        "total_pages": total_pages,
+        "prev_url": _browse_page_url(query, page - 1) if page > 1 else None,
+        "next_url": _browse_page_url(query, page + 1) if page < total_pages else None,
+        # `current` is derived in the template from page == p.number.
+        "pages": [
+            {"number": p, "url": _browse_page_url(query, p)}
+            for p in range(1, total_pages + 1)
+        ],
+    }
 
 
 def _template_rows(app: FastAPI, query: str) -> list[TemplateRow]:

@@ -539,6 +539,56 @@ code {
   border-radius: var(--radius-lg);
 }
 
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 2.5rem;
+}
+
+.pager__step,
+.pager__page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  padding: 0.45rem 0.75rem;
+  color: var(--text);
+  text-decoration: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.pager__step:hover,
+.pager__page:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-sunken);
+}
+
+.pager__step:focus-visible,
+.pager__page:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.pager__page--current {
+  font-weight: 600;
+  color: var(--surface);
+  background: var(--text);
+  border-color: var(--text);
+}
+
+.pager__step--disabled {
+  color: var(--muted);
+  background: var(--surface-sunken);
+  border-style: dashed;
+  pointer-events: none;
+}
+
 /* Gentle staggered entrance for the first rows; later cards just appear. */
 @media (prefers-reduced-motion: no-preference) {
   .template-card {

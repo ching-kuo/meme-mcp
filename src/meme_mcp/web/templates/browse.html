@@ -6,9 +6,9 @@
       <h1>meme-mcp</h1>
       <p class="masthead__count">
         {% if query %}
-          {{ plural(templates|length, "browse.match", query=query) }}
+          {{ plural(total_count, "browse.match", query=query) }}
         {% else %}
-          {{ plural(templates|length, "browse.count") }}
+          {{ plural(total_count, "browse.count") }}
         {% endif %}
       </p>
       <form class="search" method="get" action="/browse" role="search">
@@ -68,5 +68,27 @@
         </p>
       {% endfor %}
     </section>
+
+    {% if pagination %}
+      <nav class="pager" aria-label="{{ t('browse.pager.label') }}">
+        {% if pagination.prev_url %}
+          <a class="pager__step" href="{{ pagination.prev_url }}" rel="prev">{{ t("browse.pager.prev") }}</a>
+        {% else %}
+          <span class="pager__step pager__step--disabled" aria-hidden="true">{{ t("browse.pager.prev") }}</span>
+        {% endif %}
+        {% for p in pagination.pages %}
+          {% if p.number == pagination.page %}
+            <span class="pager__page pager__page--current" aria-current="page">{{ p.number }}</span>
+          {% else %}
+            <a class="pager__page" href="{{ p.url }}">{{ p.number }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if pagination.next_url %}
+          <a class="pager__step" href="{{ pagination.next_url }}" rel="next">{{ t("browse.pager.next") }}</a>
+        {% else %}
+          <span class="pager__step pager__step--disabled" aria-hidden="true">{{ t("browse.pager.next") }}</span>
+        {% endif %}
+      </nav>
+    {% endif %}
   </main>
 {% endblock %}

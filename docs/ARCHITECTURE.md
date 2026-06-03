@@ -136,7 +136,10 @@ Two auth surfaces share one tree:
   every page) holds the i18n `t()` bootstrap and the logout handler. The `<script
   type="application/json" id="i18n-catalog">` block is data, not executed, so it is exempt. A
   render guard (`test_rendered_pages_have_no_inline_scripts`) fails the build if an inline script
-  reappears. `/browse` renders a gallery whose cards
+  reappears. `/browse` renders a gallery (paginated 24 templates per page via `?page=N`; the
+  full row set is loaded for the count and search reorder, then sliced in Python, and an
+  out-of-range or non-numeric `page` clamps to the nearest valid page rather than erroring)
+  whose cards
   show a real preview served by `GET /templates/{template_id}/image` (auth-gated the same way;
   content type is taken from the stored file extension, not sniffed, so it renders under the
   gateway's `X-Content-Type-Options: nosniff`, and a missing template/blob is a 404). Each card

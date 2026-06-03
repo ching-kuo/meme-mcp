@@ -140,7 +140,7 @@ Useful routes:
 - `GET /readyz`
 - `GET /account` (HTML page where an allowlisted friend generates/regenerates/revokes their MCP PAT and copies it once; anonymous browsers are redirected to sign-in)
 - `GET /auth/login` (GitHub login, or a provider chooser when Google sign-in is enabled), `GET /auth/google/login` + `GET /auth/google/callback` (Google OIDC, when enabled)
-- `GET /browse` (HTML gallery with template previews; cards link to the detail page; an anonymous browser is redirected to sign-in)
+- `GET /browse` (HTML gallery with template previews, paginated 24 per page via `?page=N`; cards link to the detail page; an anonymous browser is redirected to sign-in)
 - `GET /templates/{template_id}` (HTML detail page: full preview plus metadata, slots, and fingerprint; auth-gated like `/browse`)
 - `GET /templates/{template_id}/image` (the gallery's preview image; auth-gated like `/browse`)
 - `GET /api/templates?q=deploy`

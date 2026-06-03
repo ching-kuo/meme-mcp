@@ -115,6 +115,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh-TW": "沒有符合「{query}」的範本。試試更廣泛的搜尋。",
     },
     "browse.empty.none": {"en": "No templates yet.", "zh-TW": "目前還沒有範本。"},
+    "browse.pager.label": {"en": "Pagination", "zh-TW": "分頁"},
+    "browse.pager.prev": {"en": "Previous", "zh-TW": "上一頁"},
+    "browse.pager.next": {"en": "Next", "zh-TW": "下一頁"},
     # --- detail.html ---------------------------------------------------------
     "detail.back": {"en": "Template library", "zh-TW": "範本庫"},
     "detail.attrs.heading": {"en": "Attributes", "zh-TW": "屬性"},
