@@ -220,17 +220,20 @@ offered and the GitHub path is untouched.
   authz-bearing claims stay bound to the validated token. A separate callback path
   (`/auth/google/callback`) is the RFC 9700 mix-up defense for running two IdPs.
 
-- **Trust-on-first-use `sub` pinning (KTD).** The operator invites a friend by Gmail address
-  (`google:<email>`). On the first sign-in where `email_verified` is strictly boolean `true` AND
-  the address is `@gmail.com` (the only domain for which `email_verified` is authoritative), the
+- **Trust-on-first-use `sub` pinning (KTD).** The operator invites a friend by their Google account
+  email (`google:<email>`). On the first sign-in where `email_verified` is strictly boolean `true`
+  (the domain is not restricted to `@gmail.com` — any verified Google mailbox, e.g. `@icloud.com`,
+  is accepted, because authorization keys on the full allowlisted email plus the `sub` pin, so a
+  Workspace admin cannot mint an arbitrary allowlisted address), the
   app records a durable `sub -> email` pin (`auth/google_pins.py`, `google_pins` table) and the
-  principal becomes `google:<sub>` — the immutable subject, never the mutable email, so a Gmail
+  principal becomes `google:<sub>` — the immutable subject, never the mutable email, so an email
   rename does not revoke access (a returning `sub` is authorized against its pinned, allowlisted
   email; the live claim email is ignored). The `email UNIQUE` constraint enforces
   **first-sign-in-wins**: a second `sub` claiming an already-pinned email is rejected at the DB
   layer. PATs and audit bind to `google:<sub>`; the allowlist stays email-keyed and
   operator-friendly, with Gmail canonicalization (lowercase, strip local-part dots, drop `+suffix`)
-  applied identically to the stored entry and the claim.
+  applied to Gmail addresses only — other domains match exactly — identically on the stored entry
+  and the claim.
 
 - **Terminal revocation and the residual race (KTD).** Both `pin revoke` and `allowlist remove
   google:<email>` **delete the pin row**; the deleted pin is never silently re-authorized, so
@@ -240,11 +243,11 @@ offered and the GitHub path is untouched.
   re-add the invite). `pin revoke` deletes the pin but **leaves the invite**, so it is a *rotation*
   tool (evict a wrong first-sign-in-wins pin): the next sign-in re-pins, and if the invite still
   stands the same `sub` can re-win it — the residual race re-applies until the operator confirms the
-  intended `sub` via `pin show`. The accepted residual risk: because Gmail
-  addresses can be reclaimed, whoever first presents a verified, allowlisted Gmail wins the pin; the
-  `@gmail.com` gate, terminal revocation, and operator inspection (`pin show`/`pin list`) are the
-  mitigations, and the documented remediation for a wrong pin is revoke-pin → re-invite → confirm
-  the new `sub`. Hand-editing the allowlist file to remove a line denies access while removed but
+  intended `sub` via `pin show`. The accepted residual risk: because an email
+  address can be reclaimed, whoever first presents a verified, allowlisted address wins the pin; the
+  strict `email_verified` gate, terminal revocation, and operator inspection (`pin show`/`pin list`)
+  are the mitigations, and the documented remediation for a wrong pin is revoke-pin → re-invite →
+  confirm the new `sub`. Hand-editing the allowlist file to remove a line denies access while removed but
   does not delete the pin; `pin revoke` is the authoritative rotation path. MCP transport auth is
   unchanged — a Google friend gets parity purely by holding a PAT whose subject is `google:<sub>`;
   no OAuth is wired into the MCP transport and RFC 8414 metadata stays intentionally absent.

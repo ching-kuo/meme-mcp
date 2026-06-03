@@ -1,12 +1,12 @@
 """Trust-on-first-use ``sub -> email`` pins for Google friends.
 
-The operator invites a friend by Gmail address (``google:<email>`` in the
-allowlist). On the first verified ``@gmail.com`` sign-in the app records a
-durable pin binding the immutable Google ``sub`` to that invited mailbox; the
-principal that PATs and audit bind to is then ``google:<sub>``, never the
-mutable email. Authorization for a returning friend resolves ``sub -> email``
-here and checks the email against the allowlist, so a Gmail rename does not
-revoke access (the pinned email is the operator's invite).
+The operator invites a friend by their Google account email (``google:<email>``
+in the allowlist). On the first verified Google sign-in (any mailbox, not only
+Gmail) the app records a durable pin binding the immutable Google ``sub`` to
+that invited mailbox; the principal that PATs and audit bind to is then
+``google:<sub>``, never the mutable email. Authorization for a returning friend
+resolves ``sub -> email`` here and checks the email against the allowlist, so an
+email rename does not revoke access (the pinned email is the operator's invite).
 
 The ``email UNIQUE`` constraint enforces first-sign-in-wins: a second ``sub``
 presenting an already-pinned email is rejected at the DB layer. Eviction

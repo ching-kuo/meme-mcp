@@ -667,13 +667,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # separate /userinfo fetch.
         oauth: GoogleOAuth = app.state.google_oauth
         identity = await oauth.resolve_identity(request)
-        # First gate (always): strictly-boolean email_verified AND an @gmail.com
-        # address (email_verified is only authoritative for Gmail). Reject with no
+        # First gate (always): strictly-boolean email_verified. Reject with no
         # session before any allowlist or pin work. The string forms Google has
         # historically emitted ("true"/"false") are rejected by the `is True`
-        # check (R15).
+        # check (R15). The domain is intentionally NOT restricted to @gmail.com:
+        # a consumer Google account can carry a verified non-Gmail mailbox (e.g.
+        # @icloud.com), and authorization keys on the FULL allowlisted email plus
+        # the immutable sub-pin -- so the Workspace-domain-takeover risk that the
+        # original Gmail-only gate guarded against does not apply (nobody can mint
+        # an @icloud.com / @gmail.com address in a Workspace they control).
         email = (identity.email or "").strip().lower()
-        if identity.email_verified is not True or not email.endswith("@gmail.com"):
+        local, _, domain = email.partition("@")
+        if identity.email_verified is not True or not local or not domain or "@" in domain:
             return _google_restricted(app, request)
         principal = _resolve_google_principal(app, identity.subject, email)
         if principal is None:
@@ -1063,15 +1068,16 @@ def _google_restricted(app: FastAPI, request: Request) -> Response:
 
 
 def _resolve_google_principal(app: FastAPI, sub: str, email: str) -> str | None:
-    """Pin-first authorization for a verified Gmail sign-in (U6).
+    """Pin-first authorization for a verified Google sign-in (U6).
 
     Returning friend (a pin exists for ``sub``): authorize on the immutable sub
     via the shared predicate -- the pinned email (the operator's invite) is what
-    is checked, so a Gmail rename does not 403. First-timer (no pin): require the
+    is checked, so an email rename does not 403. First-timer (no pin): require the
     claim email to be currently allowlisted, then create the pin; the ``email
     UNIQUE`` constraint enforces first-sign-in-wins (a second sub for an
     already-pinned email is rejected). Returns the ``google:<sub>`` principal on
-    success, else None.
+    success, else None. The email may be any verified Google mailbox, not only
+    Gmail; dot/+ canonicalization still applies to Gmail addresses only.
     """
     if not sub:
         return None

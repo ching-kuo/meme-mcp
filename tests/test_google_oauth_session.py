@@ -87,7 +87,7 @@ def test_anonymous_browse_redirects_to_chooser(tmp_path) -> None:
     assert bounce.headers["location"] == "/auth/login?next=/browse"
 
 
-# --- first gate: email_verified (R15) + @gmail.com (AE1) ----------------------
+# --- first gate: email_verified (R15); any verified Google mailbox -----------
 
 
 @pytest.mark.parametrize("verified", [False, "true", "false", None, "", 1])
@@ -117,11 +117,41 @@ def test_boolean_true_verified_gmail_proceeds(tmp_path) -> None:
     assert client.get("/browse").status_code == 200
 
 
-def test_non_gmail_verified_address_rejected(tmp_path) -> None:
+def test_verified_non_gmail_allowlisted_address_proceeds(tmp_path) -> None:
+    # A verified non-Gmail Google mailbox (e.g. an @icloud.com account) is
+    # accepted when allowlisted: authorization keys on the full email + sub-pin,
+    # so the domain is not restricted to Gmail.
     app = _app(
         tmp_path,
-        FakeGoogleOAuth(sub="s1", email="alice@example.com", email_verified=True),
-        allow="google:alice@example.com",
+        FakeGoogleOAuth(sub="s1", email="friend@icloud.com", email_verified=True),
+        allow="google:friend@icloud.com",
+    )
+    client = TestClient(app)
+    response = _complete_google_login(client)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/browse"
+    assert client.get("/browse").status_code == 200
+    assert app.state.pin_store.email_for_sub("s1") == "friend@icloud.com"
+
+
+@pytest.mark.parametrize("bad_email", ["@icloud.com", "friend@", "a@@b.com", "noatsign", ""])
+def test_malformed_verified_email_rejected(tmp_path, bad_email) -> None:
+    # The structural gate (non-empty local + single-@ + non-empty domain) rejects
+    # malformed claims before any allowlist lookup, even if email_verified is true.
+    app = _app(
+        tmp_path,
+        FakeGoogleOAuth(sub="s1", email=bad_email, email_verified=True),
+        allow=f"google:{bad_email}",
+    )
+    client = TestClient(app)
+    assert _complete_google_login(client).status_code == 403
+
+
+def test_verified_non_gmail_not_allowlisted_rejected(tmp_path) -> None:
+    # Relaxing the domain gate must not relax the allowlist requirement.
+    app = _app(
+        tmp_path,
+        FakeGoogleOAuth(sub="s1", email="stranger@icloud.com", email_verified=True),
     )
     client = TestClient(app)
     assert _complete_google_login(client).status_code == 403

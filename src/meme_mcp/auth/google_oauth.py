@@ -12,7 +12,7 @@ call:
   ``/userinfo`` fetch).
 
 Both providers converge on one :class:`ResolvedIdentity` shape so the
-``email_verified`` / ``@gmail.com`` gate and principal-minting read a single
+``email_verified`` gate and principal-minting read a single
 structure at one chokepoint (U5). The GitHub flow stays hand-rolled; this is an
 identity-type convergence, not a shared fetch interface.
 """

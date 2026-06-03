@@ -106,7 +106,7 @@ def _parser() -> argparse.ArgumentParser:
     pat_issue = pat_commands.add_parser("issue")
     pat_issue.add_argument(
         "principal",
-        help="GitHub login, a Gmail address, or google:<email> (resolved to google:<sub>)",
+        help="GitHub login, a Google account email, or google:<email> (resolved to google:<sub>)",
     )
     pat_issue.add_argument(
         "--ttl-days",
@@ -132,7 +132,7 @@ def _parser() -> argparse.ArgumentParser:
     pin_show.add_argument("email")
     pin_commands.add_parser("list")
     pin_revoke = pin_commands.add_parser("revoke")
-    pin_revoke.add_argument("identifier", help="invited Gmail address or the pinned google sub")
+    pin_revoke.add_argument("identifier", help="invited Google email or the pinned google sub")
     subcommands.add_parser("reindex-embeddings")
     seed = subcommands.add_parser("seed-memegen")
     seed.add_argument("--upstream-path", default=None)
@@ -177,7 +177,7 @@ def _run_allowlist(args: argparse.Namespace, settings: Settings) -> int:
     if args.allowlist_command == "add":
         if not sep and "@" in entry:
             # A bare value with @ would be stored as a GitHub login; require an
-            # explicit Google namespace so a Gmail invite is never mis-scoped.
+            # explicit Google namespace so a Google email invite is never mis-scoped.
             print(f"error: '{entry}' looks like an email; use google:{entry} or --provider google")
             return 2
         allowlist.add(entry)
@@ -201,8 +201,8 @@ def _run_allowlist(args: argparse.Namespace, settings: Settings) -> int:
 def _resolve_pat_subject(principal: str, pin_store: SQLiteGooglePinStore) -> str | None:
     """Resolve a CLI `pat issue` arg to the PAT subject.
 
-    A GitHub login passes through (issue_pat namespaces it). A Gmail address or
-    ``google:<email>`` is resolved to ``google:<sub>`` via the pin; returns None
+    A GitHub login passes through (issue_pat namespaces it). A Google account
+    email or ``google:<email>`` is resolved to ``google:<sub>`` via the pin; returns None
     when no pin exists yet (the friend must sign in with Google first).
     """
     provider, sep, rest = principal.partition(":")

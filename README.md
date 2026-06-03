@@ -39,11 +39,15 @@ parity: browse, generate, upload, self-service PATs, and MCP client auth.
 - Enable with `GOOGLE_OAUTH_ENABLED=true` and set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and
   `GOOGLE_REDIRECT_URI` (must end in `/auth/google/callback` and resolve to the app's public
   origin). Startup fails fast if any are missing or the redirect origin does not match.
-- **Gmail only this release.** Google's `email_verified` claim is authoritative only for Gmail, so
-  only verified `@gmail.com` addresses may sign in. Invite a friend by their Gmail address:
-  `meme-mcp allowlist add google:<email>`.
+- **Any verified Google mailbox.** Sign-in requires Google's `email_verified` claim to be strictly
+  `true`; the address may be any Google account mailbox, including non-Gmail ones (e.g.
+  `@icloud.com`). The domain is not restricted because authorization keys on the full allowlisted
+  email plus the immutable `sub` pin, so a Workspace admin cannot mint an arbitrary allowlisted
+  address. Invite a friend by their Google account email: `meme-mcp allowlist add google:<email>`.
+  (Dot/`+suffix` alias canonicalization still applies to Gmail addresses only; other domains match
+  exactly.)
 - **Trust-on-first-use.** On a friend's first verified sign-in the app pins their immutable Google
-  `sub` to the invited mailbox; PATs and audit bind to `google:<sub>`, not the email, so a Gmail
+  `sub` to the invited mailbox; PATs and audit bind to `google:<sub>`, not the email, so an email
   rename does not lock them out. The first verified, allowlisted sign-in for an invited email wins
   the pin.
 - **Wrong/poisoned pin remediation:** `meme-mcp pin show <email>` inspects the pinned `sub`;
@@ -92,7 +96,7 @@ uv run meme-mcp seed-memegen --upstream-path /path/to/memegen-clone
 # Add a GitHub login to the allowlist used by both web sessions and PAT auth.
 uv run meme-mcp allowlist add <github-login>
 
-# Invite a Google friend by Gmail address (requires GOOGLE_OAUTH_ENABLED=true).
+# Invite a Google friend by their Google account email (requires GOOGLE_OAUTH_ENABLED=true).
 uv run meme-mcp allowlist add google:<email>          # or: allowlist add <email> --provider google
 # Removing a Google invite also evicts the friend's pin (terminal revocation).
 uv run meme-mcp allowlist remove google:<email>
@@ -110,7 +114,7 @@ uv run meme-mcp pin revoke <email-or-sub>
 # (bounded to 30/90/365-day expiry; never-expire stays operator-CLI-only). This
 # CLI remains the operator fallback and the only way to issue a non-expiring token.
 uv run meme-mcp pat issue <github-login> [--ttl-days N] [--scope read|readwrite]
-# For a Google friend, pass their Gmail (resolved to google:<sub> via the pin; the
+# For a Google friend, pass their Google email (resolved to google:<sub> via the pin; the
 # friend must have signed in once). pat revoke accepts a github login or google:<sub>.
 uv run meme-mcp pat issue <email> [--ttl-days N] [--scope read|readwrite]
 uv run meme-mcp pat revoke <github-login | google:sub>
