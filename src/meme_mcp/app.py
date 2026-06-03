@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from typing import Protocol, cast
-from urllib.parse import urlencode, urlsplit, urlunsplit
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import FastAPI, Header, Request
@@ -27,8 +27,11 @@ from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from meme_mcp.audit.sink import JsonlAuditSink
-from meme_mcp.auth.allowlist import FileAllowlist
+from meme_mcp.auth.allowlist import FileAllowlist, canonical_email
+from meme_mcp.auth.authorization import display_label, is_authorized, normalize_principal
 from meme_mcp.auth.depends import require_write
+from meme_mcp.auth.google_oauth import GoogleOAuth
+from meme_mcp.auth.google_pins import SQLiteGooglePinStore
 from meme_mcp.auth.pat import SQLitePatStore, expires_at_for_login
 from meme_mcp.auth.session import (
     friend_from_header,
@@ -36,7 +39,12 @@ from meme_mcp.auth.session import (
     has_web_session,
     session_login,
 )
-from meme_mcp.config import ConfigError, Settings, validate_at_startup
+from meme_mcp.config import (
+    Settings,
+    resolve_public_base_url,
+    session_cookie_secure,
+    validate_at_startup,
+)
 from meme_mcp.db.engine import sqlite_path
 from meme_mcp.db.migrations import run_migrations
 from meme_mcp.db.outcomes import VALID_OUTCOMES, OutcomeEventStore
@@ -321,23 +329,6 @@ _IMAGE_CONTENT_TYPES = {
 }
 
 
-def _public_app_base_url(github_redirect_uri: str) -> str:
-    """Derive the externally visible app base URL from the GitHub callback URL.
-
-    The callback path must end in ``/auth/callback`` (the route the app actually
-    serves); otherwise ``removesuffix`` would be a silent no-op and bake the full
-    callback path into the advertised OAuth issuer/resource URLs, so fail fast.
-    """
-    parsed = urlsplit(github_redirect_uri)
-    path = parsed.path.rstrip("/")
-    if not path.endswith("/auth/callback"):
-        raise ConfigError(
-            f"GITHUB_REDIRECT_URI must end with /auth/callback: {github_redirect_uri}"
-        )
-    base_path = path.removesuffix("/auth/callback").rstrip("/")
-    return urlunsplit((parsed.scheme, parsed.netloc, base_path, "", ""))
-
-
 def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is not None:
         validate_at_startup(settings)
@@ -356,7 +347,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             SessionMiddleware,
             secret_key=settings.session_secret.get_secret_value(),
             same_site="lax",
-            https_only=not settings.github_redirect_uri.startswith("http://localhost"),
+            https_only=session_cookie_secure(settings),
         )
         # Added after SessionMiddleware so it is the OUTERMOST layer
         # (add_middleware prepends): it rejects oversized analyze bodies on
@@ -368,6 +359,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         run_migrations(settings)
         db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
         app.state.pat_store = SQLitePatStore(db_path)
+        # Google sub->email pins. Held by app.state so the three front doors read
+        # live pin state per request (the is_authorized google branch consults it).
+        app.state.pin_store = SQLiteGooglePinStore(db_path)
         app.state.receipts = ReceiptStore(db_path)
         app.state.outcomes = OutcomeEventStore(db_path)
         app.state.templates = SQLiteTemplateRepository(db_path)
@@ -390,7 +384,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             client_secret=settings.github_client_secret.get_secret_value(),
             redirect_uri=settings.github_redirect_uri,
         )
-        public_app_base_url = _public_app_base_url(settings.github_redirect_uri)
+        # Null object when Google sign-in is off (KTD); the real client is built
+        # once here so missing/malformed config fails fast at startup, not at the
+        # first /auth/google/login.
+        app.state.google_oauth = _make_google_oauth(settings)
+        public_app_base_url = resolve_public_base_url(settings)
         # Stored so AppMCPBackend.generate can build absolute rendered_url values
         # off the same origin advertised in OAuth metadata.
         app.state.public_app_base_url = public_app_base_url
@@ -412,6 +410,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             AppMCPBackend(app),
             allowed_hosts=settings.mcp_allowed_hosts,
             allowed_origins=settings.mcp_allowed_origins,
+            pin_store=app.state.pin_store,
         )
         auth_settings = app.state.mcp_server.settings.auth
         if auth_settings is not None and auth_settings.resource_server_url is not None:
@@ -457,8 +456,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "landing.html",
             {
                 "web_session": login is not None,
-                "friend_login": login,
+                "friend_login": display_label(login, app.state.pin_store) if login else None,
                 "pat_expires_in_days": _pat_expires_in_days(app, login) if login else None,
+                # A signed-in visitor sees the nav here too, so the logout button
+                # needs a token; minted only when there is a real web session.
+                "csrf_token": ensure_csrf_token(request.session) if login is not None else None,
+                "google_oauth_enabled": (
+                    app.state.settings.google_oauth_enabled
+                    if hasattr(app.state, "settings")
+                    else False
+                ),
             },
         )
 
@@ -473,9 +480,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response = RedirectResponse(target, status_code=303)
         if locale not in SUPPORTED:
             return response
-        secure = settings is not None and not settings.github_redirect_uri.startswith(
-            "http://localhost"
-        )
+        secure = settings is not None and session_cookie_secure(settings)
         response.set_cookie(
             COOKIE_NAME,
             locale,
@@ -512,18 +517,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ):
             return RedirectResponse("/auth/login?next=/browse", status_code=303)
         friend = friend_from_request_or_header(app, request, authorization)
-        app.state.find_limiter.hit(friend.github_login)
+        app.state.find_limiter.hit(friend.principal)
         query = q.strip()
         template_rows = _template_rows(app, query)
+        web_session = has_web_session(app, request)
         return templates.TemplateResponse(
             request,
             "browse.html",
             {
                 "query": query,
                 "templates": template_rows,
-                "friend_login": friend.github_login,
-                "pat_expires_in_days": _pat_expires_in_days(app, friend.github_login),
-                "web_session": has_web_session(app, request),
+                "friend_login": display_label(friend.principal, app.state.pin_store),
+                "pat_expires_in_days": _pat_expires_in_days(app, friend.principal),
+                "web_session": web_session,
+                # Minted only for a real web session so the nav's logout button
+                # has a token; PAT-only requests get no nav and no stray cookie.
+                "csrf_token": ensure_csrf_token(request.session) if web_session else None,
             },
         )
 
@@ -543,7 +552,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "upload.html",
             {
                 "csrf_token": csrf_token,
-                "friend_login": login,
+                "friend_login": display_label(login, app.state.pin_store),
                 "pat_expires_in_days": _pat_expires_in_days(app, login),
                 "web_session": True,
                 # Drives the egress toggle: when the feature is off, the page must
@@ -553,9 +562,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.get("/auth/login")
-    async def auth_login(request: Request) -> RedirectResponse:
+    async def auth_login(request: Request) -> Response:
         if not hasattr(app.state, "settings"):
             raise MemeMCPError(ErrorCode.UNAUTHORIZED, [])
+        # When Google sign-in is enabled, /auth/login is a provider chooser so a
+        # protected-page redirect (/browse, /upload) can reach either provider;
+        # an explicit ?provider=github starts the GitHub flow from the chooser.
+        # GitHub-only deploys are unchanged (straight to GitHub).
+        if (
+            app.state.settings.google_oauth_enabled
+            and request.query_params.get("provider") != "github"
+        ):
+            return templates.TemplateResponse(
+                request,
+                "login.html",
+                {
+                    "next_target": safe_next(request.query_params.get("next")),
+                    "web_session": False,
+                    "friend_login": None,
+                    "pat_expires_in_days": None,
+                },
+            )
+        # As with the Google route, a speculative preload must not mint OAuth
+        # state (a stale state would fail the callback's state check).
+        if _is_prefetch(request):
+            return Response(status_code=204, headers={"Cache-Control": "no-store"})
         state = secrets.token_urlsafe(24)
         verifier = secrets.token_urlsafe(48)
         request.session["oauth_state"] = state
@@ -584,7 +615,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             str(code_verifier) if code_verifier is not None else None,
         )
         login = str(user.get("login", "")).strip()
-        if not login or not app.state.web_allowlist.is_allowlisted(login):
+        try:
+            principal = normalize_principal(login) if login else ""
+        except ValueError:
+            principal = ""
+        if not principal or not is_authorized(
+            principal,
+            allowlist=app.state.web_allowlist,
+            pin_store=getattr(app.state, "pin_store", None),
+        ):
             # Render the explanatory page without establishing a session; the
             # actor stays unauthenticated. A JSON 403 would be opaque to a
             # human arriving in a browser (KTD9).
@@ -606,7 +645,59 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Re-validating defends against a tampered session value (KTD9).
         target = safe_next(request.session.get("post_login_next"))
         request.session.clear()
-        request.session["github_login"] = login
+        # The session key is unchanged for back-compat, but it now carries the
+        # namespaced principal (github:<login>); session_login normalizes either
+        # form on read.
+        request.session["github_login"] = principal
+        return RedirectResponse(target, status_code=303)
+
+    @app.get("/auth/google/login")
+    async def auth_google_login(request: Request) -> Response:
+        # Authlib generates and stores state, nonce, and the PKCE S256 challenge
+        # in the session; the redirect URI is the canonical serving origin's
+        # /auth/google/callback (validated at startup to match the public origin).
+        if not hasattr(app.state, "settings"):
+            raise MemeMCPError(ErrorCode.UNAUTHORIZED, [])
+        # A speculative preload (Arc/Chromium) must not start the flow: it would
+        # rotate the state Authlib stores, so the clicked redirect's state would
+        # no longer match and the callback would 500 with a CSRF state mismatch.
+        if _is_prefetch(request):
+            return Response(status_code=204, headers={"Cache-Control": "no-store"})
+        request.session["post_login_next"] = safe_next(request.query_params.get("next"))
+        oauth: GoogleOAuth = app.state.google_oauth
+        return await oauth.authorize_redirect(request, app.state.settings.google_redirect_uri)
+
+    @app.get("/auth/google/callback")
+    async def auth_google_callback(request: Request) -> Response:
+        if not hasattr(app.state, "settings"):
+            raise MemeMCPError(ErrorCode.UNAUTHORIZED, [])
+        # authorize_access_token validates state, the id_token, and the nonce;
+        # the authz-bearing claims are read from the validated id_token, never a
+        # separate /userinfo fetch.
+        oauth: GoogleOAuth = app.state.google_oauth
+        identity = await oauth.resolve_identity(request)
+        # First gate (always): strictly-boolean email_verified. Reject with no
+        # session before any allowlist or pin work. The string forms Google has
+        # historically emitted ("true"/"false") are rejected by the `is True`
+        # check (R15). The domain is intentionally NOT restricted to @gmail.com:
+        # a consumer Google account can carry a verified non-Gmail mailbox (e.g.
+        # @icloud.com), and authorization keys on the FULL allowlisted email plus
+        # the immutable sub-pin -- so the Workspace-domain-takeover risk that the
+        # original Gmail-only gate guarded against does not apply (nobody can mint
+        # an @icloud.com / @gmail.com address in a Workspace they control).
+        email = (identity.email or "").strip().lower()
+        local, _, domain = email.partition("@")
+        if identity.email_verified is not True or not local or not domain or "@" in domain:
+            return _google_restricted(app, request)
+        principal = _resolve_google_principal(app, identity.subject, email)
+        if principal is None:
+            return _google_restricted(app, request)
+        target = safe_next(request.session.get("post_login_next"))
+        # Regenerate the session on success (OWASP session-fixation). authorize_
+        # access_token already consumed Authlib's in-flight state/nonce keys, so
+        # clearing here is safe.
+        request.session.clear()
+        request.session["github_login"] = principal
         return RedirectResponse(target, status_code=303)
 
     @app.post("/auth/logout")
@@ -627,7 +718,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authorization: str | None = Header(default=None),
     ) -> JSONResponse:
         friend = friend_from_request_or_header(app, request, authorization)
-        app.state.find_limiter.hit(friend.github_login)
+        app.state.find_limiter.hit(friend.principal)
         rows = _template_rows(app, q.strip())
         return JSONResponse(make_success({"templates": [_template_payload(row) for row in rows]}))
 
@@ -659,7 +750,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise MemeMCPError(ErrorCode.INVALID_INPUT, [{"field": "query", "reason": "required"}])
         filters_raw = payload.get("filters", {})
         filters = filters_raw if isinstance(filters_raw, dict) else {}
-        return JSONResponse(AppMCPBackend(app).find(query, filters, friend.github_login))
+        return JSONResponse(AppMCPBackend(app).find(query, filters, friend.principal))
 
     @app.post("/api/mcp/generate")
     async def mcp_generate(
@@ -677,7 +768,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         slot_fills = [str(fill) for fill in slot_fills_raw]
         dry_run = bool(payload.get("dry_run", False))
         return JSONResponse(
-            AppMCPBackend(app).generate(template_id, slot_fills, dry_run, friend.github_login)
+            AppMCPBackend(app).generate(template_id, slot_fills, dry_run, friend.principal)
         )
 
     @app.post("/api/uploads/analyze")
@@ -694,7 +785,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             declared_mime=str(payload.get("mime", "")),
             filename=str(payload.get("filename", "upload")),
             title_hint=payload.get("title_hint"),
-            friend_login=friend.github_login,
+            friend_login=friend.principal,
             deps=_upload_deps(app),
             identify_online=bool(payload.get("identify_online", False)),
         )
@@ -722,7 +813,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> JSONResponse:
         friend = require_write(friend_from_header(app, authorization))
         try:
-            pending = app.state.pending_uploads.get(upload_id, friend.github_login)
+            pending = app.state.pending_uploads.get(upload_id, friend.principal)
         except KeyError as exc:
             raise MemeMCPError(ErrorCode.NOT_FOUND, []) from exc
         metadata_raw = payload.get("metadata")
@@ -764,7 +855,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not signed_ok:
             friend = friend_from_request_or_header(app, request, authorization)
             rendered_hash = f"{prefix}{Path(filename).stem}"
-            if not app.state.receipts.exists_for_friend(rendered_hash, friend.github_login):
+            if not app.state.receipts.exists_for_friend(rendered_hash, friend.principal):
                 raise MemeMCPError(ErrorCode.NOT_FOUND, [])
         root = Path(app.state.settings.image_store_fs_path).resolve()
         path = (root / prefix / filename).resolve()
@@ -793,7 +884,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Metered like /browse so a friend cannot enumerate every template ID
         # through the detail route while the gallery and /api/templates stay
         # rate-limited.
-        app.state.find_limiter.hit(friend.github_login)
+        app.state.find_limiter.hit(friend.principal)
         try:
             template = app.state.templates.get(template_id)
         except KeyError as exc:
@@ -806,6 +897,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         origin = template.metadata.get("origin")
         origin = origin if isinstance(origin, dict) else None
         origin_source_url_safe = sanitize_url(str(origin.get("source_url", ""))) if origin else ""
+        web_session = has_web_session(app, request)
         return templates.TemplateResponse(
             request,
             "detail.html",
@@ -813,9 +905,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "template": template,
                 "origin": origin,
                 "origin_source_url_safe": origin_source_url_safe,
-                "friend_login": friend.github_login,
-                "pat_expires_in_days": _pat_expires_in_days(app, friend.github_login),
-                "web_session": has_web_session(app, request),
+                "friend_login": display_label(friend.principal, app.state.pin_store),
+                "pat_expires_in_days": _pat_expires_in_days(app, friend.principal),
+                "web_session": web_session,
+                # See browse: token only for a real web session (nav logout).
+                "csrf_token": ensure_csrf_token(request.session) if web_session else None,
             },
         )
 
@@ -960,6 +1054,85 @@ def _duplicate_index(app: FastAPI) -> DuplicateIndex:
     return index
 
 
+def _google_restricted(app: FastAPI, request: Request) -> Response:
+    """403 restricted page for a rejected Google sign-in, no session established.
+
+    Passes ``operator_github_login=None`` so the Google path never leaks the
+    operator's GitHub handle (the provider-agnostic wording lands in U7).
+    """
+    return cast(
+        Response,
+        app.state.web_templates.TemplateResponse(
+            request,
+            "restricted.html",
+            {
+                "operator_github_login": None,
+                "pat_expires_in_days": None,
+                "friend_login": None,
+                "web_session": False,
+            },
+            status_code=403,
+        ),
+    )
+
+
+def _resolve_google_principal(app: FastAPI, sub: str, email: str) -> str | None:
+    """Pin-first authorization for a verified Google sign-in (U6).
+
+    Returning friend (a pin exists for ``sub``): authorize on the immutable sub
+    via the shared predicate -- the pinned email (the operator's invite) is what
+    is checked, so an email rename does not 403. First-timer (no pin): require the
+    claim email to be currently allowlisted, then create the pin; the ``email
+    UNIQUE`` constraint enforces first-sign-in-wins (a second sub for an
+    already-pinned email is rejected). Returns the ``google:<sub>`` principal on
+    success, else None. The email may be any verified Google mailbox, not only
+    Gmail; dot/+ canonicalization still applies to Gmail addresses only.
+    """
+    if not sub:
+        return None
+    principal = f"google:{sub}"
+    pin_store = app.state.pin_store
+    allowlist = app.state.web_allowlist
+    if pin_store.email_for_sub(sub) is not None:
+        # Returning friend: resolve authorization by the sub-pin, NOT the live
+        # claim email (the drift case).
+        if is_authorized(principal, allowlist=allowlist, pin_store=pin_store):
+            return principal
+        return None
+    # First sign-in: the verified claim email must be currently allowlisted. Pin
+    # the CANONICAL mailbox so a later `allowlist remove`/`pin revoke` (R13) can
+    # match it by the operator's invited address regardless of dot/+ variants.
+    canonical = canonical_email(email)
+    if not allowlist.is_allowlisted(f"google:{canonical}"):
+        return None
+    if not pin_store.create_pin(sub, canonical):
+        # email UNIQUE rejected the pin: already bound to another sub.
+        return None
+    return principal
+
+
+def _make_google_oauth(settings: Settings) -> object:
+    """Build the Authlib Google client when enabled, else the unavailable sentinel.
+
+    Imported lazily so the Authlib client tree is only loaded when Google sign-in
+    is actually configured (mirrors the reverse-image client gating).
+    """
+    from meme_mcp.auth.google_oauth import GoogleOAuthUnavailable
+
+    if not settings.google_oauth_enabled:
+        return GoogleOAuthUnavailable()
+    from meme_mcp.auth.google_oauth import GoogleOAuthClient
+
+    return GoogleOAuthClient(
+        client_id=settings.google_client_id or "",
+        client_secret=(
+            settings.google_client_secret.get_secret_value()
+            if settings.google_client_secret
+            else ""
+        ),
+    )
+
+
 def _make_reverse_image_client(settings: Settings) -> object | None:
     """Build the Vision client when enabled, else None (the disabled sentinel).
 
@@ -1034,3 +1207,24 @@ def _receipt(
 def _pkce_challenge(verifier: str) -> str:
     digest = hashlib.sha256(verifier.encode()).digest()
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+
+
+def _is_prefetch(request: Request) -> bool:
+    """True for a speculative (prefetch/prerender) request.
+
+    Chromium browsers (Arc especially) preload links and send
+    ``Sec-Purpose: prefetch`` (or ``prefetch;prerender``); Firefox sends
+    ``X-Moz: prefetch``; older/Safari variants use ``Purpose``/``X-Purpose``.
+    Such a request must NOT start a sign-in flow: doing so rotates the OAuth
+    ``state`` stored in the session, so the redirect the user actually clicks can
+    carry a now-stale state and the callback fails with a CSRF state mismatch.
+    The OAuth-init routes return a cache-busting no-op for these so the GET is
+    safe to preload and only a real navigation initiates sign-in.
+    """
+    headers = request.headers
+    return (
+        "prefetch" in headers.get("sec-purpose", "").lower()
+        or headers.get("purpose", "").lower() == "prefetch"
+        or headers.get("x-purpose", "").lower() in {"prefetch", "preview"}
+        or headers.get("x-moz", "").lower() == "prefetch"
+    )

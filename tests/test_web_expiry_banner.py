@@ -70,20 +70,22 @@ def test_browse_renders_banner_when_pat_expires_within_seven_days(tmp_path) -> N
     client, token = _seed_app_and_token(tmp_path, ttl_days=90)
     _set_expires_at(
         client.app.state.pat_store.path,
-        "friend",
+        "github:friend",
         datetime.now(UTC) + timedelta(days=3, hours=12),
     )
     response = client.get("/browse", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert "PAT expires in 3 days" in response.text
+    # The banner shows the bare login, never the namespaced github:<login>.
     assert "friend" in response.text
+    assert "github:friend" not in response.text
 
 
 def test_browse_renders_banner_with_singular_day(tmp_path) -> None:
     client, token = _seed_app_and_token(tmp_path, ttl_days=90)
     _set_expires_at(
         client.app.state.pat_store.path,
-        "friend",
+        "github:friend",
         datetime.now(UTC) + timedelta(days=1, hours=12),
     )
     response = client.get("/browse", headers={"Authorization": f"Bearer {token}"})
@@ -95,7 +97,7 @@ def test_browse_renders_banner_with_zero_days_for_same_day_expiry(tmp_path) -> N
     client, token = _seed_app_and_token(tmp_path, ttl_days=90)
     _set_expires_at(
         client.app.state.pat_store.path,
-        "friend",
+        "github:friend",
         datetime.now(UTC) + timedelta(hours=3),
     )
     response = client.get("/browse", headers={"Authorization": f"Bearer {token}"})

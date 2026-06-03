@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from meme_mcp.auth.authorization import is_authorized, normalize_principal
 from meme_mcp.auth.depends import Friend, require_pat
 from meme_mcp.errors import ErrorCode, MemeMCPError
 
@@ -22,21 +23,34 @@ if TYPE_CHECKING:
 
 
 def session_login(app: FastAPI, request: Request) -> str | None:
-    """The allowlisted GitHub login carried by the session, or None.
+    """The allowlisted principal carried by the session, or None.
 
-    Reads only ``request.session`` (never an Authorization header), so it can
-    never return a PAT-derived login. This is the single source of truth for
-    "valid web session": the ``/upload`` page gate, the nav-link visibility, and
-    the web-route authenticator all derive from it, so they cannot diverge.
+    Returns the provider-namespaced principal (``github:<login>`` or
+    ``google:<sub>``), normalizing a legacy bare value so an in-flight session
+    cookie predating the namespace change still authenticates. Reads only
+    ``request.session`` (never an Authorization header), so it can never return a
+    PAT-derived identity. This is the single source of truth for "valid web
+    session": the ``/upload`` page gate, the nav-link visibility, and the
+    web-route authenticator all derive from it, so they cannot diverge.
     """
-    login = request.session.get("github_login")
-    if isinstance(login, str) and app.state.web_allowlist.is_allowlisted(login):
-        return login
+    raw = request.session.get("github_login")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        principal = normalize_principal(raw)
+    except ValueError:
+        return None
+    if is_authorized(
+        principal,
+        allowlist=app.state.web_allowlist,
+        pin_store=getattr(app.state, "pin_store", None),
+    ):
+        return principal
     return None
 
 
 def has_web_session(app: FastAPI, request: Request) -> bool:
-    """True only for an allowlisted GitHub session (not a PAT-authed request).
+    """True only for an allowlisted browser session (not a PAT-authed request).
 
     The ``/upload`` nav link is gated on this rather than on ``friend_login``,
     because ``/browse`` also serves PAT-authenticated callers (who set
@@ -54,6 +68,7 @@ def friend_from_header(app: FastAPI, authorization: str | None) -> Friend:
         app.state.pat_store,
         app.state.allowlist,
         app.state.pat_hash_pepper_value,
+        getattr(app.state, "pin_store", None),
     )
 
 

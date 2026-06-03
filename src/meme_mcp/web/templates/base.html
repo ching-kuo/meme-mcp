@@ -5,26 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>meme-mcp</title>
     <link rel="stylesheet" href="/static/styles.css">
-    {# Active-locale JS catalog (KTD6). Parsed into window.I18N by the bootstrap
-       below, which also exposes t(key, vars) mirroring the server interpolation
-       contract. Emitted in <head> before the page's deferred account.js/upload.js
-       so window.I18N is defined when they run. #}
+    {# Active-locale JS catalog (KTD6). This is a data block (type=application/json,
+       not executed), so the gateway's strict CSP ("default-src 'self'", no
+       'unsafe-inline') leaves it alone. base.js parses it into window.I18N and
+       exposes t(key, vars). base.js is deferred and appears before the page's
+       deferred account.js/upload.js, so window.I18N is defined when they run.
+       The logic lives in /static/base.js, not inline, because the CSP blocks
+       inline <script> execution and allows only same-origin static files. #}
     <script type="application/json" id="i18n-catalog">{{ js_catalog_json }}</script>
-    <script>
-      (function () {
-        var el = document.getElementById("i18n-catalog");
-        window.I18N = el ? JSON.parse(el.textContent) : {};
-        window.t = function (key, vars) {
-          var value = (window.I18N && window.I18N[key] != null) ? window.I18N[key] : key;
-          if (vars) {
-            value = value.replace(/\{(\w+)\}/g, function (match, name) {
-              return Object.prototype.hasOwnProperty.call(vars, name) ? vars[name] : match;
-            });
-          }
-          return value;
-        };
-      })();
-    </script>
+    <script src="/static/base.js" defer></script>
     {% block head %}{% endblock %}
   </head>
   <body>
@@ -63,6 +52,10 @@
         <a href="/browse"{% if path == "/browse" %} aria-current="page"{% endif %}>{{ t("nav.browse") }}</a>
         <a href="/upload"{% if path == "/upload" %} aria-current="page"{% endif %}>{{ t("nav.upload") }}</a>
         <a href="/account"{% if path == "/account" %} aria-current="page"{% endif %}>{{ t("nav.account") }}</a>
+        {# Logout posts to /auth/logout, which requires the X-CSRF-Token header
+           (no form-field fallback), so this is a JS-driven button carrying the
+           per-session token in a data attribute rather than a plain form. #}
+        <button type="button" class="site-nav__logout" data-logout data-csrf="{{ csrf_token }}">{{ t("nav.logout") }}</button>
       </nav>
     {% endif %}
     {% block body %}{% endblock %}

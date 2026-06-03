@@ -10,6 +10,7 @@ from PIL import Image
 from pydantic import SecretStr
 
 from meme_mcp.app import create_app
+from meme_mcp.auth.allowlist import FileAllowlist
 from meme_mcp.auth.depends import require_pat
 from meme_mcp.auth.pat import SQLitePatStore, issue_pat, verify_pat
 from meme_mcp.config import ConfigError, Settings
@@ -195,6 +196,61 @@ def test_mcp_public_oauth_metadata_uses_public_host_and_root_well_known(tmp_path
         }
 
 
+def test_public_base_url_overrides_redirect_derivation_for_metadata_and_signing(tmp_path) -> None:
+    # PUBLIC_BASE_URL is used verbatim as the canonical origin: it feeds both the
+    # advertised OAuth resource metadata and the render-URL signing origin, even
+    # when GITHUB_REDIRECT_URI uses a different (sub)path on the same origin.
+    app = create_app(
+        settings(
+            tmp_path,
+            github_redirect_uri="https://meme.igene.tw/auth/callback",
+            public_base_url="https://meme.igene.tw",
+        )
+    )
+    assert app.state.public_app_base_url == "https://meme.igene.tw"
+    spec = TemplateSpec("drake", image_bytes(), [{"position": "top"}])
+    result = render_meme(spec, ["hi"], app.state.image_store, app.state.public_app_base_url)
+    assert result.rendered_url.startswith("https://meme.igene.tw/renders/")
+
+
+def test_public_base_url_origin_conflict_fails_fast(tmp_path) -> None:
+    # PUBLIC_BASE_URL on a different origin than GITHUB_REDIRECT_URI would silently
+    # re-sign render URLs against a new origin; create_app must refuse to boot.
+    with pytest.raises(ConfigError, match="conflicts with"):
+        create_app(
+            settings(
+                tmp_path,
+                github_redirect_uri="https://meme.igene.tw/auth/callback",
+                public_base_url="https://other.example",
+            )
+        )
+
+
+def test_google_oauth_disabled_installs_unavailable_sentinel(tmp_path) -> None:
+    from meme_mcp.auth.google_oauth import GoogleOAuthUnavailable
+
+    app = create_app(settings(tmp_path))
+    assert isinstance(app.state.google_oauth, GoogleOAuthUnavailable)
+
+
+def test_google_oauth_enabled_registers_authlib_client(tmp_path) -> None:
+    # Registration is config-only (no network); the real client is installed.
+    from meme_mcp.auth.google_oauth import GoogleOAuthClient
+
+    app = create_app(
+        settings(
+            tmp_path,
+            github_redirect_uri="https://meme.igene.tw/auth/callback",
+            public_base_url="https://meme.igene.tw",
+            google_oauth_enabled=True,
+            google_client_id="gid",
+            google_client_secret=SecretStr("gsecret"),
+            google_redirect_uri="https://meme.igene.tw/auth/google/callback",
+        )
+    )
+    assert isinstance(app.state.google_oauth, GoogleOAuthClient)
+
+
 def test_malformed_github_redirect_uri_fails_fast(tmp_path) -> None:
     # A redirect URI that does not end in /auth/callback would make the base-URL
     # derivation a silent no-op and bake a broken path into the OAuth metadata;
@@ -266,12 +322,14 @@ def test_pat_store_persists_and_enforces_allowlist(tmp_path) -> None:
     store = SQLitePatStore(tmp_path / "auth.db")
     token = issue_pat(store, "alice", "pepper")
     reopened = SQLitePatStore(tmp_path / "auth.db")
-    assert verify_pat(reopened, token, "pepper") == ("alice", "readwrite")
-    friend = require_pat(f"Bearer {token}", reopened, {"alice"}, "pepper")
-    assert friend.github_login == "alice"
+    assert verify_pat(reopened, token, "pepper") == ("github:alice", "readwrite")
+    allow = FileAllowlist(tmp_path / "allowlist.txt")
+    allow.add("alice")
+    friend = require_pat(f"Bearer {token}", reopened, allow, "pepper")
+    assert friend.principal == "github:alice"
     assert friend.capability == "readwrite"
     with pytest.raises(MemeMCPError):
-        require_pat(f"Bearer {token}", reopened, set(), "pepper")
+        require_pat(f"Bearer {token}", reopened, FileAllowlist(tmp_path / "empty.txt"), "pepper")
 
 
 def test_render_route_rejects_path_traversal(tmp_path) -> None:

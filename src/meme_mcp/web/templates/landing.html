@@ -12,7 +12,10 @@
     {% else %}
       <p>{{ t("landing.signin_prompt") }}</p>
       <p class="cta-row">
-        <a class="cta cta-primary" href="/auth/login?next=/browse">{{ t("landing.cta.signin") }}</a>
+        <a class="cta cta-primary" href="/auth/login?provider=github&next=/browse">{{ t("landing.cta.signin") }}</a>
+        {% if google_oauth_enabled %}
+          <a class="cta" href="/auth/google/login?next=/browse">{{ t("landing.cta.signin_google") }}</a>
+        {% endif %}
       </p>
     {% endif %}
     <section class="landing-about">

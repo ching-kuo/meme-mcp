@@ -9,6 +9,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
+from meme_mcp.auth.authorization import (
+    normalize_principal,
+    principal_in_clause,
+    principal_match_values,
+)
+
 Capability = Literal["read", "readwrite"]
 PatStatusState = Literal["none", "active", "expired", "revoked"]
 VALID_CAPABILITIES: tuple[Capability, ...] = ("read", "readwrite")
@@ -97,17 +103,24 @@ class SQLitePatStore:
     ) -> None:
         now = self._clock().isoformat()
         expires_iso = expires_at.isoformat() if expires_at is not None else None
+        # Store the namespaced principal; revoke any prior active PAT for the
+        # same principal INCLUDING a legacy bare-login row (no data migration),
+        # so a reissue supersedes the friend's pre-namespace PAT and the
+        # single-active-PAT invariant holds across the namespace boundary.
+        principal = normalize_principal(friend_login)
+        placeholders, values = principal_in_clause(principal)
         with self._connect() as conn:
             conn.execute(
-                "UPDATE pats SET revoked_at = ? WHERE friend_login = ? AND revoked_at IS NULL",
-                (now, friend_login),
+                f"UPDATE pats SET revoked_at = ? "
+                f"WHERE friend_login IN ({placeholders}) AND revoked_at IS NULL",
+                (now, *values),
             )
             conn.execute(
                 """
                 INSERT INTO pats (friend_login, pat_hash, created_at, expires_at, capability)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (friend_login, pat_hash, now, expires_iso, capability),
+                (principal, pat_hash, now, expires_iso, capability),
             )
 
     def verify(self, pat_hash: str) -> tuple[str, Capability] | None:
@@ -139,24 +152,32 @@ class SQLitePatStore:
                 # Corrupt capability value (somehow outside the enum) — fail closed.
                 _timing_safe_compare(pat_hash)
                 return None
+            try:
+                # Normalize a legacy bare login to its namespaced principal; a
+                # value that cannot normalize (corrupt/cross-provider) fails closed.
+                principal = normalize_principal(str(login))
+            except ValueError:
+                _timing_safe_compare(pat_hash)
+                return None
             conn.execute(
                 "UPDATE pats SET last_used_at = ? WHERE pat_hash = ?",
                 (now.isoformat(), pat_hash),
             )
-            return str(login), capability
+            return principal, capability
 
     def revoke_active(self, friend_login: str) -> bool:
         now = self._clock()
+        placeholders, values = principal_in_clause(friend_login)
         with self._connect() as conn:
             row = conn.execute(
-                """
+                f"""
                 SELECT id, expires_at
                 FROM pats
-                WHERE friend_login = ? AND revoked_at IS NULL
+                WHERE friend_login IN ({placeholders}) AND revoked_at IS NULL
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
                 """,
-                (friend_login,),
+                values,
             ).fetchone()
             if row is None:
                 return False
@@ -170,16 +191,17 @@ class SQLitePatStore:
 
     def current_status(self, friend_login: str) -> PatStatus:
         now = self._clock()
+        placeholders, values = principal_in_clause(friend_login)
         with self._connect() as conn:
             row = conn.execute(
-                """
+                f"""
                 SELECT expires_at, capability, revoked_at, last_used_at
                 FROM pats
-                WHERE friend_login = ?
+                WHERE friend_login IN ({placeholders})
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
                 """,
-                (friend_login,),
+                values,
             ).fetchone()
         if row is None:
             return PatStatus("none")
@@ -229,12 +251,16 @@ def issue_pat(
     if isinstance(store, SQLitePatStore):
         store.issue(friend_login, digest, expires_at=expires_at, capability=capability)
         return plaintext
+    # In-memory mirror of SQLitePatStore.issue: store the namespaced principal and
+    # revoke prior active rows matching it (including a legacy bare-login row).
+    principal = normalize_principal(friend_login)
+    values = set(principal_match_values(principal))
     for record in store.records:
-        if record.friend_login == friend_login and record.revoked_at is None:
+        if record.friend_login in values and record.revoked_at is None:
             record.revoked_at = now
     store.records.append(
         PatRecord(
-            friend_login=friend_login,
+            friend_login=principal,
             pat_hash=digest,
             created_at=now,
             expires_at=expires_at,
@@ -268,8 +294,12 @@ def verify_pat(
             return None
         if record.expires_at is not None and record.expires_at <= now:
             return None
+        try:
+            principal = normalize_principal(record.friend_login)
+        except ValueError:
+            return None
         record.last_used_at = now
-        return record.friend_login, record.capability
+        return principal, record.capability
     # Keep one compare on the failure path so obviously short-circuit timing is avoided.
     hmac.compare_digest(digest, "0" * 64)
     return None
@@ -310,14 +340,16 @@ def expires_at_for_login(store: SQLitePatStore, login: str) -> datetime | None:
     expiry banner; PAT-authenticated requests can surface a "renew soon" warning
     without paying a second pat_hash lookup.
     """
+    placeholders, values = principal_in_clause(login)
     with store._connect() as conn:
         row = conn.execute(
-            """
+            f"""
             SELECT expires_at FROM pats
-            WHERE friend_login = ? AND revoked_at IS NULL AND expires_at IS NOT NULL
+            WHERE friend_login IN ({placeholders}) AND revoked_at IS NULL
+            AND expires_at IS NOT NULL
             ORDER BY expires_at ASC LIMIT 1
             """,
-            (login,),
+            values,
         ).fetchone()
     if row is None or row[0] is None:
         return None

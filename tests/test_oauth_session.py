@@ -39,6 +39,30 @@ def test_oauth_callback_creates_allowlisted_session(tmp_path) -> None:
     assert client.get("/browse").status_code == 200
 
 
+def test_legacy_bare_session_cookie_still_authenticates(tmp_path) -> None:
+    # A session cookie written before the namespace change holds a bare login;
+    # session_login must normalize it to github:<login> and still authenticate so
+    # in-flight sessions survive the deploy without forcing a re-login.
+    import base64
+    import json
+
+    import itsdangerous
+
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    (tmp_path / "allowlist.txt").write_text("friend\n", encoding="utf-8")
+    signer = itsdangerous.TimestampSigner(
+        app.state.settings.session_secret.get_secret_value()
+    )
+    cookie = signer.sign(
+        base64.b64encode(json.dumps({"github_login": "friend"}).encode())
+    ).decode()
+    client = TestClient(app)
+    client.cookies.set("session", cookie)
+    assert client.get("/browse", follow_redirects=False).status_code == 200
+
+
 def test_oauth_callback_rejects_non_allowlisted_user(tmp_path) -> None:
     from meme_mcp.app import create_app
 

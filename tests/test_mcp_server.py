@@ -17,6 +17,20 @@ from meme_mcp.mcp.server import (
 )
 
 
+class _StubAllowlist:
+    """Minimal allowlist for verifier tests: matches a bare GitHub login.
+
+    is_authorized passes the bare login (the subject of a github: principal), so
+    membership is keyed on the bare value.
+    """
+
+    def __init__(self, *logins: str) -> None:
+        self._logins = set(logins)
+
+    def is_allowlisted(self, value: str) -> bool:
+        return value in self._logins
+
+
 def test_mcp_exposes_three_tools_under_schema_budget() -> None:
     schemas = tool_schemas()
     assert set(schemas) == EXPECTED_TOOLS == {"find", "generate", "record_outcome"}
@@ -27,10 +41,10 @@ def test_mcp_exposes_three_tools_under_schema_budget() -> None:
 async def test_pat_token_verifier_validates_sqlite_pat(tmp_path) -> None:
     store = SQLitePatStore(tmp_path / "auth.db")
     token = issue_pat(store, "alice", "pepper")
-    verifier = PatTokenVerifier(store, {"alice"}, "pepper")
+    verifier = PatTokenVerifier(store, _StubAllowlist("alice"), "pepper")
     access_token = await verifier.verify_token(token)
     assert access_token is not None
-    assert access_token.client_id == "alice"
+    assert access_token.client_id == "github:alice"
     assert await verifier.verify_token("wrong") is None
 
 
@@ -42,12 +56,37 @@ async def test_pat_token_verifier_scopes_derive_from_capability(tmp_path) -> Non
     store = SQLitePatStore(tmp_path / "auth.db")
     read_token = issue_pat(store, "alice", "pepper", capability="read")
     readwrite_token = issue_pat(store, "bob", "pepper", capability="readwrite")
-    verifier = PatTokenVerifier(store, {"alice", "bob"}, "pepper")
+    verifier = PatTokenVerifier(store, _StubAllowlist("alice", "bob"), "pepper")
     read_access = await verifier.verify_token(read_token)
     readwrite_access = await verifier.verify_token(readwrite_token)
     assert read_access is not None and readwrite_access is not None
     assert read_access.scopes == ["meme:read"]
     assert readwrite_access.scopes == ["meme:read", "meme:write"]
+
+
+async def test_pat_token_verifier_authorizes_google_pat_over_transport(tmp_path) -> None:
+    """AE4 + R12: a Google friend's PAT (subject google:<sub>) authenticates over
+    the MCP transport identically to a GitHub friend's, resolving authorization
+    through the pin store; deleting the pin denies the very next request.
+    """
+    from meme_mcp.auth.allowlist import FileAllowlist
+    from meme_mcp.auth.google_pins import SQLiteGooglePinStore
+
+    store = SQLitePatStore(tmp_path / "auth.db")
+    pins = SQLiteGooglePinStore(tmp_path / "pins.db")
+    pins.create_pin("sub-A", "alice@gmail.com")
+    allow = FileAllowlist(tmp_path / "allowlist.txt")
+    allow.add("google:alice@gmail.com")
+    token = issue_pat(store, "google:sub-A", "pepper")
+
+    verifier = PatTokenVerifier(store, allow, "pepper", pins)
+    access = await verifier.verify_token(token)
+    assert access is not None
+    assert access.client_id == "google:sub-A"
+
+    # R12: terminal pin eviction denies the next transport request (no caching).
+    pins.delete_by_sub("sub-A")
+    assert await verifier.verify_token(token) is None
 
 
 def test_create_mcp_server_registers_official_fastmcp_tools(tmp_path) -> None:

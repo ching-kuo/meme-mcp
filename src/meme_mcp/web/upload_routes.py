@@ -76,7 +76,7 @@ def register_upload_routes(
             declared_mime=str(payload.get("mime", "")),
             filename=str(payload.get("filename", "upload")),
             title_hint=payload.get("title_hint"),
-            friend_login=friend.github_login,
+            friend_login=friend.principal,
             deps=upload_deps(app),
             identify_online=bool(payload.get("identify_online", True)),
         )
@@ -107,7 +107,7 @@ def register_upload_routes(
         # Owner-scoped fetch: KeyError on absence OR owner mismatch maps to an
         # opaque NOT_FOUND so the endpoint never reveals another friend's id.
         try:
-            pending = app.state.pending_uploads.get(upload_id, friend.github_login)
+            pending = app.state.pending_uploads.get(upload_id, friend.principal)
         except KeyError as exc:
             raise MemeMCPError(ErrorCode.NOT_FOUND, []) from exc
         metadata_raw = payload.get("metadata")
@@ -132,5 +132,5 @@ def register_upload_routes(
         # Owner-scoped row delete only; the blob is left for the grace-windowed
         # gc-uploads sweep (KTD8). Success is returned opaquely whether or not a
         # row matched, so a friend cannot probe another friend's ids.
-        app.state.pending_uploads.delete_owned(upload_id, friend.github_login)
+        app.state.pending_uploads.delete_owned(upload_id, friend.principal)
         return JSONResponse(make_success({"discarded": True}))

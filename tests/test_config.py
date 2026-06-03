@@ -2,7 +2,13 @@ import pytest
 from pydantic import SecretStr
 from pydantic_settings import SettingsError
 
-from meme_mcp.config import ConfigError, Settings, validate_at_startup
+from meme_mcp.config import (
+    ConfigError,
+    Settings,
+    resolve_public_base_url,
+    session_cookie_secure,
+    validate_at_startup,
+)
 
 
 def good_settings(**overrides: object) -> Settings:
@@ -146,4 +152,118 @@ def test_reverse_image_enabled_warns_when_adc_set(tmp_path, monkeypatch, caplog)
             )
         )
     assert any("GOOGLE_APPLICATION_CREDENTIALS" in record.message for record in caplog.records)
+
+
+def test_public_base_url_unset_falls_back_to_github_redirect_derivation() -> None:
+    settings = good_settings()
+    validate_at_startup(settings)
+    assert resolve_public_base_url(settings) == "http://localhost:8000"
+
+
+def test_public_base_url_set_used_verbatim() -> None:
+    settings = good_settings(
+        github_redirect_uri="https://meme.example/auth/callback",
+        public_base_url="https://meme.example",
+    )
+    validate_at_startup(settings)
+    assert resolve_public_base_url(settings) == "https://meme.example"
+
+
+def test_public_base_url_trailing_slash_stripped() -> None:
+    settings = good_settings(
+        github_redirect_uri="https://meme.example/auth/callback",
+        public_base_url="https://meme.example/",
+    )
+    assert resolve_public_base_url(settings) == "https://meme.example"
+
+
+def test_public_base_url_malformed_rejected() -> None:
+    settings = good_settings(public_base_url="meme.example")
+    with pytest.raises(ConfigError, match="PUBLIC_BASE_URL"):
+        validate_at_startup(settings)
+
+
+def test_public_base_url_origin_conflict_rejected() -> None:
+    # Same host, different scheme/port => different origin => fail closed because
+    # this origin signs render URLs.
+    settings = good_settings(
+        github_redirect_uri="https://meme.example/auth/callback",
+        public_base_url="http://meme.example",
+    )
+    with pytest.raises(ConfigError, match="conflicts with"):
+        validate_at_startup(settings)
+
+
+def test_public_base_url_matching_origin_passes() -> None:
+    settings = good_settings(
+        github_redirect_uri="https://meme.example:443/auth/callback",
+        public_base_url="https://meme.example",
+    )
+    # Default https port 443 normalizes to the bare host, so origins match.
+    validate_at_startup(settings)
+
+
+def test_google_oauth_disabled_validates_without_credentials() -> None:
+    # Default-off: startup succeeds with no Google env (parity with reverse-image).
+    validate_at_startup(good_settings())
+
+
+def test_google_oauth_enabled_with_all_fields_passes() -> None:
+    validate_at_startup(
+        good_settings(
+            github_redirect_uri="https://meme.example/auth/callback",
+            google_oauth_enabled=True,
+            google_client_id="gid",
+            google_client_secret=SecretStr("gsecret"),
+            google_redirect_uri="https://meme.example/auth/google/callback",
+        )
+    )
+
+
+def test_google_oauth_enabled_missing_field_fails() -> None:
+    settings = good_settings(
+        github_redirect_uri="https://meme.example/auth/callback",
+        google_oauth_enabled=True,
+        google_client_id="gid",
+        google_redirect_uri="https://meme.example/auth/google/callback",
+        # google_client_secret omitted
+    )
+    with pytest.raises(ConfigError, match="GOOGLE_CLIENT_SECRET"):
+        validate_at_startup(settings)
+
+
+def test_google_oauth_redirect_uri_must_end_with_callback_path() -> None:
+    settings = good_settings(
+        github_redirect_uri="https://meme.example/auth/callback",
+        google_oauth_enabled=True,
+        google_client_id="gid",
+        google_client_secret=SecretStr("gsecret"),
+        google_redirect_uri="https://meme.example/auth/callback",
+    )
+    with pytest.raises(ConfigError, match="/auth/google/callback"):
+        validate_at_startup(settings)
+
+
+def test_google_oauth_redirect_origin_must_match_public_origin() -> None:
+    settings = good_settings(
+        github_redirect_uri="https://meme.example/auth/callback",
+        google_oauth_enabled=True,
+        google_client_id="gid",
+        google_client_secret=SecretStr("gsecret"),
+        google_redirect_uri="https://other.example/auth/google/callback",
+    )
+    with pytest.raises(ConfigError, match="must match the app's"):
+        validate_at_startup(settings)
+
+
+def test_session_cookie_secure_follows_canonical_origin() -> None:
+    # Local dev (unset, http://localhost redirect) => not Secure, so OAuth state
+    # round-trips on localhost.
+    assert session_cookie_secure(good_settings()) is False
+    # https PUBLIC_BASE_URL => Secure.
+    secure = good_settings(
+        github_redirect_uri="https://meme.example/auth/callback",
+        public_base_url="https://meme.example",
+    )
+    assert session_cookie_secure(secure) is True
 

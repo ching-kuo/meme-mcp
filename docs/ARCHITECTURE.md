@@ -116,7 +116,27 @@ Two auth surfaces share one tree:
   landing page (no auth) that points anonymous visitors at GitHub login; an anonymous browser
   hitting `/browse` (no PAT header and no allowlisted session) is 303-redirected to
   `/auth/login?next=/browse`, the same pattern as `/upload`, rather than handed a JSON 401. A PAT
-  header still authenticates `/browse` programmatically. `/browse` renders a gallery whose cards
+  header still authenticates `/browse` programmatically. The signed-in nav carries a Sign-out
+  button (`POST /auth/logout`, which clears the session); like every state-changing request it is
+  CSRF-protected via the header-only `X-CSRF-Token`, so the button is a small `fetch` carrying the
+  per-session token rather than a plain form. The session cookie has no explicit `max_age`, so it
+  uses Starlette's 14-day default (a friend stays signed in for two weeks unless they sign out or
+  are de-allowlisted, which is re-checked on every request).
+- **Prefetch guard on sign-in initiation.** Both OAuth-init GETs (`/auth/google/login` and the
+  GitHub branch of `/auth/login`) return a no-op `204` + `Cache-Control: no-store` for speculative
+  requests (`Sec-Purpose: prefetch`, `Purpose`/`X-Purpose`, `X-Moz: prefetch`) via `_is_prefetch`.
+  Aggressive link preloading (e.g. Arc) would otherwise re-run the init route and rotate the OAuth
+  `state` -- Authlib's `set_state_data` keeps only the latest `_state_google_*` -- so the redirect
+  the user actually clicked would carry a stale state and the callback would fail with a CSRF state
+  mismatch. The guard fires before any session write, so only a real navigation starts the flow.
+- **CSP: no inline scripts.** The gateway sets `Content-Security-Policy: default-src 'self'` (see
+  `deploy/k8s/` / the infra `httproute`), which blocks inline `<script>` and inline event handlers
+  at runtime even though they render fine in tests. All executable JS therefore lives in
+  `web/static/*.js` and is included with `<script src=... defer>`; `web/static/base.js` (loaded on
+  every page) holds the i18n `t()` bootstrap and the logout handler. The `<script
+  type="application/json" id="i18n-catalog">` block is data, not executed, so it is exempt. A
+  render guard (`test_rendered_pages_have_no_inline_scripts`) fails the build if an inline script
+  reappears. `/browse` renders a gallery whose cards
   show a real preview served by `GET /templates/{template_id}/image` (auth-gated the same way;
   content type is taken from the stored file extension, not sniffed, so it renders under the
   gateway's `X-Content-Type-Options: nosniff`, and a missing template/blob is a 404). Each card
@@ -144,11 +164,15 @@ Two auth surfaces share one tree:
   allowlist is defense-in-depth.
 - On an unauthenticated MCP request the transport returns `401` with a `WWW-Authenticate`
   header whose `resource_metadata` points at the RFC 9728 document. The advertised OAuth
-  issuer/resource URLs are derived from `GITHUB_REDIRECT_URI` (its public scheme+host, minus the
-  `/auth/callback` suffix) via `_public_app_base_url`, not hardcoded — so a hosted deploy
-  advertises `https://<host>` instead of `http://localhost:8000`. `validate_at_startup` rejects a
-  `GITHUB_REDIRECT_URI` that does not end in `/auth/callback` (it would otherwise bake a broken
-  path into the metadata). FastMCP only registers that metadata route inside the mounted `/mcp`
+  issuer/resource URLs come from the canonical public base URL resolved by
+  `config.resolve_public_base_url`: the optional, provider-independent `PUBLIC_BASE_URL` when set,
+  else derived from `GITHUB_REDIRECT_URI` (its public scheme+host, minus the `/auth/callback`
+  suffix) — so a hosted deploy advertises `https://<host>` instead of `http://localhost:8000`. This
+  origin also signs `rendered_url` values, so `validate_at_startup` fails closed when
+  `PUBLIC_BASE_URL` and `GITHUB_REDIRECT_URI` resolve to different origins (a silent origin change
+  would invalidate every outstanding signed render URL), and still rejects a `GITHUB_REDIRECT_URI`
+  that does not end in `/auth/callback` (it would otherwise bake a broken path into the metadata).
+  The session-cookie `Secure` flag follows the same canonical origin (`config.session_cookie_secure`). FastMCP only registers that metadata route inside the mounted `/mcp`
   sub-app, so `create_app` mirrors it on the parent app at the origin root
   (`/.well-known/oauth-protected-resource/mcp`) so the advertised URL actually resolves.
   Known limitation: the document lists the app as its own `authorization_server`, but the app
@@ -168,6 +192,72 @@ The MCP tool wrappers derive the rate-limit actor from the validated `AccessToke
 `Context.client_id`, which is client-supplied request metadata and therefore spoofable. Tool
 calls without a verified access token raise `UNAUTHORIZED` at the wrapper before any backend
 work runs.
+
+## Multi-provider identity (GitHub + Google)
+
+Identity is a provider-namespaced **principal** string — `github:<login>` or `google:<sub>` —
+not a bare GitHub login. GitHub and Google identities are independent: separate allowlist
+entries, PATs, history, and audit trails, never linked or merged. Google sign-in is config-gated
+(`GOOGLE_OAUTH_ENABLED`, OFF by default, mirroring reverse-image); when off, only GitHub login is
+offered and the GitHub path is untouched.
+
+- **One authorization predicate, three front doors (KTD).** `auth/authorization.py` is a
+  dependency-free leaf exposing `normalize_principal` and `is_authorized(principal, *, allowlist,
+  pin_store)`. It imports nothing from `depends`/`session`/`app`, because `session.py` already
+  imports `require_pat` from `depends.py`; a leaf both import *down* into is the only placement
+  that keeps the import graph acyclic while guaranteeing the browser session
+  (`session_login`), the web PAT (`require_pat`), and the MCP transport PAT
+  (`PatTokenVerifier.verify_token`) cannot diverge. Authorization is re-evaluated **per request**
+  against live allowlist + pin state (no caching), so de-allowlisting or evicting a pin denies the
+  *next* request, not only fresh logins.
+
+- **Idempotent, prefix-preserving normalization (KTD).** `normalize_principal` is the single place
+  the default `github:` prefix is applied. A value already carrying a known `provider:` prefix is
+  returned unchanged; a legacy bare value becomes `github:<value>` only when it matches a
+  conservative login charset; a bare value containing `@` or `:` is rejected, never smuggled into a
+  GitHub principal. Legacy bare values (allowlist entries, PAT rows, sessions, receipts, pending
+  uploads) read as `github:<value>` with no data migration — reads match both the namespaced
+  principal and the bare form, and a reissue revokes a friend's pre-namespace PAT.
+
+- **Two resolvers, one identity type (KTD).** Both callbacks converge on a frozen
+  `ResolvedIdentity(provider, subject, email, email_verified)`. GitHub stays hand-rolled (plain
+  JSON); Google uses Authlib (`auth/google_oauth.py`) for OIDC discovery, PKCE, `state`, `nonce`,
+  and ID-token validation. The Google callback reads `sub`/`email`/`email_verified` from the
+  nonce-validated `id_token` (`token["userinfo"]`), never a separate `/userinfo` fetch, so the
+  authz-bearing claims stay bound to the validated token. A separate callback path
+  (`/auth/google/callback`) is the RFC 9700 mix-up defense for running two IdPs.
+
+- **Trust-on-first-use `sub` pinning (KTD).** The operator invites a friend by their Google account
+  email (`google:<email>`). On the first sign-in where `email_verified` is strictly boolean `true`
+  (the domain is not restricted to `@gmail.com` — any verified Google mailbox, e.g. `@icloud.com`,
+  is accepted, because authorization keys on the full allowlisted email plus the `sub` pin, so a
+  Workspace admin cannot mint an arbitrary allowlisted address), the
+  app records a durable `sub -> email` pin (`auth/google_pins.py`, `google_pins` table) and the
+  principal becomes `google:<sub>` — the immutable subject, never the mutable email, so an email
+  rename does not revoke access (a returning `sub` is authorized against its pinned, allowlisted
+  email; the live claim email is ignored). The `email UNIQUE` constraint enforces
+  **first-sign-in-wins**: a second `sub` claiming an already-pinned email is rejected at the DB
+  layer. PATs and audit bind to `google:<sub>`; the allowlist stays email-keyed and
+  operator-friendly, with Gmail canonicalization (lowercase, strip local-part dots, drop `+suffix`)
+  applied to Gmail addresses only — other domains match exactly — identically on the stored entry
+  and the claim.
+
+- **Terminal revocation and the residual race (KTD).** Both `pin revoke` and `allowlist remove
+  google:<email>` **delete the pin row**; the deleted pin is never silently re-authorized, so
+  re-establishing access always takes a fresh interactive sign-in (R13). The two differ by intent:
+  `allowlist remove` is the **de-invite / kick-out** path — it removes the invite *and* the pin, so
+  the account is denied for as long as the invite is absent (re-admitting requires the operator to
+  re-add the invite). `pin revoke` deletes the pin but **leaves the invite**, so it is a *rotation*
+  tool (evict a wrong first-sign-in-wins pin): the next sign-in re-pins, and if the invite still
+  stands the same `sub` can re-win it — the residual race re-applies until the operator confirms the
+  intended `sub` via `pin show`. The accepted residual risk: because an email
+  address can be reclaimed, whoever first presents a verified, allowlisted address wins the pin; the
+  strict `email_verified` gate, terminal revocation, and operator inspection (`pin show`/`pin list`)
+  are the mitigations, and the documented remediation for a wrong pin is revoke-pin → re-invite →
+  confirm the new `sub`. Hand-editing the allowlist file to remove a line denies access while removed but
+  does not delete the pin; `pin revoke` is the authoritative rotation path. MCP transport auth is
+  unchanged — a Google friend gets parity purely by holding a PAT whose subject is `google:<sub>`;
+  no OAuth is wired into the MCP transport and RFC 8414 metadata stays intentionally absent.
 
 ## Web upload surface
 

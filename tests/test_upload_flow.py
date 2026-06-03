@@ -463,7 +463,7 @@ def test_upload_base64_garbage_charges_limiter_and_returns_invalid_input(tmp_pat
     assert body["errors"] == [{"field": "content_base64", "reason": "base64"}]
     # The shared service charges the limiter before decoding (KTD2 ordering): a
     # window now exists for the friend even though the request was rejected.
-    _start, count = app.state.upload_limiter._windows["friend"]
+    _start, count = app.state.upload_limiter._windows["github:friend"]
     assert count == 1
 
 

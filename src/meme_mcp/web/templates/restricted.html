@@ -3,9 +3,13 @@
   <main>
     <h1>{{ t("restricted.heading") }}</h1>
     <p>{{ t("restricted.body") }}</p>
-    <p>
-      {{ t("restricted.request_prefix") }}<code>{{ operator_github_login }}</code>{{ t("restricted.request_suffix") }}
-    </p>
+    {% if operator_github_login %}
+      <p>
+        {{ t("restricted.request_prefix") }}<code>{{ operator_github_login }}</code>{{ t("restricted.request_suffix") }}
+      </p>
+    {% else %}
+      <p>{{ t("restricted.request_generic") }}</p>
+    {% endif %}
     <p><a href="/browse">{{ t("restricted.back") }}</a></p>
   </main>
 {% endblock %}

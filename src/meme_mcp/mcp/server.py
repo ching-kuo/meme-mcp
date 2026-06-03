@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Container
 from typing import Any, Protocol
 
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -9,6 +8,11 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
+from meme_mcp.auth.authorization import (
+    SupportsAllowlist,
+    SupportsPinLookup,
+    is_authorized,
+)
 from meme_mcp.auth.pat import SQLitePatStore, verify_pat
 from meme_mcp.envelope import Envelope
 from meme_mcp.errors import ErrorCode, MemeMCPError
@@ -86,32 +90,39 @@ class PatTokenVerifier(TokenVerifier):
     def __init__(
         self,
         pat_store: SQLitePatStore,
-        allowlist: Container[str],
+        allowlist: SupportsAllowlist,
         pepper: str,
+        pin_store: SupportsPinLookup | None = None,
     ) -> None:
         self.pat_store = pat_store
         self.allowlist = allowlist
         self.pepper = pepper
+        self.pin_store = pin_store
 
     async def verify_token(self, token: str) -> AccessToken | None:
         result = verify_pat(self.pat_store, token, self.pepper)
         if result is None:
             return None
-        login, capability = result
-        if login not in self.allowlist:
+        principal, capability = result
+        # The MCP transport's authorization MUST route through the same predicate
+        # as the browser and web-PAT front doors; a bare membership test here
+        # would 401 every Google friend's PAT while their browser session works.
+        # No caching: each request re-checks live allowlist + pin state (R12).
+        if not is_authorized(principal, allowlist=self.allowlist, pin_store=self.pin_store):
             return None
         scopes = ["meme:read"] + (["meme:write"] if capability == "readwrite" else [])
-        return AccessToken(token=token, client_id=login, scopes=scopes)
+        return AccessToken(token=token, client_id=principal, scopes=scopes)
 
 
 def create_mcp_server(
     pat_store: SQLitePatStore,
-    allowlist: Container[str],
+    allowlist: SupportsAllowlist,
     pepper: str,
     public_base_url: str,
     backend: MCPBackend | None = None,
     allowed_hosts: list[str] | None = None,
     allowed_origins: list[str] | None = None,
+    pin_store: SupportsPinLookup | None = None,
 ) -> FastMCP:
     # The Streamable HTTP transport runs a DNS-rebinding guard that rejects any
     # Host/Origin not on its allowlist with 421. FastMCP only auto-populates that
@@ -131,7 +142,7 @@ def create_mcp_server(
     mcp = FastMCP(
         "meme-mcp",
         instructions="Find and render private meme templates.",
-        token_verifier=PatTokenVerifier(pat_store, allowlist, pepper),
+        token_verifier=PatTokenVerifier(pat_store, allowlist, pepper, pin_store),
         json_response=True,
         stateless_http=True,
         streamable_http_path="/",

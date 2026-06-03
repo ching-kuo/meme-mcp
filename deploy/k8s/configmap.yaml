@@ -13,3 +13,39 @@ data:
   # TTL ceiling. RENDER_URL_TTL_SECONDS (default 7d) must stay <= this in seconds.
   RENDER_GC_TTL_DAYS: "30"
 
+  # --- Required app config (no defaults; the app refuses to start without these) ---
+  # Run `meme-mcp check-env` to see exactly which fields are missing/invalid.
+
+  # GitHub OAuth app. The client ID is non-secret; the matching
+  # GITHUB_CLIENT_SECRET lives in the Secret (see secret.example.yaml).
+  GITHUB_CLIENT_ID: "replace-with-github-oauth-app-client-id"
+  GITHUB_REDIRECT_URI: "https://meme.example.com/auth/callback"
+  # Allowlist file path. Point at a ConfigMap-mounted file (see README ->
+  # "Declarative allowlist") or a path on the PVC the CLI can write.
+  GITHUB_ALLOWLIST_PATH: "/etc/meme-mcp/allowlist.txt"
+  # Operator (admin) GitHub login. Stored namespaced internally as github:<login>.
+  OPERATOR_GITHUB_LOGIN: "replace-with-your-github-login"
+
+  # Vision-language model backend (OpenAI-compatible /v1). The matching
+  # VLM_API_KEY / EMBEDDING_API_KEY live in the Secret (a non-empty value is
+  # required even when the backend, e.g. Ollama, ignores it).
+  VLM_BASE_URL: "https://api.openai.com/v1"
+  VLM_MODEL: "replace-with-vision-capable-model"
+
+  # Public origin used to sign render URLs and derive OAuth metadata. Optional:
+  # if unset it is derived from GITHUB_REDIRECT_URI's origin. Set it explicitly
+  # when the public origin differs from the GitHub redirect origin. Changing it
+  # invalidates every outstanding signed render URL (fail-closed on conflict).
+  # PUBLIC_BASE_URL: "https://meme.example.com"
+
+  # --- Google OAuth sign-in (optional second provider, OFF by default) ---
+  # When enabled, non-GitHub friends can sign in with a Google account. All three
+  # Google fields are required when GOOGLE_OAUTH_ENABLED is "true":
+  #   * GOOGLE_REDIRECT_URI must end with /auth/google/callback and share the
+  #     public origin (PUBLIC_BASE_URL, else the GitHub redirect origin), or the
+  #     app fails closed at startup.
+  #   * GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET live in the Secret.
+  # Invite a Google friend by adding `google:<email>` to the allowlist; they pin
+  # to their immutable Google `sub` on first verified sign-in (trust-on-first-use).
+  GOOGLE_OAUTH_ENABLED: "false"
+  # GOOGLE_REDIRECT_URI: "https://meme.example.com/auth/google/callback"

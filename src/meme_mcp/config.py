@@ -5,6 +5,7 @@ import os
 import stat
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -49,6 +50,16 @@ class Settings(BaseSettings):
     github_allowlist_path: str
     operator_github_login: str
 
+    # Externally visible base URL (scheme://host[:port], no path). Optional and
+    # provider-independent: it is the canonical origin advertised in MCP OAuth
+    # metadata AND used to sign rendered_url values. When unset it is derived from
+    # GITHUB_REDIRECT_URI (strip /auth/callback) for zero-migration. When set it
+    # is used verbatim, decoupling the public origin from any single provider's
+    # redirect URI so a second OAuth provider can be added without the advertised
+    # origin diverging. Changing its origin invalidates outstanding signed render
+    # URLs, so validate_at_startup fails closed on an origin conflict (below).
+    public_base_url: str | None = None
+
     session_secret: SecretStr
     pat_hash_pepper: SecretStr
 
@@ -65,6 +76,16 @@ class Settings(BaseSettings):
     # here; U2 hands the path to the SDK, which opens it.
     reverse_image_enabled: bool = False
     google_vision_credentials_path: str | None = None
+
+    # Google OAuth sign-in (optional second provider, OFF by default). Mirrors the
+    # reverse-image gating convention: when disabled, only GitHub login is offered
+    # and absence of these values never breaks the GitHub path. When enabled, all
+    # three are required and google_redirect_uri must end in /auth/google/callback
+    # and resolve to the app's canonical public origin (see validate_at_startup).
+    google_oauth_enabled: bool = False
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = None
+    google_redirect_uri: str | None = None
 
     embedding_base_url: str = "https://api.openai.com/v1"
     embedding_api_key: SecretStr
@@ -157,8 +178,134 @@ def validate_at_startup(settings: Settings) -> None:
         problems.extend(missing)
     if settings.reverse_image_enabled:
         _validate_vision_credentials(settings.google_vision_credentials_path, problems)
+    if settings.public_base_url is not None:
+        _validate_public_base_url(settings, problems)
+    if settings.google_oauth_enabled:
+        _validate_google_oauth(settings, problems)
     if problems:
         raise ConfigError("; ".join(problems))
+
+
+def _validate_google_oauth(settings: Settings, problems: list[str]) -> None:
+    """Fail fast on an incomplete or origin-mismatched Google OAuth config.
+
+    When enabled, all three Google fields are required and the redirect URI must
+    end in ``/auth/google/callback`` AND resolve to the app's canonical public
+    origin -- the callback route is served by this app, so a redirect URI on a
+    different origin/base path would boot a dead Google config.
+    """
+    missing = [
+        name
+        for name, value in {
+            "GOOGLE_CLIENT_ID": settings.google_client_id,
+            "GOOGLE_CLIENT_SECRET": settings.google_client_secret,
+            "GOOGLE_REDIRECT_URI": settings.google_redirect_uri,
+        }.items()
+        if value is None
+    ]
+    if missing:
+        problems.extend(f"{name} is required when GOOGLE_OAUTH_ENABLED is true" for name in missing)
+        return
+    redirect = (settings.google_redirect_uri or "").rstrip("/")
+    if not redirect.endswith("/auth/google/callback"):
+        problems.append("GOOGLE_REDIRECT_URI must end with /auth/google/callback")
+        return
+    base = redirect.removesuffix("/auth/google/callback").rstrip("/")
+    try:
+        canonical = resolve_public_base_url(settings)
+    except ConfigError:
+        # The github/public-base origin is itself invalid; that error is already
+        # accumulated elsewhere, so do not pile on a confusing secondary message.
+        return
+    if _origin_key(base) != _origin_key(canonical):
+        problems.append(
+            f"GOOGLE_REDIRECT_URI origin {_origin_key(base)} must match the app's "
+            f"public origin {_origin_key(canonical)}"
+        )
+
+
+def _origin_key(url: str) -> str:
+    """Normalized scheme://host:port for an origin comparison.
+
+    Default ports are filled in so ``http://host`` and ``http://host:80`` compare
+    equal; scheme and host are lowercased.
+    """
+    parsed = urlsplit(url)
+    port = parsed.port
+    if port is None:
+        port = {"http": 80, "https": 443}.get(parsed.scheme.lower())
+    return f"{parsed.scheme.lower()}://{(parsed.hostname or '').lower()}:{port}"
+
+
+def _base_from_redirect(github_redirect_uri: str) -> str:
+    """Derive the public base URL from the GitHub callback URL.
+
+    The callback path must end in ``/auth/callback`` (the route the app serves);
+    otherwise ``removesuffix`` is a silent no-op that would bake the full callback
+    path into the advertised metadata, so fail fast.
+    """
+    parsed = urlsplit(github_redirect_uri)
+    path = parsed.path.rstrip("/")
+    if not path.endswith("/auth/callback"):
+        raise ConfigError(
+            f"GITHUB_REDIRECT_URI must end with /auth/callback: {github_redirect_uri}"
+        )
+    base_path = path.removesuffix("/auth/callback").rstrip("/")
+    return urlunsplit((parsed.scheme, parsed.netloc, base_path, "", ""))
+
+
+def _validate_public_base_url(settings: Settings, problems: list[str]) -> None:
+    """Fail closed on a malformed PUBLIC_BASE_URL or an origin conflict.
+
+    Because this origin signs ``rendered_url`` values, a silent origin change
+    invalidates every outstanding signed URL. When PUBLIC_BASE_URL and
+    GITHUB_REDIRECT_URI resolve to different origins (scheme+host+port), refuse to
+    start rather than re-sign against a new origin behind the operator's back.
+    """
+    explicit = (settings.public_base_url or "").rstrip("/")
+    parsed = urlsplit(explicit)
+    if not parsed.scheme or not parsed.netloc:
+        problems.append("PUBLIC_BASE_URL must be an absolute URL with scheme and host")
+        return
+    redirect = settings.github_redirect_uri.rstrip("/")
+    # Only compare origins when the redirect is itself well-formed; its own
+    # /auth/callback check ran above and would already have flagged a bad value.
+    if redirect.endswith("/auth/callback"):
+        derived = redirect.removesuffix("/auth/callback").rstrip("/")
+        if _origin_key(explicit) != _origin_key(derived):
+            problems.append(
+                f"PUBLIC_BASE_URL origin {_origin_key(explicit)} conflicts with "
+                f"GITHUB_REDIRECT_URI origin {_origin_key(derived)} (this origin "
+                "signs render URLs; repoint both deliberately to change it)"
+            )
+
+
+def resolve_public_base_url(settings: Settings) -> str:
+    """Canonical externally-visible base URL (no trailing slash).
+
+    Prefers PUBLIC_BASE_URL verbatim; otherwise derives from GITHUB_REDIRECT_URI.
+    Assumes ``validate_at_startup`` already ran (create_app calls it first), so
+    the conflict/format checks have surfaced; still defensive on the redirect
+    suffix.
+    """
+    if settings.public_base_url is not None:
+        return settings.public_base_url.rstrip("/")
+    return _base_from_redirect(settings.github_redirect_uri)
+
+
+def session_cookie_secure(settings: Settings) -> bool:
+    """Whether the session/lang cookie ``Secure`` flag should be set.
+
+    Follows the canonical public origin's scheme when PUBLIC_BASE_URL is set;
+    otherwise keeps the historical GITHUB_REDIRECT_URI localhost check. The
+    fail-closed origin-conflict rule guarantees the two never disagree when both
+    are set, so OAuth state (carried in the session cookie) round-trips: a
+    local-dev http://localhost deploy stays non-Secure, a production https origin
+    is Secure.
+    """
+    if settings.public_base_url is not None:
+        return settings.public_base_url.lower().startswith("https://")
+    return not settings.github_redirect_uri.startswith("http://localhost")
 
 
 def _validate_vision_credentials(path: str | None, problems: list[str]) -> None:

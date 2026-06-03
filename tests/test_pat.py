@@ -20,7 +20,7 @@ def test_issue_and_verify_pat() -> None:
     plaintext = issue_pat(store, "alice", "pepper")
     assert len(plaintext) >= 40
     assert plaintext not in store.records[0].pat_hash
-    assert verify_pat(store, plaintext, "pepper") == ("alice", DEFAULT_CAPABILITY)
+    assert verify_pat(store, plaintext, "pepper") == ("github:alice", DEFAULT_CAPABILITY)
 
 
 def test_second_pat_revokes_first() -> None:
@@ -28,7 +28,29 @@ def test_second_pat_revokes_first() -> None:
     first = issue_pat(store, "alice", "pepper")
     second = issue_pat(store, "alice", "pepper")
     assert verify_pat(store, first, "pepper") is None
-    assert verify_pat(store, second, "pepper") == ("alice", DEFAULT_CAPABILITY)
+    assert verify_pat(store, second, "pepper") == ("github:alice", DEFAULT_CAPABILITY)
+
+
+def test_reissue_revokes_legacy_bare_login_row(tmp_path: Path) -> None:
+    """A friend with a pre-namespace PAT stored under the bare login must have it
+    revoked when a new PAT is issued for the github:<login> principal, preserving
+    the single-active-PAT invariant across the namespace boundary (no migration).
+    """
+    db_path = tmp_path / "pats.db"
+    store = SQLitePatStore(db_path)
+    legacy_hash = "0" * 64
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO pats (friend_login, pat_hash, created_at, capability) "
+            "VALUES (?, ?, ?, ?)",
+            ("bob", legacy_hash, datetime.now(UTC).isoformat(), "readwrite"),
+        )
+    # Legacy row verifies (normalized to github:bob) before reissue.
+    assert store.verify(legacy_hash) == ("github:bob", DEFAULT_CAPABILITY)
+    issue_pat(store, "bob", "pepper")
+    # The legacy bare row is now revoked; only the new namespaced PAT is active.
+    assert store.verify(legacy_hash) is None
+    assert store.current_status("github:bob").state == "active"
 
 
 def test_pepper_rotation_invalidates_existing_pat() -> None:
@@ -40,7 +62,7 @@ def test_pepper_rotation_invalidates_existing_pat() -> None:
 def test_issue_with_explicit_capability(tmp_path: Path) -> None:
     store = SQLitePatStore(tmp_path / "pats.db")
     read_token = issue_pat(store, "alice", "pepper", capability="read")
-    assert verify_pat(store, read_token, "pepper") == ("alice", "read")
+    assert verify_pat(store, read_token, "pepper") == ("github:alice", "read")
 
 
 def test_issue_rejects_unknown_capability() -> None:
@@ -61,10 +83,10 @@ def test_ttl_zero_means_never_expires(tmp_path: Path) -> None:
     token = issue_pat(store, "alice", "pepper", ttl_days=0)
     with sqlite3.connect(db_path) as conn:
         row = conn.execute(
-            "SELECT expires_at FROM pats WHERE friend_login = ?", ("alice",)
+            "SELECT expires_at FROM pats WHERE friend_login = ?", ("github:alice",)
         ).fetchone()
     assert row is not None and row[0] is None
-    assert verify_pat(store, token, "pepper") == ("alice", DEFAULT_CAPABILITY)
+    assert verify_pat(store, token, "pepper") == ("github:alice", DEFAULT_CAPABILITY)
 
 
 def test_expired_pat_returns_none(tmp_path: Path) -> None:
@@ -72,7 +94,7 @@ def test_expired_pat_returns_none(tmp_path: Path) -> None:
     clock_value = [fixed_now]
     store = SQLitePatStore(tmp_path / "pats.db", clock=lambda: clock_value[0])
     token = issue_pat(store, "alice", "pepper", ttl_days=1)
-    assert verify_pat(store, token, "pepper") == ("alice", DEFAULT_CAPABILITY)
+    assert verify_pat(store, token, "pepper") == ("github:alice", DEFAULT_CAPABILITY)
     clock_value[0] = fixed_now + timedelta(days=2)
     assert verify_pat(store, token, "pepper") is None
 
@@ -106,7 +128,7 @@ def test_back_compat_legacy_row_without_new_columns(tmp_path: Path) -> None:
     assert "expires_at" in columns
     assert "capability" in columns
     result = store.verify(legacy_hash)
-    assert result == ("legacy-alice", DEFAULT_CAPABILITY)
+    assert result == ("github:legacy-alice", DEFAULT_CAPABILITY)
 
 
 def test_alter_is_idempotent(tmp_path: Path) -> None:
@@ -206,7 +228,7 @@ def test_current_status_reflects_states_without_hash(tmp_path: Path) -> None:
     assert not hasattr(none_status, "pat_hash")
 
     read_token = issue_pat(store, "alice", "pepper", ttl_days=30, capability="read")
-    assert verify_pat(store, read_token, "pepper") == ("alice", "read")
+    assert verify_pat(store, read_token, "pepper") == ("github:alice", "read")
     active = store.current_status("alice")
     assert active.state == "active"
     assert active.capability == "read"

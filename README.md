@@ -5,6 +5,7 @@ Private meme retrieval and rendering service with:
 - hosted MCP Streamable HTTP at `/mcp`
 - compatibility JSON routes under `/api/mcp/*`
 - GitHub OAuth browser sessions for friends
+- optional Google OAuth sign-in alongside GitHub (off by default) so friends without a GitHub account can join, with full parity
 - bearer PAT auth for MCP clients
 - self-service PAT management for friends via a browser `/account` page (generate/regenerate/revoke their single token)
 - friend upload analysis/review/approval via a browser `/upload` page or the PAT API
@@ -19,6 +20,43 @@ cp .env.example .env
 ```
 
 Set the required GitHub OAuth, VLM, embedding, session, and PAT pepper values in `.env`.
+
+`PUBLIC_BASE_URL` is optional: when unset, the canonical externally-visible origin (advertised in
+MCP OAuth metadata and used to sign render URLs) is derived from `GITHUB_REDIRECT_URI`. Set it when
+running a second OAuth provider so the advertised origin does not depend on a single provider's
+redirect URI. **Changing its origin invalidates outstanding/bookmarked signed render URLs**, and
+startup fails closed if it conflicts with `GITHUB_REDIRECT_URI`'s origin.
+
+### Google sign-in (optional, off by default)
+
+Lets friends without a GitHub account sign in with Google. Google and GitHub identities are
+independent (separate allowlist entries, PATs, history) and never linked. Google friends get full
+parity: browse, generate, upload, self-service PATs, and MCP client auth.
+
+- Provision a Google Cloud **OAuth 2.0 "Web application"** client (APIs & Services → Credentials).
+  Set the authorized redirect URI to `<PUBLIC_BASE_URL or your GitHub origin>/auth/google/callback`,
+  configure the OAuth consent screen, and request the `openid email` scopes.
+- Enable with `GOOGLE_OAUTH_ENABLED=true` and set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and
+  `GOOGLE_REDIRECT_URI` (must end in `/auth/google/callback` and resolve to the app's public
+  origin). Startup fails fast if any are missing or the redirect origin does not match.
+- **Any verified Google mailbox.** Sign-in requires Google's `email_verified` claim to be strictly
+  `true`; the address may be any Google account mailbox, including non-Gmail ones (e.g.
+  `@icloud.com`). The domain is not restricted because authorization keys on the full allowlisted
+  email plus the immutable `sub` pin, so a Workspace admin cannot mint an arbitrary allowlisted
+  address. Invite a friend by their Google account email: `meme-mcp allowlist add google:<email>`.
+  (Dot/`+suffix` alias canonicalization still applies to Gmail addresses only; other domains match
+  exactly.)
+- **Trust-on-first-use.** On a friend's first verified sign-in the app pins their immutable Google
+  `sub` to the invited mailbox; PATs and audit bind to `google:<sub>`, not the email, so an email
+  rename does not lock them out. The first verified, allowlisted sign-in for an invited email wins
+  the pin.
+- **Wrong/poisoned pin remediation:** `meme-mcp pin show <email>` inspects the pinned `sub`;
+  `meme-mcp pin revoke <email>` evicts it. `pin revoke` is a *rotation* tool — it deletes the pin
+  but leaves the invite, so the next sign-in re-pins (confirm the intended `sub` with `pin show`,
+  and re-revoke if the wrong account won again). To **deny access entirely**, remove the invite with
+  `meme-mcp allowlist remove google:<email>` (this deletes the pin too); the account stays out until
+  you re-add the invite. A deleted pin is never silently re-authorized — re-admitting always takes a
+  fresh interactive sign-in.
 
 ### Reverse-image enrichment (optional, off by default)
 
@@ -58,6 +96,16 @@ uv run meme-mcp seed-memegen --upstream-path /path/to/memegen-clone
 # Add a GitHub login to the allowlist used by both web sessions and PAT auth.
 uv run meme-mcp allowlist add <github-login>
 
+# Invite a Google friend by their Google account email (requires GOOGLE_OAUTH_ENABLED=true).
+uv run meme-mcp allowlist add google:<email>          # or: allowlist add <email> --provider google
+# Removing a Google invite also evicts the friend's pin (terminal revocation).
+uv run meme-mcp allowlist remove google:<email>
+
+# Inspect / evict Google sub->email pins (detect a wrong first-sign-in-wins pin).
+uv run meme-mcp pin list
+uv run meme-mcp pin show <email>
+uv run meme-mcp pin revoke <email-or-sub>
+
 # Issue a PAT. The token is printed once; only its hash is stored. The PAT expires
 # after 90 days by default; pass --ttl-days 0 to opt out of expiry, and
 # --scope read for read-only access.
@@ -66,6 +114,10 @@ uv run meme-mcp allowlist add <github-login>
 # (bounded to 30/90/365-day expiry; never-expire stays operator-CLI-only). This
 # CLI remains the operator fallback and the only way to issue a non-expiring token.
 uv run meme-mcp pat issue <github-login> [--ttl-days N] [--scope read|readwrite]
+# For a Google friend, pass their Google email (resolved to google:<sub> via the pin; the
+# friend must have signed in once). pat revoke accepts a github login or google:<sub>.
+uv run meme-mcp pat issue <email> [--ttl-days N] [--scope read|readwrite]
+uv run meme-mcp pat revoke <github-login | google:sub>
 
 # Inventory active and revoked PATs.
 uv run meme-mcp pat list
@@ -86,8 +138,9 @@ Useful routes:
 - `GET /` (public landing page)
 - `GET /healthz`
 - `GET /readyz`
-- `GET /account` (HTML page where an allowlisted friend generates/regenerates/revokes their MCP PAT and copies it once; anonymous browsers are redirected to GitHub login)
-- `GET /browse` (HTML gallery with template previews; cards link to the detail page; an anonymous browser is redirected to GitHub login)
+- `GET /account` (HTML page where an allowlisted friend generates/regenerates/revokes their MCP PAT and copies it once; anonymous browsers are redirected to sign-in)
+- `GET /auth/login` (GitHub login, or a provider chooser when Google sign-in is enabled), `GET /auth/google/login` + `GET /auth/google/callback` (Google OIDC, when enabled)
+- `GET /browse` (HTML gallery with template previews; cards link to the detail page; an anonymous browser is redirected to sign-in)
 - `GET /templates/{template_id}` (HTML detail page: full preview plus metadata, slots, and fingerprint; auth-gated like `/browse`)
 - `GET /templates/{template_id}/image` (the gallery's preview image; auth-gated like `/browse`)
 - `GET /api/templates?q=deploy`
@@ -203,6 +256,7 @@ Implemented:
 - MCP tool registration via official FastMCP
 - PAT hashing and file-backed allowlist enforcement
 - GitHub OAuth session flow with PKCE state (token exchange against `github.com`, user fetch against `api.github.com`)
+- optional Google OAuth (OIDC via Authlib) sign-in alongside GitHub, with provider-namespaced identities and trust-on-first-use `sub` pinning
 - persisted templates, receipts, pending uploads (with 24h TTL), and vectors
 - upload validation, EXIF-stripping re-encode, duplicate detection, VLM review fallback
 - optional reverse-image enrichment via Google Cloud Vision (deploy-gated, per-upload toggle)

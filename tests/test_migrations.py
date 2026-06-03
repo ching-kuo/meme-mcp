@@ -39,6 +39,7 @@ EXPECTED_TABLES = {
     "template_embeddings_meta",
     "generated_receipts",
     "outcome_events",
+    "google_pins",
     "alembic_version",  # alembic's own bookkeeping table
 }
 
@@ -121,4 +122,7 @@ def test_vector_ddl_revision_is_noop_on_sqlite(tmp_path: Path) -> None:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(template_vectors)")}
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()
     assert {"template_id", "vector_json", "dimensions"} <= columns
-    assert version == ("0002_vector_ddl",)
+    # The SQLite template_vectors table is untouched regardless of head; assert a
+    # version row exists rather than pinning a revision id that moves when we add
+    # migrations (mirrors test_run_migrations_creates_expected_tables).
+    assert version is not None

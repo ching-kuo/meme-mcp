@@ -21,6 +21,7 @@ MESSAGES: dict[str, dict[str, str]] = {
     "nav.browse": {"en": "Browse", "zh-TW": "瀏覽"},
     "nav.upload": {"en": "Upload", "zh-TW": "上傳"},
     "nav.account": {"en": "Account", "zh-TW": "帳號"},
+    "nav.logout": {"en": "Sign out", "zh-TW": "登出"},
     "nav.aria_primary": {"en": "Primary", "zh-TW": "主要導覽"},
     # --- PAT-expiry banner (base.html) ---------------------------------------
     "banner.pat_expiry.one": {
@@ -42,10 +43,11 @@ MESSAGES: dict[str, dict[str, str]] = {
     "landing.cta.browse": {"en": "Browse templates", "zh-TW": "瀏覽範本"},
     "landing.cta.upload": {"en": "Upload a template", "zh-TW": "上傳範本"},
     "landing.signin_prompt": {
-        "en": "Sign in with GitHub to browse the template library and contribute your own.",
-        "zh-TW": "使用 GitHub 登入即可瀏覽範本庫，並貢獻你自己的範本。",
+        "en": "Sign in to browse the template library and contribute your own.",
+        "zh-TW": "登入即可瀏覽範本庫，並貢獻你自己的範本。",
     },
     "landing.cta.signin": {"en": "Sign in with GitHub", "zh-TW": "使用 GitHub 登入"},
+    "landing.cta.signin_google": {"en": "Sign in with Google", "zh-TW": "使用 Google 登入"},
     "landing.mcp.heading": {"en": "For MCP clients", "zh-TW": "給 MCP 用戶端"},
     "landing.mcp.body_prefix": {
         "en": "Connect an agent to the hosted MCP endpoint at",
@@ -55,21 +57,33 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "with a bearer PAT. See the README for client snippets.",
         "zh-TW": "。用戶端程式碼範例請見 README。",
     },
+    # --- login.html (provider chooser) ---------------------------------------
+    "login.heading": {"en": "Sign in", "zh-TW": "登入"},
+    "login.prompt": {
+        "en": "Choose how you would like to sign in.",
+        "zh-TW": "請選擇登入方式。",
+    },
+    "login.github": {"en": "Sign in with GitHub", "zh-TW": "使用 GitHub 登入"},
+    "login.google": {"en": "Sign in with Google", "zh-TW": "使用 Google 登入"},
     # --- restricted.html -----------------------------------------------------
     "restricted.heading": {"en": "Access restricted", "zh-TW": "存取受限"},
     "restricted.body": {
-        "en": "Your GitHub account is signed in, but it is not on the allowlist "
-        "for this meme-mcp instance, so an upload session was not created.",
-        "zh-TW": "你的 GitHub 帳號已登入，但不在這個 meme-mcp 執行個體的允許清單中，"
-        "因此沒有建立上傳工作階段。",
+        "en": "Your account is signed in, but it is not on the allowlist "
+        "for this meme-mcp instance, so a session was not created.",
+        "zh-TW": "你的帳號已登入，但不在這個 meme-mcp 執行個體的允許清單中，"
+        "因此沒有建立工作階段。",
     },
     "restricted.request_prefix": {
         "en": "To request access, ask the operator (",
         "zh-TW": "若要申請存取權，請聯絡管理者（",
     },
     "restricted.request_suffix": {
-        "en": ") to add your GitHub login to the allowlist.",
-        "zh-TW": "）將你的 GitHub 帳號加入允許清單。",
+        "en": ") to add you to the allowlist.",
+        "zh-TW": "）將你加入允許清單。",
+    },
+    "restricted.request_generic": {
+        "en": "To request access, contact the operator to be added to the allowlist.",
+        "zh-TW": "若要申請存取權，請聯絡管理者將你加入允許清單。",
     },
     "restricted.back": {"en": "Back to browse", "zh-TW": "返回瀏覽"},
     # --- browse.html ---------------------------------------------------------
