@@ -47,7 +47,7 @@ meme-mcp = "meme_mcp.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/meme_mcp"]
-force-include = { "assets/fonts" = "meme_mcp/assets/fonts", "assets/memegen-enrichment.json" = "meme_mcp/assets/memegen-enrichment.json" }
+force-include = { "assets/fonts" = "meme_mcp/assets/fonts", "assets/memegen-enrichment.json" = "meme_mcp/assets/memegen-enrichment.json", "assets/memegen-enrichment.zh-TW.json" = "meme_mcp/assets/memegen-enrichment.zh-TW.json" }
 
 [tool.pytest.ini_options]
 addopts = "-q"

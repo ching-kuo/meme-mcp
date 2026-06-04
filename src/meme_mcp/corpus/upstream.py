@@ -11,9 +11,15 @@ from typing import Any
 import yaml
 
 from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate
+from meme_mcp.metadata_locales import provenance
 from meme_mcp.rendering.image_store import FilesystemImageStore
 from meme_mcp.upload.validation import compute_hashes
 from meme_mcp.vlm.sanitize import hard_sanitize_metadata, sanitize_url
+
+# Enrichment-file field name -> stored metadata field name. The English asset and
+# the zh-TW overlay both key prose by these source names; the overlay uses "tags"
+# directly while the English asset uses "extra_tags" (merged with config keywords).
+_OVERLAY_PROSE_FIELDS = ("description", "emotion", "usage_context")
 
 CANONICAL_POSITIONS = frozenset(
     {
@@ -182,8 +188,49 @@ def _load_enrichment(path: Path | None) -> dict[str, dict[str, Any]]:
     }
 
 
+def _load_zh_tw_overlay(path: Path | None) -> dict[str, dict[str, Any]]:
+    """Load slug -> zh-TW overlay fields from the committed overlay file.
+
+    Mirrors `_load_enrichment`: an absent, corrupt, or non-UTF-8 overlay degrades
+    to English-only rather than aborting the seed. The `_meta` header and any
+    non-dict slug entry are skipped.
+    """
+    return _load_enrichment(path)
+
+
+def _attach_zh_tw_locale(
+    metadata: dict[str, Any], overlay: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Attach an unsanitized locales['zh-TW'] block with machine/drift-pass meta.
+
+    The block carries only the four overlay-scoped fields (name stays English by
+    design; localize() falls back to the top-level English name). Per-field `_meta`
+    records machine provenance with a passing drift status; the overlay is the
+    drift-gated GENERATE output, so values reaching import already passed the gate.
+    The caller runs `hard_sanitize_metadata`, whose locales dispatch sanitizes this
+    block (prose capped, tags per-item capped, `_meta` enum-validated).
+    """
+    block: dict[str, Any] = {}
+    for field in _OVERLAY_PROSE_FIELDS:
+        value = overlay.get(field)
+        if isinstance(value, str) and value.strip():
+            block[field] = value
+    tags = [tag for tag in (overlay.get("tags") or []) if isinstance(tag, str) and tag.strip()]
+    if tags:
+        block["tags"] = tags
+    if not block:
+        return metadata
+    meta = {field: provenance("machine", drift="pass") for field in block}
+    block["_meta"] = meta
+    result = dict(metadata)
+    result["locales"] = {"zh-TW": block}
+    return result
+
+
 def _build_metadata(
-    upstream: UpstreamTemplate, enriched: Mapping[str, Any]
+    upstream: UpstreamTemplate,
+    enriched: Mapping[str, Any],
+    zh_tw_overlay: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble + sanitize one template's metadata: relocate URL, merge enrichment.
 
@@ -206,6 +253,8 @@ def _build_metadata(
     source_url = sanitize_url(_upgrade_to_https(upstream.source_url))
     if source_url:
         metadata["origin"] = {"source_url": source_url}
+    if zh_tw_overlay:
+        metadata = _attach_zh_tw_locale(metadata, zh_tw_overlay)
     metadata = hard_sanitize_metadata(metadata)
     # De-duplicate and drop empties on the SANITIZED tag value: markup-laden input
     # can collapse onto an existing tag after cleaning (e.g. "<b>ten</b>" -> "ten"),
@@ -224,18 +273,22 @@ def import_upstream_corpus(
     image_store: FilesystemImageStore,
     upstream_commit_sha: str,
     enrichment_path: Path | None = None,
+    zh_tw_enrichment_path: Path | None = None,
 ) -> tuple[int, dict[str, str]]:
     """Walk upstream/templates/*, persist templates, return (count, manifest).
 
     The manifest maps slug -> SHA-256 of the imported image bytes. Pinning the
     upstream commit + per-template hashes is what makes seed-memegen reproducible
     across machines. `enrichment_path` points at the committed web-grounded
-    enrichment file (optional; absence degrades to relocation-only).
+    English enrichment file (optional; absence degrades to relocation-only).
+    `zh_tw_enrichment_path` points at the committed zh-TW overlay (optional;
+    absence or a missing slug degrades that row to English-only).
     """
     templates_dir = upstream_root / "templates"
     if not templates_dir.is_dir():
         raise FileNotFoundError(f"no templates/ under {upstream_root}")
     enrichment = _load_enrichment(enrichment_path)
+    zh_tw_overlay = _load_zh_tw_overlay(zh_tw_enrichment_path)
     manifest: dict[str, str] = {"_upstream_commit": upstream_commit_sha}
     count = 0
     for entry in sorted(templates_dir.iterdir()):
@@ -254,7 +307,11 @@ def import_upstream_corpus(
                 slug=upstream.slug,
                 name=upstream.name,
                 source="memegen",
-                metadata=_build_metadata(upstream, enrichment.get(upstream.slug, {})),
+                metadata=_build_metadata(
+                    upstream,
+                    enrichment.get(upstream.slug, {}),
+                    zh_tw_overlay.get(upstream.slug),
+                ),
                 slot_definitions=slot_definitions(upstream),
                 image_path=stored_path,
                 perceptual_hash=perceptual_hash,

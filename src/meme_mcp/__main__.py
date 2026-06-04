@@ -20,6 +20,7 @@ from meme_mcp.cli.gc_uploads import run as run_gc_uploads
 from meme_mcp.cli.migrate import run as run_migrate
 from meme_mcp.cli.reindex_embeddings import make_embedder, reindex_embeddings
 from meme_mcp.cli.seed import run as run_seed
+from meme_mcp.cli.translate_corpus import run as run_translate_corpus
 from meme_mcp.config import Settings, validate_at_startup
 from meme_mcp.db.engine import sqlite_path
 from meme_mcp.db.templates import SQLiteTemplateRepository
@@ -50,11 +51,21 @@ def run(argv: Sequence[str] | None = None, settings: Settings | None = None) -> 
         upstream = Path(args.upstream_path) if args.upstream_path else None
         manifest = Path(args.manifest_path) if args.manifest_path else None
         enrichment = Path(args.enrichment_path) if args.enrichment_path else None
+        zh_tw = Path(args.zh_tw_enrichment_path) if args.zh_tw_enrichment_path else None
         return run_seed(
             app_settings,
             upstream_path=upstream,
             manifest_path=manifest,
             enrichment_path=enrichment,
+            zh_tw_enrichment_path=zh_tw,
+        )
+    if args.command == "translate-corpus":
+        english = Path(args.enrichment_path) if args.enrichment_path else None
+        output = Path(args.output_path) if args.output_path else None
+        return run_translate_corpus(
+            app_settings,
+            enrichment_path=english,
+            output_path=output,
         )
     if args.command == "gc-renders":
         # Neither flag given (the cronjob's invocation) falls back to the
@@ -139,6 +150,10 @@ def _parser() -> argparse.ArgumentParser:
     seed.add_argument("--upstream-path", default=None)
     seed.add_argument("--manifest-path", default=None)
     seed.add_argument("--enrichment-path", default=None)
+    seed.add_argument("--zh-tw-enrichment-path", default=None)
+    translate = subcommands.add_parser("translate-corpus")
+    translate.add_argument("--enrichment-path", default=None)
+    translate.add_argument("--output-path", default=None)
     gc = subcommands.add_parser("gc-renders")
     gc.add_argument("--ttl-days", type=int, default=None)
     gc.add_argument("--max-bytes", type=int, default=None)

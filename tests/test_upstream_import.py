@@ -201,6 +201,7 @@ def _import_one(
     source: str,
     keywords: tuple[str, ...] = (),
     enrichment: dict[str, Any] | None = None,
+    zh_tw_enrichment: dict[str, Any] | None = None,
 ):
     """Import a single upstream template and return its persisted TemplateRow."""
     templates_dir = tmp_path / "upstream" / "templates" / slug
@@ -220,10 +221,20 @@ def _import_one(
         enrichment_path = tmp_path / "enrichment.json"
         enrichment_path.write_text(json.dumps(enrichment))
 
+    zh_tw_path: Path | None = None
+    if zh_tw_enrichment is not None:
+        zh_tw_path = tmp_path / "enrichment.zh-TW.json"
+        zh_tw_path.write_text(json.dumps(zh_tw_enrichment))
+
     repo = SQLiteTemplateRepository(tmp_path / "db.sqlite")
     store = FilesystemImageStore(tmp_path / "images")
     import_upstream_corpus(
-        tmp_path / "upstream", repo, store, "sha", enrichment_path=enrichment_path
+        tmp_path / "upstream",
+        repo,
+        store,
+        "sha",
+        enrichment_path=enrichment_path,
+        zh_tw_enrichment_path=zh_tw_path,
     )
     return repo.get(f"memegen-{slug}")
 
@@ -339,3 +350,111 @@ def test_import_degrades_when_enrichment_file_is_malformed(tmp_path: Path) -> No
     row = repo.get("memegen-tenguy")
     assert row.metadata["description"] == ""
     assert row.metadata["origin"] == {"source_url": "https://kym.test/x"}
+
+
+def test_import_attaches_zh_tw_overlay_with_machine_provenance(tmp_path: Path) -> None:
+    enrichment = {
+        "tenguy": {
+            "description": "Used when stating something obviously true.",
+            "emotion": "smug",
+            "usage_context": "reacting to an obvious fact",
+            "extra_tags": ["obvious"],
+        },
+    }
+    zh_tw = {
+        "_meta": {"model": "fake"},
+        "tenguy": {
+            "description": "用於陳述顯而易見的事實時。",
+            "emotion": "得意",
+            "usage_context": "面對顯而易見的事實時的反應",
+            "tags": ["顯而易見"],
+        },
+    }
+    row = _import_one(
+        tmp_path,
+        "tenguy",
+        "https://kym.test/x",
+        keywords=("ten",),
+        enrichment=enrichment,
+        zh_tw_enrichment=zh_tw,
+    )
+    # English top level is unchanged by the overlay.
+    assert row.metadata["description"] == "Used when stating something obviously true."
+    assert row.metadata["emotion"] == "smug"
+    assert row.metadata["tags"] == ["ten", "obvious"]
+    # The zh-TW locale block carries the four overlay fields...
+    block = row.metadata["locales"]["zh-TW"]
+    assert block["description"] == "用於陳述顯而易見的事實時。"
+    assert block["emotion"] == "得意"
+    assert block["usage_context"] == "面對顯而易見的事實時的反應"
+    assert block["tags"] == ["顯而易見"]
+    # ...with per-field machine provenance and a passing drift status.
+    meta = block["_meta"]
+    for field in ("description", "emotion", "usage_context", "tags"):
+        assert meta[field] == {"source": "machine", "drift": "pass"}
+    # name is not localized (English fallback by design).
+    assert "name" not in block
+
+
+def test_import_without_zh_tw_overlay_has_no_locales(tmp_path: Path) -> None:
+    enrichment = {
+        "tenguy": {
+            "description": "obvious truth",
+            "emotion": "smug",
+            "usage_context": "",
+            "extra_tags": [],
+        },
+    }
+    row = _import_one(tmp_path, "tenguy", "https://kym.test/x", enrichment=enrichment)
+    assert "locales" not in row.metadata
+
+
+def test_import_slug_missing_from_overlay_is_english_only(tmp_path: Path) -> None:
+    enrichment = {"tenguy": {"description": "obvious truth", "extra_tags": []}}
+    zh_tw = {"_meta": {"model": "fake"}, "someoneelse": {"description": "別的"}}
+    row = _import_one(
+        tmp_path,
+        "tenguy",
+        "https://kym.test/x",
+        enrichment=enrichment,
+        zh_tw_enrichment=zh_tw,
+    )
+    assert "locales" not in row.metadata
+    assert row.metadata["description"] == "obvious truth"
+
+
+def test_import_sanitizes_zh_tw_overlay_markup(tmp_path: Path) -> None:
+    # The locales block flows through hard_sanitize_metadata's locales dispatch.
+    enrichment = {"tenguy": {"description": "obvious", "extra_tags": []}}
+    zh_tw = {
+        "tenguy": {
+            "description": "<script>alert(1)</script>乾淨文字",
+            "emotion": "得意",
+            "usage_context": "情境",
+            "tags": ["標籤"],
+        },
+    }
+    row = _import_one(
+        tmp_path,
+        "tenguy",
+        "https://kym.test/x",
+        enrichment=enrichment,
+        zh_tw_enrichment=zh_tw,
+    )
+    description = row.metadata["locales"]["zh-TW"]["description"]
+    assert "<script>" not in description
+    assert "乾淨文字" in description
+
+
+def test_import_zh_tw_overlay_empty_block_attaches_no_locale(tmp_path: Path) -> None:
+    enrichment = {"tenguy": {"description": "obvious", "extra_tags": []}}
+    # An overlay slug present but with only empty/whitespace fields adds no block.
+    zh_tw = {"tenguy": {"description": "  ", "tags": []}}
+    row = _import_one(
+        tmp_path,
+        "tenguy",
+        "https://kym.test/x",
+        enrichment=enrichment,
+        zh_tw_enrichment=zh_tw,
+    )
+    assert "locales" not in row.metadata

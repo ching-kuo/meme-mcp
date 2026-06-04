@@ -36,11 +36,31 @@ def _default_enrichment_path() -> Path:
     return Path(stack.enter_context(resources.as_file(ref)))
 
 
+@cache
+def _default_zh_tw_enrichment_path() -> Path | None:
+    """Resolve the committed zh-TW overlay in the source tree and the wheel.
+
+    Mirrors `_default_enrichment_path` (source-tree path first, then the packaged
+    resource). Returns None when the overlay is absent from both locations so the
+    import degrades to English-only rather than failing -- the overlay is optional.
+    """
+    source_path = _PROJECT_ROOT / "assets" / "memegen-enrichment.zh-TW.json"
+    if source_path.is_file():
+        return source_path
+    ref = resources.files("meme_mcp").joinpath("assets/memegen-enrichment.zh-TW.json")
+    if not ref.is_file():
+        return None
+    stack = ExitStack()
+    atexit.register(stack.close)
+    return Path(stack.enter_context(resources.as_file(ref)))
+
+
 def run(
     settings: Settings,
     upstream_path: Path | None = None,
     manifest_path: Path | None = None,
     enrichment_path: Path | None = None,
+    zh_tw_enrichment_path: Path | None = None,
 ) -> int:
     db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
     repository = SQLiteTemplateRepository(db_path)
@@ -48,8 +68,14 @@ def run(
     if upstream_path is not None:
         commit_sha = _git_rev_parse(upstream_path)
         enrichment = enrichment_path or _default_enrichment_path()
+        zh_tw_enrichment = zh_tw_enrichment_path or _default_zh_tw_enrichment_path()
         count, manifest = import_upstream_corpus(
-            upstream_path, repository, image_store, commit_sha, enrichment_path=enrichment
+            upstream_path,
+            repository,
+            image_store,
+            commit_sha,
+            enrichment_path=enrichment,
+            zh_tw_enrichment_path=zh_tw_enrichment,
         )
         target = manifest_path or _DEFAULT_MANIFEST_PATH
         write_manifest(manifest, target)

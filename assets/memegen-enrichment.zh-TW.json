@@ -1,0 +1,8 @@
+{
+  "_meta": {
+    "memegen_commit": "3e1cdd13a2e914d51b96fc5916b507904fb74d5a",
+    "model": "unset",
+    "authored": "2026-06-04",
+    "note": "slug -> {description, emotion, usage_context, tags} in Traditional Chinese (zh-TW, Taiwan vocabulary). Machine-generated zh-TW overlay applied at import by corpus.upstream, attaching locales['zh-TW'] with per-field machine provenance and a passing drift status. Each value passes check_drift at generation (Simplified chars and mainland vocabulary rejected, retried once, then the field is skipped). `name` stays English -- localize() falls back to the top-level English name (documented v1 limitation). This file ships as an empty skeleton; populate it with `meme-mcp translate-corpus` against your LLM endpoint, then re-seed and run `reindex-embeddings --force`. Re-running translate-corpus only fills missing slugs."
+  }
+}
