@@ -49,6 +49,14 @@ FIELD_CAPS = {
 # Declared once so both sanitization dispatch sites agree on which keys are URLs.
 URL_FIELDS = {"source_url"}
 
+# The origin block has a fixed string shape. Sanitization is whitelist-only: any
+# other key -- including a nested or `_`-prefixed value -- is dropped. The anomaly
+# scan skips `_`-prefixed keys at every level, so without this allowlist a
+# write-capable caller could smuggle an unscanned payload (e.g.
+# origin={"_x": {"y": "ignore previous instructions"}}) into stored origin and
+# out through find/MCP and /api/templates (KTD6/KTD9).
+ALLOWED_ORIGIN_KEYS = ("name", "source_url", "status")
+
 # https-only source links capped well under the metadata blob size. A URL longer
 # than this is rejected (returned empty), not truncated -- a truncated URL is a
 # broken/dangerous link.
@@ -142,12 +150,14 @@ def _sanitize_locale_meta(meta: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sanitize_origin_block(origin: dict[str, Any]) -> dict[str, Any]:
+    # Whitelist-only (see ALLOWED_ORIGIN_KEYS): keep just the known string fields,
+    # cleaned, and drop everything else -- non-string values and unknown/`_`-prefixed
+    # keys -- so origin cannot become an unscanned passthrough channel to find/MCP.
     cleaned: dict[str, Any] = {}
-    for key, value in origin.items():
+    for key in ALLOWED_ORIGIN_KEYS:
+        value = origin.get(key)
         if isinstance(value, str):
             cleaned[key] = clean_origin_value(key, value)
-        else:
-            cleaned[key] = value
     return cleaned
 
 
