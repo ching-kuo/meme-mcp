@@ -483,6 +483,16 @@ overlay model; the supported content locales are `{"zh-TW"}` (`SUPPORTED_CONTENT
 - **MCP projection (U8).** `project_candidate_english` (and the `find` wrappers) project candidates
   through `english_metadata`, so `locales` never leaks into the agent-facing MCP/HTTP `find` response —
   agents always see canonical English.
+- **Corpus backfill (U5).** The seed corpus has no upload flow, so its zh-TW is produced once by the
+  `translate-corpus` CLI: it reads the English enrichment asset, asks the VLM for Traditional Chinese,
+  drift-gates each field (retry once then skip — drifted text is never written), and writes a
+  reviewable `assets/memegen-enrichment.zh-TW.json` overlay. `corpus/upstream.py` attaches the overlay
+  as `locales["zh-TW"]` with per-field machine provenance (`drift: "pass"`) at import, sanitized through
+  the same locales dispatch; `name` stays English (localize falls back). `import_upstream_corpus` reads
+  the stored row and runs `merge_locales` before the full-row upsert, so a re-seed never clobbers a
+  human-corrected zh-TW field with the rebuilt machine overlay (the importer honors the same human-wins
+  invariant as approve). Clearing/deleting a stored human locale value is post-approval editing, which
+  is deferred (see Scope Boundaries in the plan).
 
 ## Reverse-image enrichment
 
@@ -533,7 +543,9 @@ use; the cultural meaning lives on the web, not in the pixels.
   not descriptive text). Memegen-seeded rows reuse this block in its provenance-only shape —
   `{source_url}` with no `name`/`status` — so the reference link renders (the detail page titles
   that panel "Source" rather than "Origin" and labels the row "Reference") but never earns the
-  `origin_name_match` alias bonus.
+  `origin_name_match` alias bonus. `_sanitize_origin_block` is whitelist-only (`ALLOWED_ORIGIN_KEYS =
+  {name, source_url, status}`): any other key — including a nested or `_`-prefixed value — is dropped,
+  so origin cannot become an unscanned passthrough channel (the anomaly scan skips `_`-prefixed keys).
 - **Egress departure (privacy).** Enabling the feature sends uploaded images off-box to Google for
   the first time beyond the VLM provider. Egress occurs the instant the lookup is invoked — a
   `timeout`/`error` status does **not** mean the bytes stayed local; no-retention is provider
