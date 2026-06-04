@@ -186,6 +186,141 @@ def test_browse_and_detail_localize_values_with_field_fallback(tmp_path) -> None
     assert "relief" in detail.text
 
 
+def _seed_fully_translated(app) -> str:
+    # A template whose zh-TW block carries name + description + tags so the
+    # fully-translated browse/detail scenario has localized values for every
+    # user-facing field.
+    image_path = app.state.image_store.put(png_bytes("black"), "png")
+    app.state.templates.upsert(
+        TemplateCreate(
+            template_id="distracted",
+            slug="distracted",
+            name="Distracted Boyfriend",
+            source="friend",
+            metadata={
+                "name": "Distracted Boyfriend",
+                "description": "looking at someone else",
+                "emotion": "temptation",
+                "usage_context": "shiny new thing",
+                "tags": ["temptation", "choice"],
+                "format": "static",
+                "locales": {
+                    "zh-TW": {
+                        "name": "分心男友",
+                        "description": "看著別人",
+                        "emotion": "誘惑",
+                        "usage_context": "閃亮的新事物",
+                        "tags": ["誘惑", "選擇"],
+                        "_meta": {
+                            "name": {"source": "human"},
+                            "description": {"source": "machine"},
+                            "tags": {"source": "machine"},
+                        },
+                    }
+                },
+            },
+            slot_definitions=[{"name": "top", "position": "top"}],
+            image_path=image_path,
+            perceptual_hash="2" * 16,
+            exact_hash="c" * 64,
+        )
+    )
+    return "distracted"
+
+
+def _seed_english_only(app) -> str:
+    # A pre-feature row: no `locales` block at all (AE3). zh-TW visitors must see
+    # the English values, never a blank field.
+    image_path = app.state.image_store.put(png_bytes("white"), "png")
+    app.state.templates.upsert(
+        TemplateCreate(
+            template_id="legacy",
+            slug="legacy",
+            name="Legacy Meme",
+            source="friend",
+            metadata={
+                "name": "Legacy Meme",
+                "description": "english only description",
+                "emotion": "nostalgia",
+                "usage_context": "the old days",
+                "tags": ["legacy", "classic"],
+                "format": "static",
+            },
+            slot_definitions=[{"name": "top", "position": "top"}],
+            image_path=image_path,
+            perceptual_hash="3" * 16,
+            exact_hash="d" * 64,
+        )
+    )
+    return "legacy"
+
+
+def test_browse_and_detail_fully_translated_zh_tw(tmp_path) -> None:
+    # zh-TW cookie + a fully translated template -> zh-TW name/description/tags on
+    # BOTH browse and detail (the human-marked zh-TW name is honored).
+    client, headers = authed_client(tmp_path)
+    template_id = _seed_fully_translated(client.app)
+    client.cookies.set("lang", "zh-TW")
+
+    browse = client.get("/browse", headers=headers)
+    detail = client.get(f"/templates/{template_id}", headers=headers)
+
+    assert browse.status_code == 200
+    assert "分心男友" in browse.text  # localized name
+    assert "看著別人" in browse.text  # localized description
+    assert "誘惑" in browse.text  # localized tag
+    assert "Distracted Boyfriend" not in browse.text  # English name replaced
+    assert detail.status_code == 200
+    assert "分心男友" in detail.text
+    assert "看著別人" in detail.text
+    assert "閃亮的新事物" in detail.text  # localized usage_context
+    assert "Distracted Boyfriend" not in detail.text
+
+
+def test_browse_and_detail_english_fallback_when_no_locales(tmp_path) -> None:
+    # AE3: a zh-TW visitor viewing a template with NO locales block sees the
+    # English values on both surfaces, and no field renders blank.
+    client, headers = authed_client(tmp_path)
+    template_id = _seed_english_only(client.app)
+    client.cookies.set("lang", "zh-TW")
+
+    browse = client.get("/browse", headers=headers)
+    detail = client.get(f"/templates/{template_id}", headers=headers)
+
+    assert browse.status_code == 200
+    assert "Legacy Meme" in browse.text  # English name, not blank
+    assert "english only description" in browse.text  # English description
+    assert "legacy" in browse.text  # English tag
+    assert detail.status_code == 200
+    body = detail.text
+    assert "Legacy Meme" in body
+    assert "english only description" in body
+    assert "nostalgia" in body  # English emotion, not blank
+    assert "the old days" in body  # English usage_context, not blank
+    assert "classic" in body  # English tag, not blank
+
+
+def test_en_locale_renders_english_even_when_locales_present(tmp_path) -> None:
+    # Regression: an en visitor sees the canonical English values even though the
+    # seeded fixture (deploy-face) carries a zh-TW locales block. Output must be
+    # identical to the pre-feature English behavior.
+    client, headers = authed_client(tmp_path)
+    client.cookies.set("lang", "en")
+
+    browse = client.get("/browse", headers=headers)
+    detail = client.get("/templates/deploy-face", headers=headers)
+
+    assert browse.status_code == 200
+    assert "Deploy Face" in browse.text
+    assert "deploy relief" in browse.text  # English description
+    assert "deploy" in browse.text  # English tag
+    assert "部署鬆一口氣" not in browse.text  # zh-TW value not leaked
+    assert "部署" not in browse.text
+    assert detail.status_code == 200
+    assert "deploy relief" in detail.text
+    assert "部署鬆一口氣" not in detail.text
+
+
 def test_template_detail_redirects_anonymous_browser_to_login(tmp_path) -> None:
     app = create_app(good_settings(tmp_path))
     client = TestClient(app)

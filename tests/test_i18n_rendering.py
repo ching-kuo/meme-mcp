@@ -241,6 +241,55 @@ def test_detail_page_translated(tmp_path) -> None:
     _assert_no_raw_keys(response.text)
 
 
+def _seed_localized_template(app) -> None:
+    # description-only zh-TW block: proves per-field value localization with
+    # English fallback for the untranslated name (U2).
+    app.state.templates.upsert(
+        TemplateCreate(
+            template_id="zh-party",
+            slug="zh-party",
+            name="CI Party",
+            source="friend",
+            metadata={
+                "name": "CI Party",
+                "description": "celebrate a clean CI run",
+                "emotion": "celebration",
+                "usage_context": "build passed",
+                "tags": ["ci"],
+                "format": "static",
+                "locales": {
+                    "zh-TW": {
+                        "description": "慶祝乾淨的 CI",
+                        "_meta": {"description": {"source": "machine"}},
+                    }
+                },
+            },
+            slot_definitions=[{"name": "top", "position": "top"}],
+            image_path="ab/example.png",
+            perceptual_hash="0" * 16,
+            exact_hash="a" * 64,
+        )
+    )
+
+
+def test_detail_localizes_values_with_field_fallback(tmp_path) -> None:
+    # U2: a zh-TW visitor sees the localized description value while the
+    # untranslated name falls back to English -- the field label chrome stays
+    # translated (this render also exercises the i18n context processor).
+    client, app = _authed_client(tmp_path)
+    _seed_localized_template(app)
+
+    response = client.get("/templates/zh-party", headers=ZH)
+
+    assert response.status_code == 200
+    body = response.text
+    assert "慶祝乾淨的 CI" in body  # localized description value
+    assert "celebrate a clean CI run" not in body  # English description replaced
+    assert "CI Party" in body  # name falls back to English (no zh-TW name)
+    assert "屬性" in body  # label chrome still translated (Attributes)
+    _assert_no_raw_keys(body)
+
+
 def test_pat_expiry_banner_plural_and_interpolation(tmp_path) -> None:
     client, app = _authed_client(tmp_path)
     issue_pat(app.state.pat_store, "friend", app.state.pat_hash_pepper_value, ttl_days=3)
