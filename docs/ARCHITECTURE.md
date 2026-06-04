@@ -98,7 +98,16 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
 - `rendering/` reads each slot's `box` to derive pixel anchor, alignment, and box dimensions
   (see `_slot_anchor` in `rendering/pipeline.py`). `text_layout.select_wrap` picks the 1/2/3-line
   layout that fills ≥60% of box width while maximizing font size, and `fit_font` runs a
-  shrink-loop to find the largest Anton size that fits the box with memegen-matching margins.
+  shrink-loop to find the largest font size that fits the box with memegen-matching margins.
+- Font is chosen per caption: a caption containing any CJK codepoint renders in
+  `NotoSansTC-Black.otf` (Noto Sans TC Black, OFL 1.1, ~6 MB, covers Latin too so mixed
+  captions stay one face); pure-Latin captions keep `Anton-Regular.ttf` and are byte-identical
+  to before (the golden visual-parity suite is the hard gate). For CJK, `text_layout.segment_tokens`
+  breaks text into wrap tokens — Latin runs stay word-atomic, each CJK char is its own token — and
+  `greedy_wrap` applies minimal kinsoku (closing punctuation 」』。，！？、） never starts a line;
+  opening 「『（ never ends one). `fit_font`/`select_wrap` reserve stroke-outline room
+  (`stroke_ratio`) so the bold CJK outline never clips. Both fonts ship via the same wheel
+  `force-include` of `assets/fonts` and the Docker `COPY . .`.
   Slots persisted without a `box` (legacy 3-band callers) fall back to synthetic top/center/bottom
   geometry via `_legacy_box_from_position`. Slot rotation (`box.angle`) is applied by drawing
   each rotated slot onto a per-slot transparent RGBA layer, rotating with `BICUBIC` around the
