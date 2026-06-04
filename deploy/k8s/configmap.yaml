@@ -32,6 +32,17 @@ data:
   VLM_BASE_URL: "https://api.openai.com/v1"
   VLM_MODEL: "replace-with-vision-capable-model"
 
+  # Embedding backend for semantic search (OpenAI-compatible /v1). Defaults to the
+  # cluster Ollama service; pull the model once: `ollama pull qwen3-embedding:0.6b`.
+  # EMBEDDING_DIMENSIONS must match the model (1024 for qwen3-embedding:0.6b). After
+  # changing the model or dimensions, run reindex-embeddings --force as a Job that
+  # completes BEFORE the Deployment picks up the new env, or the boot guard fails
+  # closed. The matching EMBEDDING_API_KEY lives in the Secret (any non-empty value;
+  # Ollama ignores it).
+  EMBEDDING_BASE_URL: "http://ollama.ollama.svc.cluster.local:11434/v1"
+  EMBEDDING_MODEL: "qwen3-embedding:0.6b"
+  EMBEDDING_DIMENSIONS: "1024"
+
   # Public origin used to sign render URLs and derive OAuth metadata. Optional:
   # if unset it is derived from GITHUB_REDIRECT_URI's origin. Set it explicitly
   # when the public origin differs from the GitHub redirect origin. Changing it

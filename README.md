@@ -129,6 +129,17 @@ uv run meme-mcp pat list
 # EMBEDDING_DIMENSIONS=1024
 # Required after switching EMBEDDING_MODEL or EMBEDDING_DIMENSIONS.
 uv run meme-mcp reindex-embeddings --force
+
+# Generate the reviewable zh-TW metadata overlay for the seed corpus. Reads the
+# English enrichment asset, asks the VLM for Traditional Chinese, runs the drift
+# gate (retry once then skip), and writes assets/memegen-enrichment.zh-TW.json.
+# Review the artifact, commit it, then re-seed (below) and reindex.
+uv run meme-mcp translate-corpus
+# Re-import the corpus so templates carry the zh-TW overlay (locales.zh-TW), then
+# reindex so embeddings cover the bilingual text.
+uv run meme-mcp seed-memegen --upstream-path <memegen-checkout> \
+  --zh-tw-enrichment-path assets/memegen-enrichment.zh-TW.json
+uv run meme-mcp reindex-embeddings --force
 ```
 
 ## Run locally
@@ -263,6 +274,19 @@ Semantic search defaults to a local Ollama OpenAI-compatible endpoint
 index with `uv run meme-mcp reindex-embeddings --force` (the `--force` flag clears
 stale vectors before rebuilding so the boot guard does not stay latched).
 
+The seed corpus (memegen templates) is translated once via `meme-mcp
+translate-corpus`, which writes a reviewable `assets/memegen-enrichment.zh-TW.json`
+overlay (machine provenance, drift-gated); re-seeding with
+`--zh-tw-enrichment-path` attaches it as `locales.zh-TW`. New uploads are
+translated inline by the VLM at analyze time. See the CLI block above for the
+one-time backfill sequence.
+
+zh-TW captions render with bundled `assets/fonts/NotoSansTC-Black.otf` (Noto Sans
+TC, SIL Open Font License 1.1 — see `assets/fonts/NotoSansTC-OFL.txt` and
+`LICENSES/SIL-OFL-1.1.txt`), selected per caption by CJK detection; pure-Latin
+captions keep the existing Anton font unchanged. CJK lines wrap on character
+boundaries with minimal kinsoku, Latin words stay atomic.
+
 ## Development verification
 
 ```bash
@@ -290,7 +314,7 @@ Implemented:
 - embedding model-drift startup guard (refuses to boot if persisted vectors disagree with `EMBEDDING_MODEL`)
 - global `DecompressionBombWarning` escalation
 - public landing page and web browse/search/detail/preview routes
-- bilingual (en / zh-TW) template metadata with a zh-CN drift gate, human-wins provenance merge, CJK bigram + semantic search, and English-only MCP projection
+- bilingual (en / zh-TW) template metadata with a zh-CN drift gate, human-wins provenance merge, CJK bigram + semantic search, English-only MCP projection, a one-time reviewable corpus translation overlay, and CJK caption rendering (bundled Noto Sans TC)
 - self-service web PAT management at `/account` (session-authed, CSRF-protected, per-user rate limited, one-time plaintext reveal)
 - structured JSONL audit log (`audit.jsonl` under the storage dir) carrying `pat_issued`/`pat_revoked` events (never the token or its hash)
 - operator CLI for allowlist, PAT issue, seed, and reindex

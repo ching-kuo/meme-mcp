@@ -175,6 +175,44 @@ kubectl apply -f meme-mcp-seed-job.yaml
 in the container image. The in-tree `assets/memegen-seed-manifest.json` is only updated by operators
 running `seed-memegen --upstream-path` locally before committing.
 
+## Bilingual rollout (en / zh-TW)
+
+Turning on bilingual metadata for an existing deployment is a one-time sequence. The
+zh-TW overlay (`assets/memegen-enrichment.zh-TW.json`) ships in the image, so it is
+applied by re-seeding; the only live data change is the embedding reindex.
+
+Ordering matters: the embedding model swap is fail-closed. If the Deployment picks up
+the new `EMBEDDING_MODEL`/`EMBEDDING_DIMENSIONS` before a forced reindex has rebuilt the
+vectors, the boot guard refuses to start. Run the reindex as a Job that **completes
+before** the Deployment rolls to the new env.
+
+1. **Generate and review the overlay (once, off-cluster).** Run `meme-mcp
+   translate-corpus` locally against your VLM, review
+   `assets/memegen-enrichment.zh-TW.json`, and commit it. It is baked into the image at
+   build time.
+2. **Pull the embedding model** on the cluster Ollama: `ollama pull qwen3-embedding:0.6b`.
+3. **Set the embedding env** in the ConfigMap (`EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`,
+   `EMBEDDING_DIMENSIONS=1024`) and Secret (`EMBEDDING_API_KEY`) — but do not roll the
+   Deployment yet.
+4. **Snapshot the DB** (`VACUUM INTO` a dated copy on the PVC) so a bad reindex or
+   translation is reversible.
+5. **Re-seed with the overlay**, then **force-reindex**, in one Job that completes before
+   the app rolls — add to the seed Job's `args`:
+
+   ```sh
+   /app/.venv/bin/meme-mcp seed-memegen \
+     --upstream-path /tmp/memegen \
+     --manifest-path /data/memegen-seed-manifest.json \
+     --zh-tw-enrichment-path /app/assets/memegen-enrichment.zh-TW.json
+   /app/.venv/bin/meme-mcp reindex-embeddings --force
+   ```
+6. **Roll the Deployment** (`kubectl rollout restart deploy/meme-mcp`) and verify it boots
+   (the boot guard passes) and that a zh-TW `/browse` search returns results.
+
+Rollback is two independent paths: *model rollback* (restore the old embedding env +
+forced reindex) and *translation rollback* (restore the dated DB snapshot, then forced
+reindex — the only way back from translations that passed the drift gate but read poorly).
+
 ## Render GC
 
 `cronjob-gc-renders.yaml` schedules a daily 30-day TTL sweep over `generated_receipts` and their
