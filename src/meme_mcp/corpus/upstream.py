@@ -188,16 +188,6 @@ def _load_enrichment(path: Path | None) -> dict[str, dict[str, Any]]:
     }
 
 
-def _load_zh_tw_overlay(path: Path | None) -> dict[str, dict[str, Any]]:
-    """Load slug -> zh-TW overlay fields from the committed overlay file.
-
-    Mirrors `_load_enrichment`: an absent, corrupt, or non-UTF-8 overlay degrades
-    to English-only rather than aborting the seed. The `_meta` header and any
-    non-dict slug entry are skipped.
-    """
-    return _load_enrichment(path)
-
-
 def _attach_zh_tw_locale(
     metadata: dict[str, Any], overlay: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -220,8 +210,7 @@ def _attach_zh_tw_locale(
         block["tags"] = tags
     if not block:
         return metadata
-    meta = {field: provenance("machine", drift="pass") for field in block}
-    block["_meta"] = meta
+    block["_meta"] = {field: provenance("machine", drift="pass") for field in block}
     result = dict(metadata)
     result["locales"] = {"zh-TW": block}
     return result
@@ -288,7 +277,10 @@ def import_upstream_corpus(
     if not templates_dir.is_dir():
         raise FileNotFoundError(f"no templates/ under {upstream_root}")
     enrichment = _load_enrichment(enrichment_path)
-    zh_tw_overlay = _load_zh_tw_overlay(zh_tw_enrichment_path)
+    # The zh-TW overlay loads with the same loader/degradation as the English
+    # enrichment: an absent, corrupt, or non-UTF-8 overlay (or a missing slug)
+    # degrades that row to English-only rather than aborting the seed.
+    zh_tw_overlay = _load_enrichment(zh_tw_enrichment_path)
     manifest: dict[str, str] = {"_upstream_commit": upstream_commit_sha}
     count = 0
     for entry in sorted(templates_dir.iterdir()):

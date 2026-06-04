@@ -152,13 +152,7 @@ def generate_overlay(
     Re-generation is stable: a slug whose overlay block already exists is reused
     unchanged (idempotent re-run), so only missing slugs hit the LLM.
     """
-    prior: dict[str, Any] = {}
-    if isinstance(existing, Mapping):
-        prior = {
-            slug: value
-            for slug, value in existing.items()
-            if not str(slug).startswith("_") and isinstance(value, dict)
-        }
+    prior = _slug_entries(existing) if isinstance(existing, Mapping) else {}
     overlay: dict[str, Any] = {}
     for slug in sorted(enrichment):
         if slug in prior and prior[slug]:
@@ -192,15 +186,18 @@ def _build_meta(model: str, memegen_commit: str | None) -> dict[str, Any]:
     return meta
 
 
-def _load_enrichment_for_translate(path: Path) -> dict[str, dict[str, Any]]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        return {}
+def _slug_entries(data: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """Keep only slug -> dict entries, dropping the `_meta` header and bad shapes."""
     return {
         slug: value
         for slug, value in data.items()
         if not str(slug).startswith("_") and isinstance(value, dict)
     }
+
+
+def _load_enrichment_for_translate(path: Path) -> dict[str, dict[str, Any]]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return _slug_entries(data) if isinstance(data, dict) else {}
 
 
 def _load_existing_overlay(path: Path) -> dict[str, Any]:

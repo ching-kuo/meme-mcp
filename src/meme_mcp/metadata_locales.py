@@ -58,18 +58,9 @@ def stamp_locale_provenance(
     copy = deepcopy(metadata)
     if locale not in SUPPORTED_CONTENT_LOCALES:
         return copy
-    locales = copy.setdefault("locales", {})
-    if not isinstance(locales, dict):
-        locales = {}
-        copy["locales"] = locales
-    block = locales.setdefault(locale, {})
-    if not isinstance(block, dict):
-        block = {}
-        locales[locale] = block
-    meta = block.setdefault("_meta", {})
-    if not isinstance(meta, dict):
-        meta = {}
-        block["_meta"] = meta
+    locales = _dict_slot(copy, "locales")
+    block = _dict_slot(locales, locale)
+    meta = _dict_slot(block, "_meta")
     for field in fields:
         if field in LOCALIZED_FIELDS and _has_value(block.get(field)):
             meta[field] = provenance(source, drift=drift)
@@ -131,6 +122,15 @@ def merge_locales(
                 result_block["_meta"] = result_meta
     merged["locales"] = result_locales
     return merged
+
+
+def _dict_slot(container: dict[str, Any], key: str) -> dict[str, Any]:
+    """Return ``container[key]`` as a dict, replacing a missing/non-dict value."""
+    value = container.get(key)
+    if not isinstance(value, dict):
+        value = {}
+        container[key] = value
+    return value
 
 
 def _locale_block(metadata: dict[str, Any], locale: str | None) -> dict[str, Any] | None:

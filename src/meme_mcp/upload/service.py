@@ -158,12 +158,13 @@ async def analyze_image(
     grounding, origin_block, reverse_status = await _reverse_image_lookup(
         sanitized, identify_online, deps.reverse_image_client
     )
+    grounding_authoritative = reverse_status == "success"
     enrichment = await asyncio.to_thread(
         deps.vlm_client.enrich_template,
         sanitized,
         hint,
         grounding,
-        grounding_authoritative=(reverse_status == "success"),
+        grounding_authoritative=grounding_authoritative,
     )
     if enrichment.status == "success" and enrichment.metadata is not None:
         metadata = enrichment.metadata
@@ -180,7 +181,7 @@ async def analyze_image(
         sanitized,
         hint,
         grounding,
-        grounding_authoritative=(reverse_status == "success"),
+        grounding_authoritative=grounding_authoritative,
         deps=deps,
         locale=locale,
     )
@@ -297,10 +298,9 @@ def approve_pending(
         # on a later re-approval.
         baseline = hard_sanitize_metadata(pending.metadata)
         metadata = _stamp_human_locale_edits(metadata, baseline)
-    if slot_overrides is not None:
-        slot_definitions: list[Any] = slot_overrides
-    else:
-        slot_definitions = pending.slot_definitions
+    slot_definitions: list[Any] = (
+        slot_overrides if slot_overrides is not None else pending.slot_definitions
+    )
     name = str(metadata["name"])
     template_id = _template_id(name, pending.exact_hash)
     stored_metadata = _stored_metadata_for(deps.templates, template_id)

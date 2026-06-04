@@ -187,7 +187,10 @@
   // announces the active step rather than reading the strip as decoration.
   function setStep(phase) {
     root.dataset.current = phase;
-    var activeKey = phase === "pick" ? "pick" : phase === "done" ? "done" : "review";
+    var activeKey = "review";
+    if (phase === "pick" || phase === "done") {
+      activeKey = phase;
+    }
     els.steps.forEach(function (item) {
       if (item.getAttribute("data-key") === activeKey) {
         item.setAttribute("aria-current", "step");
@@ -665,9 +668,10 @@
       // zh-TW slot to pollute its embedding.
       LOCALIZED_FIELDS.forEach(function (name) {
         var editedValue = edited[name];
-        if (hasGenuineLocaleValue(proposed[name])) {
-          block[name] = editedValue;
-        } else if (!equalsEnglishFallback(name, editedValue, proposal)) {
+        if (
+          hasGenuineLocaleValue(proposed[name]) ||
+          !equalsEnglishFallback(name, editedValue, proposal)
+        ) {
           block[name] = editedValue;
         }
       });
