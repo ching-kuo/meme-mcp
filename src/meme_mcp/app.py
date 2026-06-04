@@ -53,8 +53,8 @@ from meme_mcp.db.outcomes import VALID_OUTCOMES, OutcomeEventStore
 from meme_mcp.db.receipts import ReceiptStore
 from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateRow
 from meme_mcp.db.uploads import PendingUploadStore
-from meme_mcp.db.vectors import EmbeddingMetaStore
-from meme_mcp.embeddings.client import validate_embedding_model
+from meme_mcp.db.vectors import EmbeddingMetaStore, SQLiteVecStore
+from meme_mcp.embeddings.client import EmbeddingClient, validate_embedding_model
 from meme_mcp.envelope import Envelope, make_error, make_success
 from meme_mcp.errors import ErrorCode, MemeMCPError, status_for_error
 from meme_mcp.limits import WindowedRateLimiter
@@ -373,7 +373,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.pin_store = SQLiteGooglePinStore(db_path)
         app.state.receipts = ReceiptStore(db_path)
         app.state.outcomes = OutcomeEventStore(db_path)
-        app.state.templates = SQLiteTemplateRepository(db_path)
+        # Wire the semantic layer only on the serving path: the repository
+        # composes the vector store + query embedder around the pure lexical
+        # search() as an ADDITIVE boost, degrading to lexical-only on any
+        # embedding/store failure (U7). The store dimensions follow
+        # EMBEDDING_DIMENSIONS so a query vector length mismatch is caught and
+        # degraded rather than corrupting cosine. CLI/seed paths build the
+        # repository with no embedder/store and keep the pure lexical behavior.
+        app.state.search_vector_store = SQLiteVecStore(
+            db_path, dimensions=settings.embedding_dimensions
+        )
+        app.state.search_embedder = EmbeddingClient(
+            model=settings.embedding_model,
+            api_key=settings.embedding_api_key.get_secret_value(),
+            base_url=settings.embedding_base_url,
+        )
+        app.state.templates = SQLiteTemplateRepository(
+            db_path,
+            embedder=app.state.search_embedder,
+            vector_store=app.state.search_vector_store,
+        )
         app.state.pending_uploads = PendingUploadStore(db_path)
         app.state.embedding_meta = EmbeddingMetaStore(db_path)
         validate_embedding_model(
