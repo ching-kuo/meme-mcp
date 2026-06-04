@@ -274,12 +274,15 @@ Semantic search defaults to a local Ollama OpenAI-compatible endpoint
 index with `uv run meme-mcp reindex-embeddings --force` (the `--force` flag clears
 stale vectors before rebuilding so the boot guard does not stay latched).
 
-The seed corpus (memegen templates) is translated once via `meme-mcp
-translate-corpus`, which writes a reviewable `assets/memegen-enrichment.zh-TW.json`
-overlay (machine provenance, drift-gated); re-seeding with
-`--zh-tw-enrichment-path` attaches it as `locales.zh-TW`. New uploads are
-translated inline by the VLM at analyze time. See the CLI block above for the
-one-time backfill sequence.
+The seed corpus (memegen templates) carries a one-time, reviewable
+`assets/memegen-enrichment.zh-TW.json` overlay (machine provenance, drift-gated);
+re-seeding with `--zh-tw-enrichment-path` attaches it as `locales.zh-TW`. The
+shipped overlay is web-grounded: each meme was researched online for its
+Traditional-Chinese / Taiwan usage and localized from the curated English
+enrichment. `meme-mcp translate-corpus` is the reproducible text-only
+regeneration path (it re-fills only missing slugs). New uploads are translated
+inline by the VLM at analyze time. See the CLI block above for the one-time
+backfill sequence.
 
 zh-TW captions render with bundled `assets/fonts/NotoSansTC-Black.otf` (Noto Sans
 TC, SIL Open Font License 1.1 — see `assets/fonts/NotoSansTC-OFL.txt` and

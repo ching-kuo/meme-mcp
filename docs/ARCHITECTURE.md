@@ -450,9 +450,14 @@ overlay model; the supported content locales are `{"zh-TW"}` (`SUPPORTED_CONTENT
   block. This protects friend edits from a later machine backfill while still letting backfill improve
   untouched machine fields.
 - **zh-CN drift gate + one retry (U3/U4).** `vlm/drift.py` rejects Simplified-Chinese /
-  mainland-vocabulary leakage in the model's zh-TW output: `check_drift` flags Simplified-only
-  characters (via `hanzidentifier`) and a curated `MAINLAND_VOCAB_DENYLIST` (e.g. 視頻→影片, 質量→品質,
-  軟件→軟體). `upload.service._resolve_machine_locales` runs the gate at analyze time: on a clean
+  mainland-vocabulary leakage in the model's zh-TW output. `check_drift` uses `hanzidentifier` as
+  the authoritative classifier — Simplified or Mixed text is rejected — and a curated
+  `MAINLAND_VOCAB_DENYLIST` (e.g. 視頻→影片, 質量→品質, 軟件→軟體) that ALWAYS runs to catch whole
+  mainland words, including ones spelled entirely with characters that are also valid Traditional
+  (后台→後台, 程序→程式), which the identifier classifies as `BOTH`. The per-character `SIMPLIFIED_ONLY`
+  scan is a fallback used ONLY when `hanzidentifier` is unavailable; it lists genuinely Simplified-only
+  characters, deliberately excluding shared Traditional characters (件 信 台 程 …) so legitimate zh-TW
+  prose is not false-positive-rejected. `upload.service._resolve_machine_locales` runs the gate at analyze time: on a clean
   pass it stamps via `_prepare_machine_locales`; on failure it issues ONE constrained re-prompt
   (`enrich_template(drift_retry=True)`, which tightens the zh-TW instruction) and re-checks. If the
   retry is also dirty (or unusable), the zh-TW content is dropped (English-only) but per-field
@@ -483,10 +488,13 @@ overlay model; the supported content locales are `{"zh-TW"}` (`SUPPORTED_CONTENT
 - **MCP projection (U8).** `project_candidate_english` (and the `find` wrappers) project candidates
   through `english_metadata`, so `locales` never leaks into the agent-facing MCP/HTTP `find` response —
   agents always see canonical English.
-- **Corpus backfill (U5).** The seed corpus has no upload flow, so its zh-TW is produced once by the
-  `translate-corpus` CLI: it reads the English enrichment asset, asks the VLM for Traditional Chinese,
-  drift-gates each field (retry once then skip — drifted text is never written), and writes a
-  reviewable `assets/memegen-enrichment.zh-TW.json` overlay. `corpus/upstream.py` attaches the overlay
+- **Corpus backfill (U5).** The seed corpus has no upload flow, so its zh-TW is produced once as a
+  reviewable `assets/memegen-enrichment.zh-TW.json` overlay. The shipped overlay is web-grounded: each
+  meme was researched online for its Traditional-Chinese / Taiwan usage and localized from the English
+  enrichment asset, then drift-gated per field (drifted fields fall back to English; nothing drifted is
+  written). The `translate-corpus` CLI is the reproducible text-only regeneration path (VLM-translates
+  the English asset, same per-field drift gate with retry-once-then-skip, fills only missing slugs).
+  `corpus/upstream.py` attaches the overlay
   as `locales["zh-TW"]` with per-field machine provenance (`drift: "pass"`) at import, sanitized through
   the same locales dispatch; `name` stays English (localize falls back). `import_upstream_corpus` reads
   the stored row and runs `merge_locales` before the full-row upsert, so a re-seed never clobbers a
