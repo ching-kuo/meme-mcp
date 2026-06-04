@@ -55,8 +55,9 @@ class FakeVLMClient:
         grounding: str | None = None,
         *,
         grounding_authoritative: bool = True,
+        drift_retry: bool = False,
     ) -> EnrichmentResult:
-        del image_bytes, grounding, grounding_authoritative
+        del image_bytes, grounding, grounding_authoritative, drift_retry
         return EnrichmentResult(
             "success",
             {
@@ -883,3 +884,327 @@ def test_rate_limit_precedes_any_egress(tmp_path) -> None:
 
     assert response.status_code == 429
     assert reverse is not None and reverse.calls == []  # no egress before the budget check
+
+
+# ---------------------------------------------------------------------------
+# U4: bilingual VLM enrichment + localized upload review
+# ---------------------------------------------------------------------------
+
+
+class CountingBilingualVLM(FakeVLMClient):
+    """Returns a clean bilingual proposal and records every enrich call."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def enrich_template(self, *args: Any, **kwargs: Any) -> EnrichmentResult:
+        self.calls += 1
+        result = super().enrich_template(*args, **kwargs)
+        assert result.metadata is not None
+        result.metadata["locales"] = {
+            "zh-TW": {
+                "name": "部署臉",
+                "description": "形容部署成功的表情",
+                "emotion": "鬆一口氣",
+                "usage_context": "高風險部署後 CI 轉綠",
+                "tags": ["部署", "持續整合"],
+            }
+        }
+        return result
+
+
+class DriftRetryVLM(FakeVLMClient):
+    """First call drifts (視頻); the constrained retry returns clean zh-TW."""
+
+    def __init__(self, *, heal_on_retry: bool) -> None:
+        self.calls = 0
+        self.retry_calls = 0
+        self.heal_on_retry = heal_on_retry
+
+    def enrich_template(self, *args: Any, **kwargs: Any) -> EnrichmentResult:
+        self.calls += 1
+        drift_retry = bool(kwargs.get("drift_retry", False))
+        if drift_retry:
+            self.retry_calls += 1
+        result = super().enrich_template(*args, **kwargs)
+        assert result.metadata is not None
+        if drift_retry and self.heal_on_retry:
+            result.metadata["locales"] = {
+                "zh-TW": {
+                    "name": "部署臉",
+                    "description": "形容部署成功的影片",
+                    "emotion": "鬆一口氣",
+                    "usage_context": "部署後",
+                    "tags": ["部署"],
+                }
+            }
+        else:
+            # 視頻 is mainland vocabulary -> drift gate rejects it.
+            result.metadata["locales"] = {
+                "zh-TW": {
+                    "name": "部署臉",
+                    "description": "形容部署成功的視頻",
+                    "emotion": "鬆一口氣",
+                    "usage_context": "部署後",
+                    "tags": ["部署"],
+                }
+            }
+        return result
+
+
+def _analyze_zh(client: TestClient, headers: dict[str, str]) -> dict[str, Any]:
+    return client.post(
+        "/api/uploads/analyze",
+        headers=headers,
+        json={
+            "filename": "deploy.png",
+            "mime": "image/png",
+            "content_base64": base64.b64encode(png_bytes()).decode(),
+            "title_hint": "Deploy Face",
+        },
+    ).json()["data"]
+
+
+def test_zh_tw_analyze_presents_bilingual_and_approve_stores_machine(tmp_path) -> None:
+    # AE1: a clean bilingual proposal carries machine zh-TW provenance; an
+    # untouched approve stores en top-level + locales.zh-TW, all machine-marked.
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = CountingBilingualVLM()
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = _analyze_zh(client, headers)
+
+    zh = analyzed["metadata"]["locales"]["zh-TW"]
+    assert zh["name"] == "部署臉"
+    assert zh["_meta"]["name"]["source"] == "machine"
+    assert zh["_meta"]["description"]["drift"] == "pass"
+
+    approved = client.post(
+        f"/api/uploads/{analyzed['pending_upload_id']}/approve",
+        headers=headers,
+        json={"metadata": analyzed["metadata"]},
+    )
+    assert approved.status_code == 200
+    template = app.state.templates.get(approved.json()["data"]["template_id"])
+    assert template.name == "Deploy Face"  # English top level
+    stored_zh = template.metadata["locales"]["zh-TW"]
+    assert stored_zh["name"] == "部署臉"
+    assert stored_zh["_meta"]["name"]["source"] == "machine"
+
+
+def test_zh_tw_approve_derives_slug_from_english_name(tmp_path) -> None:
+    # zh-TW view: template_id/slug derive from the English name, the top level
+    # stays English, and required-field validation passes on the canonicals.
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = CountingBilingualVLM()
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = _analyze_zh(client, headers)
+
+    # Mimic the upload.js zh-TW reconstruction: English canonicals from the
+    # proposal, edited zh-TW name into the locale block.
+    proposal = analyzed["metadata"]
+    edited = {
+        "name": proposal["name"],
+        "description": proposal["description"],
+        "emotion": proposal["emotion"],
+        "usage_context": proposal["usage_context"],
+        "tags": proposal["tags"],
+        "format": "static",
+        "locales": {
+            "zh-TW": {
+                "name": "部署臉孔",  # edited
+                "description": proposal["locales"]["zh-TW"]["description"],
+                "emotion": proposal["locales"]["zh-TW"]["emotion"],
+                "usage_context": proposal["locales"]["zh-TW"]["usage_context"],
+                "tags": proposal["locales"]["zh-TW"]["tags"],
+                "_meta": proposal["locales"]["zh-TW"]["_meta"],
+            }
+        },
+    }
+    approved = client.post(
+        f"/api/uploads/{analyzed['pending_upload_id']}/approve",
+        headers=headers,
+        json={"metadata": edited},
+    )
+    assert approved.status_code == 200
+    template_id = approved.json()["data"]["template_id"]
+    assert template_id.startswith("deploy-face-")  # slug from English name
+    template = app.state.templates.get(template_id)
+    assert template.name == "Deploy Face"
+    meta = template.metadata["locales"]["zh-TW"]["_meta"]
+    assert meta["name"]["source"] == "human"  # edited field stamped human
+    assert meta["description"]["source"] == "machine"  # untouched stays machine
+
+
+def test_drift_retry_heals_on_second_attempt(tmp_path) -> None:
+    # AE2 (heal): first enrichment drifts; one constrained retry fires and
+    # returns clean zh-TW, which is stored machine-marked.
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    vlm = DriftRetryVLM(heal_on_retry=True)
+    app.state.vlm_client = vlm
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = _analyze_zh(client, headers)
+
+    assert vlm.retry_calls == 1  # exactly one retry
+    zh = analyzed["metadata"]["locales"]["zh-TW"]
+    assert "影片" in zh["description"]  # healed Taiwan vocabulary
+    assert zh["_meta"]["description"]["drift"] == "pass"
+
+
+def test_drift_retry_second_failure_stores_english_only(tmp_path) -> None:
+    # AE2 (fail): both attempts drift -> zh-TW dropped, drift: failed persisted,
+    # approve still succeeds English-only.
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    vlm = DriftRetryVLM(heal_on_retry=False)
+    app.state.vlm_client = vlm
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = _analyze_zh(client, headers)
+
+    assert vlm.retry_calls == 1
+    zh = analyzed["metadata"]["locales"]["zh-TW"]
+    assert "description" not in zh  # drifted content dropped
+    assert zh["_meta"]["description"]["drift"] == "failed"
+
+    approved = client.post(
+        f"/api/uploads/{analyzed['pending_upload_id']}/approve",
+        headers=headers,
+        json={"metadata": analyzed["metadata"]},
+    )
+    assert approved.status_code == 200
+    template = app.state.templates.get(approved.json()["data"]["template_id"])
+    assert template.name == "Deploy Face"  # English-only ships
+    assert "description" not in template.metadata["locales"]["zh-TW"]
+
+
+def test_en_upload_gets_machine_zh_tw_counterpart(tmp_path) -> None:
+    # en-locale upload behaves as today plus a machine zh-TW counterpart.
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = CountingBilingualVLM()
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = _analyze_zh(client, headers)
+
+    assert analyzed["metadata"]["name"] == "Deploy Face"
+    assert analyzed["metadata"]["locales"]["zh-TW"]["_meta"]["name"]["source"] == "machine"
+
+
+def test_schema_degraded_no_zh_tw_succeeds_english_only(tmp_path) -> None:
+    # VLM returns no zh-TW fields -> analyze succeeds English-only, no crash.
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = FakeVLMClient()  # no locales block
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = _analyze_zh(client, headers)
+
+    assert analyzed["metadata"]["name"] == "Deploy Face"
+    assert "locales" not in analyzed["metadata"]
+    approved = client.post(
+        f"/api/uploads/{analyzed['pending_upload_id']}/approve",
+        headers=headers,
+        json={"metadata": analyzed["metadata"]},
+    )
+    assert approved.status_code == 200
+
+
+def test_pre_feature_pending_row_approves_english_only(tmp_path) -> None:
+    # A pending row without a locales block (pre-feature) approves unchanged.
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = FakeVLMClient()
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = _analyze_zh(client, headers)
+    assert "locales" not in analyzed["metadata"]
+
+    approved = client.post(
+        f"/api/uploads/{analyzed['pending_upload_id']}/approve",
+        headers=headers,
+        json={"metadata": analyzed["metadata"]},
+    )
+    assert approved.status_code == 200
+    template = app.state.templates.get(approved.json()["data"]["template_id"])
+    assert "locales" not in template.metadata
+
+
+def test_approve_makes_no_additional_llm_call(tmp_path) -> None:
+    # R8 latency guarantee: approve must never re-invoke the VLM.
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    vlm = CountingBilingualVLM()
+    app.state.vlm_client = vlm
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = _analyze_zh(client, headers)
+    calls_after_analyze = vlm.calls
+
+    client.post(
+        f"/api/uploads/{analyzed['pending_upload_id']}/approve",
+        headers=headers,
+        json={"metadata": analyzed["metadata"]},
+    )
+    assert vlm.calls == calls_after_analyze  # no extra LLM call during approve
+
+
+def test_clobber_guard_backfilled_locales_survives_payload_without_locales(tmp_path) -> None:
+    # A form payload lacking locales must not wipe a backfilled locales block on
+    # an existing template (merge, not overwrite).
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = FakeVLMClient()  # English-only proposal
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = _analyze_zh(client, headers)
+
+    # Derive the template_id the approve will use and pre-seed a backfilled row.
+    from meme_mcp.upload.service import _template_id
+
+    pending = app.state.pending_uploads.get(analyzed["pending_upload_id"], "friend")
+    template_id = _template_id("Deploy Face", pending.exact_hash)
+    app.state.templates.upsert(
+        TemplateCreate(
+            template_id=template_id,
+            slug=template_id,
+            name="Deploy Face",
+            source="friend",
+            metadata={
+                "name": "Deploy Face",
+                "locales": {
+                    "zh-TW": {
+                        "name": "部署臉",
+                        "_meta": {"name": {"source": "machine", "drift": "pass"}},
+                    }
+                },
+            },
+            slot_definitions=[{"name": "top", "position": "top"}],
+            image_path=pending.image_path,
+            perceptual_hash=pending.perceptual_hash,
+            exact_hash=pending.exact_hash,
+        )
+    )
+
+    approved = client.post(
+        f"/api/uploads/{analyzed['pending_upload_id']}/approve",
+        headers=headers,
+        json={"metadata": analyzed["metadata"]},  # no locales in the form payload
+    )
+    assert approved.status_code == 200
+    template = app.state.templates.get(template_id)
+    assert template.metadata["locales"]["zh-TW"]["name"] == "部署臉"  # survived

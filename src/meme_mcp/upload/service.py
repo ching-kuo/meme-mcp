@@ -71,6 +71,7 @@ class VLMEnricher(Protocol):
         grounding: str | None = None,
         *,
         grounding_authoritative: bool = True,
+        drift_retry: bool = False,
     ) -> Any: ...
 
 
@@ -120,6 +121,7 @@ async def analyze_image(
     friend_login: str,
     deps: UploadServiceDeps,
     identify_online: bool = False,
+    locale: str = "en",
 ) -> AnalyzeResult:
     """Validate, strip, dedupe and enrich an uploaded image; persist a pending row.
 
@@ -134,6 +136,12 @@ async def analyze_image(
     already gated the external call (R12). The lookup never raises -- every
     non-success outcome degrades silently to today's image-only enrichment.
     The service default is OFF so the PAT door does not silently egress (KTD7).
+
+    ``locale`` is the author's UI locale (R9): it is the view the review form
+    edits, and -- when it names a supported content locale -- it triggers the
+    zh-CN drift gate on the machine zh-TW half with one constrained-reprompt
+    retry (U4). Approve never re-enters this function, so it never blocks on or
+    re-invokes the LLM.
     """
     deps.upload_limiter.hit(friend_login)
     hint = _normalize_title_hint(title_hint)
@@ -167,7 +175,15 @@ async def analyze_image(
         # Merge the clean origin BEFORE the pending row is created so it persists
         # (KTD5). A copy avoids mutating the VLM client's returned dict.
         metadata = {**metadata, "origin": origin_block}
-    metadata = _prepare_machine_locales(metadata)
+    metadata = await _resolve_machine_locales(
+        metadata,
+        sanitized,
+        hint,
+        grounding,
+        grounding_authoritative=(reverse_status == "success"),
+        deps=deps,
+        locale=locale,
+    )
     slot_definitions = slot_definitions_for(metadata)
     # Record the pending row BEFORE writing the blob (KTD8). create-then-put makes the
     # row -- and thus the image_path reference -- observable to the gc sweep's live-
@@ -391,14 +407,86 @@ def _validated_metadata(
     return cleaned
 
 
+async def _resolve_machine_locales(
+    metadata: dict[str, Any],
+    sanitized: bytes,
+    hint: str | None,
+    grounding: str | None,
+    *,
+    grounding_authoritative: bool,
+    deps: UploadServiceDeps,
+    locale: str,
+) -> dict[str, Any]:
+    """Drift-gate the machine zh-TW half, retrying enrichment once on failure.
+
+    The machine counterpart is always generated (R8); the author ``locale`` only
+    selects the review view (R9). When the zh-TW half trips the zh-CN drift gate
+    (U3), a single constrained re-prompt is attempted before falling back to
+    English-only with a ``drift: failed`` marker. This is the ONLY place the
+    retry LLM call can happen -- approve never re-enters here, so approve makes
+    no extra LLM call (R8 latency guarantee).
+    """
+    del locale  # Drift always runs on the machine zh-TW half regardless of view.
+    if not _has_locale_content(metadata):
+        # Schema-degraded / English-only proposal: nothing to drift-gate or
+        # stamp. Leave the metadata English-only so no empty locale block is
+        # written (R2 fallback covers display).
+        return metadata
+    if check_metadata_drift(metadata).passed:
+        return _prepare_machine_locales(metadata)
+    retried = await asyncio.to_thread(
+        deps.vlm_client.enrich_template,
+        sanitized,
+        hint,
+        grounding,
+        grounding_authoritative=grounding_authoritative,
+        drift_retry=True,
+    )
+    if retried.status == "success" and isinstance(retried.metadata, dict):
+        # Carry only the re-prompted zh-TW block onto the already-accepted English
+        # top level; the English fields and origin were validated on the first
+        # pass and must not be churned by the retry response.
+        candidate = dict(metadata)
+        retry_locales = retried.metadata.get("locales")
+        if isinstance(retry_locales, dict):
+            candidate["locales"] = retry_locales
+        else:
+            candidate.pop("locales", None)
+        if check_metadata_drift(candidate).passed:
+            return _prepare_machine_locales(candidate)
+    # Second failure (or unusable retry): fall back to the original proposal's
+    # drift markers so the dropped fields are recorded English-only.
+    return _prepare_machine_locales(metadata)
+
+
+def _has_locale_content(metadata: dict[str, Any]) -> bool:
+    """True when a zh-TW block carries at least one populated prose field.
+
+    A block with only ``_meta`` (or none at all) is treated as English-only:
+    there is nothing to drift-gate, stamp, or persist.
+    """
+    locales = metadata.get("locales")
+    if not isinstance(locales, dict):
+        return False
+    block = locales.get("zh-TW")
+    if not isinstance(block, dict):
+        return False
+    return any(field in block and bool(block[field]) for field in LOCALIZED_FIELDS)
+
+
 def _prepare_machine_locales(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Pure zh-CN drift gate for the machine zh-TW half (no retry).
+
+    On pass: stamp every zh-TW field ``source: machine, drift: pass``. On fail:
+    drop the drifted zh-TW content (English-only per R7) but persist per-field
+    ``drift: failed`` inside ``locales._meta`` (R3) so a later backfill can target
+    it -- a top-level ``_``-prefixed key would be stripped by
+    ``hard_sanitize_metadata``. Callable as a stand-alone unit (U3 tests) and the
+    single-shot core that ``_resolve_machine_locales`` wraps with one retry.
+    """
     drift = check_metadata_drift(metadata)
     if drift.passed:
         return stamp_locale_provenance(metadata, "zh-TW", LOCALIZED_FIELDS, "machine", drift="pass")
-    # Drift failed: drop the zh-TW content (English-only per R7) but persist the
-    # per-field drift: "failed" provenance inside locales._meta so the failure is
-    # recorded (R3) and a later backfill can target it. A top-level "_"-prefixed
-    # key would be silently stripped by hard_sanitize_metadata.
     failed_fields = sorted(
         {reason.split(":", 1)[0] for reason in drift.reasons} & set(LOCALIZED_FIELDS)
     )

@@ -35,6 +35,7 @@ from meme_mcp.envelope import make_success
 from meme_mcp.errors import ErrorCode, MemeMCPError
 from meme_mcp.upload.service import analyze_image, approve_pending
 from meme_mcp.web.csrf import require_csrf
+from meme_mcp.web.i18n import resolve_locale
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -71,6 +72,10 @@ def register_upload_routes(
         # enrichment-first is the right default for the interactive surface. The
         # friend can uncheck the toggle (U6); a configured-off feature still
         # yields a no-egress "unavailable" status in the service.
+        # The author's UI locale is the review-form view (R9): resolved from the
+        # request exactly as the page chrome resolves it (lang cookie ->
+        # Accept-Language -> "en"), so the analyze proposal surfaces the same
+        # language the friend is reading the site in.
         result = await analyze_image(
             content_base64=str(payload.get("content_base64", "")),
             declared_mime=str(payload.get("mime", "")),
@@ -79,6 +84,7 @@ def register_upload_routes(
             friend_login=friend.principal,
             deps=upload_deps(app),
             identify_online=bool(payload.get("identify_online", True)),
+            locale=resolve_locale(request),
         )
         return JSONResponse(
             make_success(

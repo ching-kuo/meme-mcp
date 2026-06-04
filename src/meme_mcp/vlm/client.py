@@ -95,9 +95,10 @@ class VLMClient:
         grounding: str | None = None,
         *,
         grounding_authoritative: bool = True,
+        drift_retry: bool = False,
     ) -> EnrichmentResult:
         data_url = "data:image/png;base64," + base64.b64encode(image_bytes).decode()
-        prompt = _build_prompt(title_hint, grounding, grounding_authoritative)
+        prompt = _build_prompt(title_hint, grounding, grounding_authoritative, drift_retry)
         try:
             chat: Any = self.provider.chat
             response = chat.completions.create(
@@ -143,6 +144,7 @@ def _build_prompt(
     title_hint: str | None,
     grounding: str | None,
     grounding_authoritative: bool,
+    drift_retry: bool = False,
 ) -> str:
     """Build the enrichment prompt; byte-identical to today's when grounding is None."""
     prompt = (
@@ -150,6 +152,14 @@ def _build_prompt(
         "English at the top level and, when possible, zh-TW Traditional Chinese "
         "metadata under locales.zh-TW using Taiwan vocabulary."
     )
+    if drift_retry:
+        # Constrained re-prompt after a zh-CN drift failure (U4): tighten the
+        # zh-TW instruction so the retry cannot repeat the rejected vocabulary.
+        prompt += (
+            " The previous zh-TW attempt used Simplified characters or mainland "
+            "vocabulary and was rejected. Use ONLY Traditional Chinese with "
+            "Taiwan vocabulary (e.g. 影片 not 視頻, 品質 not 質量, 軟體 not 軟件)."
+        )
     if title_hint:
         prompt += f" Title hint: {title_hint}"
     if not grounding:

@@ -840,6 +840,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             friend_login=friend.principal,
             deps=_upload_deps(app),
             identify_online=bool(payload.get("identify_online", False)),
+            # PAT door has no UI locale: agents review the canonical English
+            # proposal (R9 view defaults to "en"). The machine zh-TW counterpart
+            # is still generated and drift-gated.
+            locale="en",
         )
         return JSONResponse(
             make_success(

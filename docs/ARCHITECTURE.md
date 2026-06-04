@@ -304,6 +304,20 @@ route -- the web endpoints call them with no Authorization header). Approval val
 shared service requires a non-empty, non-placeholder template name, a deliberate tightening
 that applies to the PAT `/api/uploads/{id}/approve` path too.
 
+Localized review (U4, R9): the web `/upload/analyze` route resolves the author's UI locale via
+`resolve_locale(request)` (the same lang-cookie → Accept-Language → `en` chain as the chrome) and
+passes it into `analyze_image`; the PAT door passes `locale="en"` (agents review the canonical
+English proposal). `analyze_image` always emits the machine zh-TW counterpart and drift-gates it
+regardless of view. The review form's flat fields are the author's-locale VIEW: `upload.js` reads
+`<html lang>`, and when it names a content locale it renders `locales[locale]` values (per-field
+English fallback) and reconstructs the approve payload by mapping edits into `locales[locale]`
+while carrying the canonical top-level English (and the machine counterpart) verbatim from the
+analyze proposal — Chinese never replaces the English `name`, so `template_id`/slug keep deriving
+from it. The per-field `_meta` from the proposal rides along so the server's
+`_stamp_human_locale_edits` can diff edited-vs-machine and stamp only changed fields human; an
+approve payload that lacks `locales` is merged (not overwritten) against the stored row via
+`merge_locales`, so a form built before a backfill cannot clobber a backfilled block.
+
 The presentation is a self-contained design system in `upload.css`: CSS custom-property tokens
 with a `prefers-color-scheme` dark theme and a `prefers-reduced-motion` fallback, WCAG AA
 contrast, and line-art icons drawn with CSS `mask` data-URIs (no fonts, no network). The flow
@@ -435,12 +449,18 @@ overlay model; the supported content locales are `{"zh-TW"}` (`SUPPORTED_CONTENT
   never overwritten by an incoming machine value, and a missing incoming locale preserves the stored
   block. This protects friend edits from a later machine backfill while still letting backfill improve
   untouched machine fields.
-- **zh-CN drift gate (U3).** `vlm/drift.py` rejects Simplified-Chinese / mainland-vocabulary leakage
-  in the model's zh-TW output: `check_drift` flags Simplified-only characters (via `hanzidentifier`)
-  and a curated `MAINLAND_VOCAB_DENYLIST` (e.g. 視頻→影片, 質量→品質, 軟件→軟體). On failure
-  `_prepare_machine_locales` drops the zh-TW content (English-only) but persists per-field
-  `drift: "failed"` provenance inside `locales._meta` so the failure is recorded and a later backfill
-  can target it — a top-level `_`-prefixed marker would be silently stripped by `hard_sanitize_metadata`.
+- **zh-CN drift gate + one retry (U3/U4).** `vlm/drift.py` rejects Simplified-Chinese /
+  mainland-vocabulary leakage in the model's zh-TW output: `check_drift` flags Simplified-only
+  characters (via `hanzidentifier`) and a curated `MAINLAND_VOCAB_DENYLIST` (e.g. 視頻→影片, 質量→品質,
+  軟件→軟體). `upload.service._resolve_machine_locales` runs the gate at analyze time: on a clean
+  pass it stamps via `_prepare_machine_locales`; on failure it issues ONE constrained re-prompt
+  (`enrich_template(drift_retry=True)`, which tightens the zh-TW instruction) and re-checks. If the
+  retry is also dirty (or unusable), the zh-TW content is dropped (English-only) but per-field
+  `drift: "failed"` provenance is persisted inside `locales._meta` so the failure is recorded and a
+  later backfill can target it — a top-level `_`-prefixed marker would be silently stripped by
+  `hard_sanitize_metadata`. The retry is the ONLY extra LLM call; approve never re-enters this path,
+  so it never blocks on or re-invokes the model. A schema-degraded response with no zh-TW prose is
+  left English-only with no empty locale block written.
 - **Sanitization (U1).** `vlm/sanitize._sanitize_locales_block` keeps only `SUPPORTED_CONTENT_LOCALES`,
   validates `_meta` entries against the `source`/`drift` enums, and enforces per-field shape — `tags`
   must be a list, prose fields must be strings; wrong-shaped values are dropped, not coerced.

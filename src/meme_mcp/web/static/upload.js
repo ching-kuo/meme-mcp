@@ -18,6 +18,11 @@
   "use strict";
 
   var MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+  // The only supported non-English content locale (mirrors the server's
+  // metadata_locales.SUPPORTED_CONTENT_LOCALES). The review form edits exactly
+  // one locale's view; any other UI locale edits the canonical English fields.
+  var CONTENT_LOCALES = { "zh-TW": true };
+  var LOCALIZED_FIELDS = ["name", "description", "emotion", "usage_context", "tags"];
   // Client abort budget. The server VLM timeout is 60s; this allows headroom
   // for the surrounding round trip so a client-side abort is distinguishable
   // from a server-reported VLM timeout/unavailable (which arrives as an
@@ -68,12 +73,36 @@
     steps: Array.prototype.slice.call(root.querySelectorAll(".upload-stepper-item"))
   };
 
+  // The locale the review form edits, derived from <html lang> (the same active
+  // locale the server resolved for the page chrome). Only a supported content
+  // locale switches the form to the localized view; everything else edits the
+  // canonical English fields, unchanged from today (R9).
+  var docLang = document.documentElement.getAttribute("lang") || "en";
+  var formLocale = CONTENT_LOCALES[docLang] ? docLang : "en";
+
   var state = {
     file: null,
     previewUrl: null,
     pendingId: null,
-    suspectFlags: []
+    suspectFlags: [],
+    // The full bilingual analyze proposal. collectMetadata reconstructs the
+    // approve payload from this so the canonical English top level is carried
+    // verbatim and never replaced by the author's localized edits.
+    proposal: {}
   };
+
+  // Per-field author-locale view with English fallback. When the form edits a
+  // content locale, prefer locales[formLocale][field] then the top-level English
+  // value; for the English view it is just the top-level value.
+  function viewField(metadata, name) {
+    if (formLocale !== "en") {
+      var block = metadata.locales && metadata.locales[formLocale];
+      if (block && block[name] != null && block[name] !== "") {
+        return block[name];
+      }
+    }
+    return metadata[name];
+  }
 
   // --- DOM helpers ---------------------------------------------------------
 
@@ -415,11 +444,15 @@
 
   function enterReview(data) {
     var metadata = data.metadata || {};
-    field("name").value = metadata.name || "";
-    field("description").value = metadata.description || "";
-    field("emotion").value = metadata.emotion || "";
-    field("usage_context").value = metadata.usage_context || "";
-    field("tags").value = Array.isArray(metadata.tags) ? metadata.tags.join(", ") : "";
+    // Keep the full bilingual proposal so approve can carry the English
+    // canonicals verbatim (collectMetadata reads it back).
+    state.proposal = metadata;
+    var viewTags = viewField(metadata, "tags");
+    field("name").value = viewField(metadata, "name") || "";
+    field("description").value = viewField(metadata, "description") || "";
+    field("emotion").value = viewField(metadata, "emotion") || "";
+    field("usage_context").value = viewField(metadata, "usage_context") || "";
+    field("tags").value = Array.isArray(viewTags) ? viewTags.join(", ") : "";
 
     var origin = metadata.origin || {};
     field("origin_name").value = origin.name || "";
@@ -530,21 +563,83 @@
 
   // --- approve -------------------------------------------------------------
 
-  function collectMetadata() {
-    var tags = field("tags")
+  function formTags() {
+    return field("tags")
       .value.split(",")
       .map(function (t) {
         return t.trim();
       })
       .filter(Boolean);
-    var metadata = {
+  }
+
+  // Reconstruct the full bilingual approve payload from the author's-locale form
+  // view (the approve payload contract). For the English view the form edits the
+  // canonical top level directly; for a content-locale view the edited values map
+  // into locales[formLocale] while the canonical English top level is carried
+  // verbatim from the analyze proposal and NEVER replaced by localized text
+  // (so template_id/slug keep deriving from the English name). The proposal's
+  // machine counterpart (the other half) round-trips so a backfilled/machine
+  // locales block survives approval via the server's merge_locales.
+  function collectMetadata() {
+    var proposal = state.proposal || {};
+    var tags = formTags();
+    var edited = {
       name: field("name").value.trim(),
       description: field("description").value,
       emotion: field("emotion").value,
       usage_context: field("usage_context").value,
-      tags: tags,
-      format: "static"
+      tags: tags
     };
+    var metadata;
+    if (formLocale === "en") {
+      metadata = {
+        name: edited.name,
+        description: edited.description,
+        emotion: edited.emotion,
+        usage_context: edited.usage_context,
+        tags: edited.tags,
+        format: "static"
+      };
+      // Carry the machine counterpart (e.g. zh-TW) unchanged so it round-trips.
+      if (proposal.locales) {
+        metadata.locales = proposal.locales;
+      }
+    } else {
+      // Content-locale view: English top level from the proposal (machine
+      // counterpart), localized edits into locales[formLocale].
+      metadata = {
+        name: proposal.name || edited.name,
+        description: proposal.description || "",
+        emotion: proposal.emotion || "",
+        usage_context: proposal.usage_context || "",
+        tags: Array.isArray(proposal.tags) ? proposal.tags : [],
+        format: "static"
+      };
+      var locales = {};
+      if (proposal.locales) {
+        // Shallow-copy sibling locales (none today, but future-proof).
+        for (var key in proposal.locales) {
+          if (Object.prototype.hasOwnProperty.call(proposal.locales, key)) {
+            locales[key] = proposal.locales[key];
+          }
+        }
+      }
+      var block = {
+        name: edited.name,
+        description: edited.description,
+        emotion: edited.emotion,
+        usage_context: edited.usage_context,
+        tags: edited.tags
+      };
+      // Preserve the proposal's per-field provenance (_meta) so the server can
+      // diff edited-vs-machine and stamp only changed fields as human.
+      var proposed = (proposal.locales && proposal.locales[formLocale]) || {};
+      if (proposed._meta) {
+        block._meta = proposed._meta;
+      }
+      locales[formLocale] = block;
+      metadata.locales = locales;
+    }
     // Collect origin only when at least one field is filled; omit it entirely
     // (do not send empty strings) so a blank origin leaves no stored block.
     var originName = field("origin_name").value.trim();
