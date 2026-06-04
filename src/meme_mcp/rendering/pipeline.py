@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from meme_mcp.errors import ErrorCode, MemeMCPError
 from meme_mcp.rendering.image_store import ImageStore
-from meme_mcp.rendering.text_layout import select_wrap
+from meme_mcp.rendering.text_layout import contains_cjk, select_wrap
 
 
 @dataclass(frozen=True)
@@ -40,18 +40,29 @@ def _font(size: int) -> ImageFont.ImageFont:
         return cast(ImageFont.ImageFont, ImageFont.load_default())
 
 
-@cache
-def _font_path() -> str:
-    source_path = Path(__file__).resolve().parents[3] / "assets" / "fonts" / "Anton-Regular.ttf"
+def _bundled_font_path(filename: str) -> str:
+    source_path = Path(__file__).resolve().parents[3] / "assets" / "fonts" / filename
     if source_path.is_file():
         return str(source_path)
     # importlib.resources.as_file materializes a real filesystem path even when the
     # package is loaded from a zip; the ExitStack keeps any temp file alive for the
     # process lifetime so PIL can reopen it on every render.
-    ref = resources.files("meme_mcp").joinpath("assets/fonts/Anton-Regular.ttf")
+    ref = resources.files("meme_mcp").joinpath(f"assets/fonts/{filename}")
     stack = ExitStack()
     atexit.register(stack.close)
     return str(stack.enter_context(resources.as_file(ref)))
+
+
+@cache
+def _font_path() -> str:
+    return _bundled_font_path("Anton-Regular.ttf")
+
+
+@cache
+def _cjk_font_path() -> str:
+    # Noto Sans TC Black covers Latin too, so a mixed caption renders in one consistent
+    # face. Selected per caption when any CJK codepoint is present (see _draw_slot_text).
+    return _bundled_font_path("NotoSansTC-Black.otf")
 
 
 _LEGACY_BOX_VERTICAL: dict[str, tuple[float, float]] = {
@@ -115,6 +126,9 @@ def _slot_angle(slot: dict[str, Any]) -> float:
     return 0.0
 
 
+_STROKE_DIVISOR = 18
+
+
 def _draw_slot_text(
     target: ImageDraw.ImageDraw,
     fill: str,
@@ -122,12 +136,19 @@ def _draw_slot_text(
     y: int,
     anchor: str,
     box_size: tuple[int, int],
-    font_path: str,
 ) -> None:
+    # .upper() is a no-op on CJK, so it stays in the shared path. A caption with any
+    # CJK codepoint uses the Noto face (it covers Latin too) and reserves stroke room
+    # in layout so the bold outline never clips; pure-Latin keeps Anton untouched.
+    is_cjk = contains_cjk(fill)
+    font_path = _cjk_font_path() if is_cjk else _font_path()
+    stroke_ratio = _STROKE_DIVISOR if is_cjk else 0
     max_size = max(12, int(box_size[1] / 1.4))
-    lines, font = select_wrap(fill.upper(), box_size, font_path, max_size)
+    lines, font = select_wrap(
+        fill.upper(), box_size, font_path, max_size, stroke_ratio=stroke_ratio
+    )
     font_size = int(getattr(font, "size", max_size))
-    stroke_width = max(1, font_size // 18)
+    stroke_width = max(1, font_size // _STROKE_DIVISOR)
     if len(lines) > 1:
         target.multiline_text(
             (x, y),
@@ -154,19 +175,18 @@ def _draw_slot_text(
 
 def _draw_slots(image: Image.Image, slots: list[dict[str, Any]], slot_fills: list[str]) -> None:
     width, height = image.size
-    font_path = _font_path()
     base_draw = ImageDraw.Draw(image)
     for fill, slot in zip(slot_fills, slots, strict=True):
         x, y, anchor, box_size = _slot_anchor(slot, (width, height))
         angle = _slot_angle(slot)
         if angle == 0.0:
-            _draw_slot_text(base_draw, fill, x, y, anchor, box_size, font_path)
+            _draw_slot_text(base_draw, fill, x, y, anchor, box_size)
             continue
         # Each rotated slot draws into its own transparent layer so neighbours and the
         # base image don't smear together when we rotate around the slot anchor.
         layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         layer_draw = ImageDraw.Draw(layer)
-        _draw_slot_text(layer_draw, fill, x, y, anchor, box_size, font_path)
+        _draw_slot_text(layer_draw, fill, x, y, anchor, box_size)
         rotated = layer.rotate(angle, resample=Image.Resampling.BICUBIC, center=(x, y))
         image.alpha_composite(rotated)
 

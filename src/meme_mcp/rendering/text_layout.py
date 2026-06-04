@@ -6,6 +6,83 @@ from PIL import ImageFont
 
 MeasuredFont = ImageFont.ImageFont | ImageFont.FreeTypeFont
 
+# Closing punctuation must never begin a line; opening punctuation must never end one
+# (minimal kinsoku shori). Kept as frozensets so the rules are immutable.
+_KINSOKU_NO_LINE_START: frozenset[str] = frozenset("」』。，！？、）")
+_KINSOKU_NO_LINE_END: frozenset[str] = frozenset("「『（")
+
+
+def _is_cjk_char(char: str) -> bool:
+    """True for codepoints we treat as individually breakable CJK tokens.
+
+    Covers CJK Unified Ideographs and Ext A, fullwidth/CJK punctuation, and the
+    CJK Symbols block so kinsoku punctuation also counts as CJK width.
+    """
+    code = ord(char)
+    return (
+        0x4E00 <= code <= 0x9FFF  # CJK Unified Ideographs
+        or 0x3400 <= code <= 0x4DBF  # CJK Unified Ideographs Extension A
+        or 0x3000 <= code <= 0x303F  # CJK Symbols and Punctuation
+        or 0xFF00 <= code <= 0xFFEF  # Halfwidth and Fullwidth Forms
+    )
+
+
+def contains_cjk(text: str) -> bool:
+    """Whether any character in ``text`` is treated as CJK."""
+    return any(_is_cjk_char(char) for char in text)
+
+
+def segment_tokens(text: str) -> list[str]:
+    """Break text into wrap tokens: Latin runs stay word-atomic, each CJK char alone.
+
+    Whitespace separates Latin words as usual; CJK characters always start a new
+    token (and never merge with a neighbouring Latin run), so a line break may fall
+    on any character boundary between Han glyphs.
+    """
+    tokens: list[str] = []
+    latin_run = ""
+    for char in text:
+        if _is_cjk_char(char):
+            if latin_run:
+                tokens.append(latin_run)
+                latin_run = ""
+            tokens.append(char)
+        elif char.isspace():
+            if latin_run:
+                tokens.append(latin_run)
+                latin_run = ""
+        else:
+            latin_run += char
+    if latin_run:
+        tokens.append(latin_run)
+    return tokens
+
+
+def _join_tokens(tokens: Sequence[str]) -> str:
+    """Reassemble a line: no space between adjacent CJK tokens, single space otherwise."""
+    parts: list[str] = []
+    for token in tokens:
+        if parts and not (_is_cjk_char(token[0]) and _is_cjk_char(parts[-1][-1])):
+            parts.append(" ")
+        parts.append(token)
+    return "".join(parts)
+
+
+def _apply_kinsoku(lines: list[list[str]]) -> list[list[str]]:
+    """Pull forbidden line-initial/final tokens back across the break."""
+    for i in range(1, len(lines)):
+        # No line may start with closing punctuation: pull it to the previous line.
+        while lines[i] and lines[i][0] in _KINSOKU_NO_LINE_START and lines[i - 1]:
+            lines[i - 1].append(lines[i].pop(0))
+        # No line may end with opening punctuation: push it to the next line.
+        while (
+            lines[i - 1]
+            and lines[i - 1][-1] in _KINSOKU_NO_LINE_END
+            and len(lines[i - 1]) > 1
+        ):
+            lines[i].insert(0, lines[i - 1].pop())
+    return [line for line in lines if line]
+
 
 def _text_bbox_size(font: MeasuredFont, text: str) -> tuple[int, int]:
     left, top, right, bottom = font.getbbox(text)
@@ -21,8 +98,33 @@ def _measure_lines(font: MeasuredFont, lines: Sequence[str]) -> tuple[int, int]:
     return width, height
 
 
+def _greedy_wrap_cjk(text: str, max_chars: int, target_lines: int | None) -> list[str]:
+    """Token-aware greedy wrap for captions containing CJK characters."""
+    tokens = segment_tokens(text)
+    if not tokens:
+        return [""]
+    if target_lines == 1:
+        return [_join_tokens(tokens)]
+    lines: list[list[str]] = []
+    current: list[str] = []
+    for token in tokens:
+        candidate = current + [token]
+        can_add_line = target_lines is None or len(lines) < target_lines - 1
+        if len(_join_tokens(candidate)) > max_chars and current and can_add_line:
+            lines.append(current)
+            current = [token]
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    lines = _apply_kinsoku(lines)
+    return [_join_tokens(line) for line in lines] or [""]
+
+
 def greedy_wrap(text: str, max_chars: int, target_lines: int | None = None) -> list[str]:
     max_chars = max(1, max_chars)
+    if contains_cjk(text):
+        return _greedy_wrap_cjk(text, max_chars, target_lines)
     words = text.split()
     if target_lines == 1:
         return [" ".join(words)] if words else [""]
@@ -47,11 +149,14 @@ def fit_font(
     font_path: str,
     max_size: int,
     min_size: int = 12,
+    stroke_ratio: int = 0,
 ) -> ImageFont.FreeTypeFont:
     """Return the largest font that fits text within the box with memegen-like margins.
 
     `text` may include newlines; multi-line input is measured per-line with the same
-    line spacing the renderer will apply at draw time.
+    line spacing the renderer will apply at draw time. ``stroke_ratio`` (font_size //
+    stroke_ratio, the same heuristic the renderer uses) reserves room for the stroke
+    outline on both sides so a bold CJK glyph + its outline never clips the box edge.
     """
     box_w, box_h = box_size
     usable_w = max(1, int(box_w - box_w / 35))
@@ -61,9 +166,24 @@ def fit_font(
     for size in range(start, min_size - 1, -2):
         font = ImageFont.truetype(font_path, size)
         text_w, text_h = _measure_lines(font, lines)
-        if text == "" or (text_w <= usable_w and text_h <= usable_h):
+        stroke = (max(1, size // stroke_ratio) if stroke_ratio else 0) * 2
+        if text == "" or (text_w + stroke <= usable_w and text_h + stroke <= usable_h):
             return font
     return ImageFont.truetype(font_path, min_size)
+
+
+def _max_chars_for(text: str, target_lines: int) -> int:
+    """Per-line column budget for ``greedy_wrap``.
+
+    The pixel measurement in ``fit_font``/``select_wrap`` is the source of truth; this
+    heuristic only seeds how aggressively ``greedy_wrap`` splits. Pure-Latin text keeps
+    the original ``len()``-based budget byte-for-byte (golden parity). When CJK is
+    present, each CJK char counts as ~2 columns so a dense Han line breaks sooner.
+    """
+    if not contains_cjk(text):
+        return max(1, (len(text) + target_lines - 1) // target_lines)
+    columns = sum(2 if _is_cjk_char(char) else 1 for char in text if not char.isspace())
+    return max(1, (columns + target_lines - 1) // target_lines)
 
 
 def select_wrap(
@@ -72,17 +192,18 @@ def select_wrap(
     font_path: str,
     max_size: int,
     min_size: int = 12,
+    stroke_ratio: int = 0,
 ) -> tuple[list[str], ImageFont.FreeTypeFont]:
     """Choose a 1/2/3-line layout that fills the box while maximizing font size."""
     normalized = " ".join(text.split())
     if not normalized:
-        return [""], fit_font("", box_size, font_path, max_size, min_size)
+        return [""], fit_font("", box_size, font_path, max_size, min_size, stroke_ratio)
 
     candidates: list[tuple[list[str], ImageFont.FreeTypeFont, bool, bool, int]] = []
     for target_lines in (1, 2, 3):
-        max_chars = max(1, (len(normalized) + target_lines - 1) // target_lines)
+        max_chars = _max_chars_for(normalized, target_lines)
         lines = greedy_wrap(normalized, max_chars, target_lines)
-        font = fit_font("\n".join(lines), box_size, font_path, max_size, min_size)
+        font = fit_font("\n".join(lines), box_size, font_path, max_size, min_size, stroke_ratio)
         width, height = _measure_lines(font, lines)
         fits = width <= box_size[0] - box_size[0] / 35 and height <= box_size[1] - box_size[1] / 10
         fills = width >= box_size[0] * 0.60
