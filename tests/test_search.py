@@ -90,6 +90,44 @@ def test_provenance_only_origin_is_not_a_search_alias() -> None:
     assert found and "origin_name_match" not in found[0].matched_fields
 
 
+def test_cjk_query_matches_localized_metadata_and_skips_meta() -> None:
+    record = TemplateRecord(
+        template_id="distracted",
+        slug="distracted-boyfriend",
+        name="Distracted Boyfriend",
+        metadata={
+            "name": "Distracted Boyfriend",
+            "description": "English only",
+            "emotion": "tempted",
+            "usage_context": "bad priorities",
+            "tags": ["relationship"],
+            "format": "static",
+            "locales": {
+                "zh-TW": {
+                    "name": "分心男友",
+                    "description": "拿來形容注意力被別的事物吸引",
+                    "tags": ["梗圖"],
+                    "_meta": {"description": {"source": "machine"}},
+                }
+            },
+        },
+        slot_definitions=[],
+    )
+
+    found = search([record], "分心男友")
+
+    assert found[0].template_id == "distracted"
+    assert "cjk_lexical" in found[0].matched_fields
+    assert not search([record], "machine")
+
+    # Bigram damping (U6): a multi-char query with no consecutive-pair overlap
+    # gets no CJK boost, and a single-char query is damped, not a full match.
+    no_bigram = search([record], "男注")  # both chars present, never adjacent
+    assert not no_bigram or "cjk_lexical" not in no_bigram[0].matched_fields
+    single = search([record], "男")
+    assert single and single[0].similarity_score <= 0.5
+
+
 # ---------------------------------------------------------------------------
 # AE5: the origin_name_match tag survives serialization to the find envelope
 # ---------------------------------------------------------------------------
@@ -110,6 +148,13 @@ def _seed_pigeon(app: Any) -> None:
                 "usage_context": "captivated",
                 "tags": ["anime"],
                 "format": "static",
+                "locales": {
+                    "zh-TW": {
+                        "name": "這是鴿子嗎",
+                        "description": "動畫男人指著蝴蝶",
+                        "_meta": {"name": {"source": "machine"}},
+                    }
+                },
                 "origin": {
                     "name": "Is This a Pigeon?",
                     "source_url": "https://knowyourmeme.com/memes/is-this-a-pigeon",
@@ -155,3 +200,24 @@ def test_origin_name_match_reaches_http_find_endpoint(tmp_path) -> None:
     candidates = response.json()["data"]["candidates"]
     pigeon = next(c for c in candidates if c["template_id"] == "pigeon")
     assert "origin_name_match" in pigeon["matched_fields"]
+    assert "locales" not in pigeon["metadata"]
+
+
+def test_chinese_query_reaches_http_find_endpoint_with_english_metadata(tmp_path) -> None:
+    app = create_app(good_settings(tmp_path))
+    token = issue_pat(app.state.pat_store, "friend", app.state.pat_hash_pepper_value)
+    app.state.allowlist.add("friend")
+    _seed_pigeon(app)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/mcp/find",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"query": "這是鴿子嗎"},
+    )
+
+    assert response.status_code == 200
+    candidates = response.json()["data"]["candidates"]
+    pigeon = next(c for c in candidates if c["template_id"] == "pigeon")
+    assert pigeon["metadata"]["name"] == "Anime Butterfly"
+    assert "locales" not in pigeon["metadata"]

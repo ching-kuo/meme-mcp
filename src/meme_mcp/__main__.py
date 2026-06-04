@@ -45,7 +45,7 @@ def run(argv: Sequence[str] | None = None, settings: Settings | None = None) -> 
     if args.command == "pin":
         return _run_pin(args, app_settings)
     if args.command == "reindex-embeddings":
-        return _run_reindex_embeddings(app_settings)
+        return _run_reindex_embeddings(app_settings, force=bool(args.force))
     if args.command == "seed-memegen":
         upstream = Path(args.upstream_path) if args.upstream_path else None
         manifest = Path(args.manifest_path) if args.manifest_path else None
@@ -133,7 +133,8 @@ def _parser() -> argparse.ArgumentParser:
     pin_commands.add_parser("list")
     pin_revoke = pin_commands.add_parser("revoke")
     pin_revoke.add_argument("identifier", help="invited Google email or the pinned google sub")
-    subcommands.add_parser("reindex-embeddings")
+    reindex = subcommands.add_parser("reindex-embeddings")
+    reindex.add_argument("--force", action="store_true")
     seed = subcommands.add_parser("seed-memegen")
     seed.add_argument("--upstream-path", default=None)
     seed.add_argument("--manifest-path", default=None)
@@ -312,7 +313,7 @@ def _run_pin(args: argparse.Namespace, settings: Settings) -> int:
     raise SystemExit(f"unknown pin command: {args.pin_command}")
 
 
-def _run_reindex_embeddings(settings: Settings) -> int:
+def _run_reindex_embeddings(settings: Settings, *, force: bool = False) -> int:
     db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
     templates = SQLiteTemplateRepository(db_path)
     vectors = SQLiteVecStore(db_path, dimensions=settings.embedding_dimensions)
@@ -322,8 +323,9 @@ def _run_reindex_embeddings(settings: Settings) -> int:
         settings.embedding_api_key.get_secret_value(),
         settings.embedding_base_url,
     )
-    count = reindex_embeddings(templates, vectors, embedder, meta)
-    print(f"reindexed {count} templates")
+    count = reindex_embeddings(templates, vectors, embedder, meta, force=force)
+    suffix = " (forced)" if force else ""
+    print(f"reindexed {count} templates{suffix}")
     return 0
 
 

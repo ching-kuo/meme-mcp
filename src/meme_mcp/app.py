@@ -9,6 +9,7 @@ import time
 import warnings
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -58,9 +59,11 @@ from meme_mcp.envelope import Envelope, make_error, make_success
 from meme_mcp.errors import ErrorCode, MemeMCPError, status_for_error
 from meme_mcp.limits import WindowedRateLimiter
 from meme_mcp.mcp.server import create_mcp_server, tool_schemas
+from meme_mcp.metadata_locales import localized_metadata
 from meme_mcp.rendering.image_store import make_image_store_from_settings
 from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_meme
 from meme_mcp.rendering.signing import sign_render_url, verify_render_signature
+from meme_mcp.retrieval.search import project_candidate_english
 from meme_mcp.upload.dedupe import DuplicateIndex
 from meme_mcp.upload.service import UploadServiceDeps, analyze_image, approve_pending
 from meme_mcp.vlm.client import VLMClient
@@ -373,7 +376,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.templates = SQLiteTemplateRepository(db_path)
         app.state.pending_uploads = PendingUploadStore(db_path)
         app.state.embedding_meta = EmbeddingMetaStore(db_path)
-        validate_embedding_model(app.state.embedding_meta, settings.embedding_model)
+        validate_embedding_model(
+            app.state.embedding_meta,
+            settings.embedding_model,
+            settings.embedding_dimensions,
+        )
         app.state.image_store = make_image_store_from_settings(settings)
         app.state.web_allowlist = FileAllowlist(settings.github_allowlist_path)
         app.state.allowlist = app.state.web_allowlist
@@ -539,7 +546,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             requested_page = 1
         page_number = min(max(requested_page, 1), total_pages)
         start = (page_number - 1) * BROWSE_PAGE_SIZE
-        page_rows = all_rows[start : start + BROWSE_PAGE_SIZE]
+        locale = resolve_locale(request)
+        page_rows = [
+            _localized_template_row(row, locale)
+            for row in all_rows[start : start + BROWSE_PAGE_SIZE]
+        ]
         web_session = has_web_session(app, request)
         return templates.TemplateResponse(
             request,
@@ -911,6 +922,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             template = app.state.templates.get(template_id)
         except KeyError as exc:
             raise MemeMCPError(ErrorCode.NOT_FOUND, []) from exc
+        template = _localized_template_row(template, resolve_locale(request))
         # Server-side https gate for the origin source link: Jinja autoescape does
         # NOT neutralize a javascript: href, so the safe URL is computed here and a
         # non-https one renders as plain text, never a live link (U6/KTD6). Stored
@@ -991,7 +1003,7 @@ class AppMCPBackend:
         self.app.state.find_limiter.hit(actor)
         outcomes = self.app.state.outcomes
         candidates = [
-            candidate.__dict__
+            project_candidate_english(candidate)
             for candidate in self.app.state.templates.search(
                 query,
                 filters or {},
@@ -1222,6 +1234,11 @@ def _template_rows(app: FastAPI, query: str) -> list[TemplateRow]:
     all_rows = cast(list[TemplateRow], app.state.templates.list_rows())
     rows = {row.template_id: row for row in all_rows}
     return [rows[template_id] for template_id in ids if template_id in rows]
+
+
+def _localized_template_row(row: TemplateRow, locale: str) -> TemplateRow:
+    metadata = localized_metadata(row.metadata, locale)
+    return replace(row, name=str(metadata.get("name") or row.name), metadata=metadata)
 
 
 def _template_payload(row: TemplateRow) -> dict[str, object]:

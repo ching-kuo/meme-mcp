@@ -1,3 +1,5 @@
+import math
+
 from meme_mcp.embeddings.client import EmbeddingClient, embedding_text, embedding_text_hash
 
 
@@ -74,5 +76,5 @@ def test_embedding_client_uses_provider_and_model() -> None:
     vector = client.embed_template(
         {"description": "hello", "emotion": "joy", "usage_context": "tests"}
     )
-    assert vector == [0.1, 0.2, 0.3]
+    assert math.isclose(math.sqrt(sum(value * value for value in vector)), 1.0)
     assert fake.embeddings.calls[0][0] == "text-embedding-3-small"

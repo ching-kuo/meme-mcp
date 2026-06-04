@@ -14,6 +14,8 @@ class VectorStore(Protocol):
 
     def search(self, query_vector: list[float], top_k: int) -> list[tuple[str, float]]: ...
 
+    def clear(self) -> None: ...
+
 
 class InMemoryVectorStore:
     def __init__(self) -> None:
@@ -21,6 +23,9 @@ class InMemoryVectorStore:
 
     def upsert(self, template_id: str, vector: list[float]) -> None:
         self.vectors[template_id] = vector
+
+    def clear(self) -> None:
+        self.vectors.clear()
 
     def search(self, query_vector: list[float], top_k: int) -> list[tuple[str, float]]:
         scored = [
@@ -82,6 +87,10 @@ class SQLiteVecStore:
         ]
         return sorted(scored, key=lambda item: item[1], reverse=True)[:top_k]
 
+    def clear(self) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM template_vectors")
+
 
 class PgVectorStore:
     """pgvector-backed semantic search.
@@ -131,6 +140,10 @@ class PgVectorStore:
             )
             rows = cur.fetchall()
         return [(str(template_id), float(similarity)) for template_id, similarity in rows]
+
+    def clear(self) -> None:
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM template_vectors")
 
 
 def _to_psycopg_url(url: str) -> str:
@@ -194,6 +207,17 @@ class EmbeddingMetaStore:
                 "SELECT DISTINCT embedding_model FROM template_embeddings_meta"
             ).fetchall()
         return {str(row[0]) for row in rows}
+
+    def dimensions_in_use(self) -> set[int]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT dimensions FROM template_embeddings_meta"
+            ).fetchall()
+        return {int(row[0]) for row in rows}
+
+    def clear(self) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM template_embeddings_meta")
 
     def orphan_vector_count(self) -> int:
         """Vectors stored without corresponding meta — pre-guard installs.

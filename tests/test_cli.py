@@ -13,7 +13,8 @@ from meme_mcp.cli.reindex_embeddings import reindex_embeddings
 from meme_mcp.config import Settings
 from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate
 from meme_mcp.db.uploads import PendingUploadStore
-from meme_mcp.db.vectors import SQLiteVecStore
+from meme_mcp.db.vectors import EmbeddingMetaStore, SQLiteVecStore
+from meme_mcp.embeddings.client import validate_embedding_model
 from meme_mcp.rendering.image_store import ImageStore, make_image_store
 
 
@@ -145,6 +146,8 @@ def test_pat_cli_issue_rejects_negative_ttl_with_clean_message(tmp_path, capsys)
 
 
 class FakeEmbeddingClient:
+    model = "fake-embedding-model"
+
     def embed_template(self, metadata: dict[str, object]) -> list[float]:
         assert metadata["description"] == "ship green"
         return [1.0, 0.0, 0.0]
@@ -171,6 +174,38 @@ def test_reindex_embeddings_rebuilds_vector_store_from_templates(tmp_path) -> No
 
     assert count == 1
     assert vectors.search([1.0, 0.0, 0.0], 1) == [("deploy", 1.0)]
+
+
+def test_reindex_embeddings_force_purges_stale_meta_and_orphan_vectors(tmp_path) -> None:
+    # --force is the boot guard's documented remediation: it must clear stale
+    # meta rows (old model/dimensions, deleted templates) and orphan vectors so
+    # validate_embedding_model stops latching after the rebuild.
+    repo = SQLiteTemplateRepository(tmp_path / "meme.db")
+    repo.upsert(
+        TemplateCreate(
+            template_id="deploy",
+            slug="deploy",
+            name="Deploy",
+            source="friend",
+            metadata={"description": "ship green", "tags": ["ci"]},
+            slot_definitions=[{"position": "top"}],
+            image_path="aa/deploy.png",
+            perceptual_hash="0" * 16,
+            exact_hash="a" * 64,
+        )
+    )
+    db = tmp_path / "vectors.db"
+    vectors = SQLiteVecStore(db, dimensions=3)
+    meta = EmbeddingMetaStore(db)
+    meta.record("deleted-template", model="old-model", text_hash="x", dimensions=1536)
+    vectors.upsert("orphan", [0.0, 1.0, 0.0])
+    embedder = FakeEmbeddingClient()
+
+    count = reindex_embeddings(repo, vectors, embedder, meta, force=True)
+
+    assert count == 1
+    validate_embedding_model(meta, embedder.model, 3)  # guard unlatches
+    assert vectors.search([1.0, 0.0, 0.0], 5) == [("deploy", 1.0)]
 
 
 def test_seed_memegen_cli_persists_default_templates(tmp_path, capsys) -> None:

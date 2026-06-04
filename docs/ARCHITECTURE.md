@@ -400,9 +400,60 @@ client-side JS strings. `core.py` is the pure engine — `resolve_locale`, `t`, 
   templates and JS for known pre-existing English literals left outside a `t(...)`/`I18N` lookup —
   the load-bearing guards against a half-translated UI, since presence/completeness tests cannot
   catch a string silently left hardcoded. Translation *correctness* (vs. mere key presence) is gated
-  by a native `zh-TW` review before shipping, not by the mechanical tests. Scope is UI chrome only —
-  friend-authored template names, descriptions, and tags are left as authored, and locale-aware date
-  formatting is deferred.
+  by a native `zh-TW` review before shipping, not by the mechanical tests. Scope here is UI chrome —
+  the chrome is fully localized, while friend-authored template content carries its own bilingual
+  payload (see **Bilingual template metadata** below). Locale-aware date formatting is deferred.
+
+## Bilingual template metadata
+
+Template metadata is canonical English at the top level with an optional locale overlay so
+non-English-proficient friends can read and search templates in Traditional Chinese. The layer is
+distinct from the UI i18n above: i18n localizes chrome strings; this localizes friend-authored
+content (`name`, `description`, `emotion`, `usage_context`, `tags`). `metadata_locales.py` owns the
+overlay model; the supported content locales are `{"zh-TW"}` (`SUPPORTED_CONTENT_LOCALES`).
+
+- **Shape.** Localized values live under `metadata.locales["zh-TW"]`, mirroring the five
+  `LOCALIZED_FIELDS`, alongside a `_meta` block carrying per-field provenance:
+  `{field: {"source": "human"|"machine", "drift": "pass"|"failed"}}`. Top-level English is always
+  authoritative — it backs the slug, the MCP contract, and the English fallback.
+- **Resolution.** `localize()` resolves one field as requested-locale-then-English fallback;
+  `localized_metadata(metadata, locale)` overlays the whole display copy for the web layer;
+  `english_metadata()` strips `locales` for the canonical agent-facing projection.
+- **Provenance and merge (U4).** The VLM produces machine zh-TW; `upload.service._prepare_machine_locales`
+  stamps it `source: "machine"`. On approve, `_stamp_human_locale_edits` diffs the submitted locale
+  fields against the *sanitized* pending baseline (so sanitization-only normalization is not mistaken
+  for an edit) and re-stamps only the fields the friend actually changed as `source: "human"`. `merge_locales` then enforces human-wins/machine-fills: a stored human value is
+  never overwritten by an incoming machine value, and a missing incoming locale preserves the stored
+  block. This protects friend edits from a later machine backfill while still letting backfill improve
+  untouched machine fields.
+- **zh-CN drift gate (U3).** `vlm/drift.py` rejects Simplified-Chinese / mainland-vocabulary leakage
+  in the model's zh-TW output: `check_drift` flags Simplified-only characters (via `hanzidentifier`)
+  and a curated `MAINLAND_VOCAB_DENYLIST` (e.g. 視頻→影片, 質量→品質, 軟件→軟體). On failure
+  `_prepare_machine_locales` drops the zh-TW content (English-only) but persists per-field
+  `drift: "failed"` provenance inside `locales._meta` so the failure is recorded and a later backfill
+  can target it — a top-level `_`-prefixed marker would be silently stripped by `hard_sanitize_metadata`.
+- **Sanitization (U1).** `vlm/sanitize._sanitize_locales_block` keeps only `SUPPORTED_CONTENT_LOCALES`,
+  validates `_meta` entries against the `source`/`drift` enums, and enforces per-field shape — `tags`
+  must be a list, prose fields must be strings; wrong-shaped values are dropped, not coerced.
+  `flag_anomalies` walks locale content (skipping `_`-prefixed keys) and trips `imperative_prompt` on
+  Chinese-language injection phrasing (e.g. 忽略之前, 系統：) as well as the English markers, since
+  zh-TW content is part of the prompt-injection threat surface. `_clean_string` NFKC-folds
+  unconditionally, so fullwidth ASCII in zh-TW prose folds to ASCII while Han characters are untouched.
+- **CJK search (U6).** `retrieval/search.py` routes CJK-bearing query terms away from the
+  whitespace/substring path (a one-char substring hit would otherwise full-score every haystack
+  containing that character) and into a bigram-overlap path: a multi-char query scores only on
+  consecutive-pair overlap, and a single-char query (which has no bigram) gets a damped flat boost.
+  The flattened haystack includes locale content but skips `_meta`.
+- **Embedding (U7).** `embeddings.client.embedding_text` appends each locale block's prose and tags to
+  the embedded text so zh-TW queries retrieve by meaning, not just lexical overlap. Semantic search
+  defaults to a local Ollama OpenAI-compatible endpoint (`EMBEDDING_MODEL=qwen3-embedding:0.6b`,
+  `EMBEDDING_DIMENSIONS=1024`); vectors are L2-normalized on both the index and query paths. Switching
+  model or dimensions requires `meme-mcp reindex-embeddings --force`, which clears the vector and meta
+  stores before rebuilding so the boot guard (`validate_embedding_model`) does not stay latched on
+  stale rows.
+- **MCP projection (U8).** `project_candidate_english` (and the `find` wrappers) project candidates
+  through `english_metadata`, so `locales` never leaks into the agent-facing MCP/HTTP `find` response —
+  agents always see canonical English.
 
 ## Reverse-image enrichment
 

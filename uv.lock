@@ -649,6 +649,18 @@ wheels = [
 ]
 
 [[package]]
+name = "hanzidentifier"
+version = "1.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "zhon" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cb/32/c1f5f7cf4d4372c7778e34f116c52539db717b73e1ec0b149ce3717b1c9c/hanzidentifier-1.3.0.tar.gz", hash = "sha256:7acd99ef00c69ab57f3441e2b3568348b58ef115500e5a01f66cedea603b3101", size = 3890, upload-time = "2024-11-20T00:56:39.286Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/f6/94c3975b5e06ea4084056413da975395924ff0ddd89e975427bd46684359/hanzidentifier-1.3.0-py3-none-any.whl", hash = "sha256:8e36204a96072c328c8bc6ae9342fc6f9faea10bc519ff51da3ef6e6e0cee5a6", size = 4777, upload-time = "2024-11-20T00:56:40.668Z" },
+]
+
+[[package]]
 name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -1073,6 +1085,7 @@ dependencies = [
     { name = "concurrent-log-handler" },
     { name = "fastapi" },
     { name = "google-cloud-vision" },
+    { name = "hanzidentifier" },
     { name = "httpx" },
     { name = "imagehash" },
     { name = "itsdangerous" },
@@ -1126,6 +1139,7 @@ requires-dist = [
     { name = "concurrent-log-handler", specifier = ">=0.9" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "google-cloud-vision", specifier = ">=3.10,<4" },
+    { name = "hanzidentifier", specifier = ">=1.3" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "imagehash", specifier = ">=4.3" },
     { name = "itsdangerous", specifier = ">=2.2" },
@@ -2535,4 +2549,13 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/19/70/80f3b7c10d2630aa66414bf23d210386700aa390547278c789afa994fd7e/xmltodict-1.0.4.tar.gz", hash = "sha256:6d94c9f834dd9e44514162799d344d815a3a4faec913717a9ecbfa5be1bb8e61", size = 26124, upload-time = "2026-02-22T02:21:22.074Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/38/34/98a2f52245f4d47be93b580dae5f9861ef58977d73a79eb47c58f1ad1f3a/xmltodict-1.0.4-py3-none-any.whl", hash = "sha256:a4a00d300b0e1c59fc2bfccb53d7b2e88c32f200df138a0dd2229f842497026a", size = 13580, upload-time = "2026-02-22T02:21:21.039Z" },
+]
+
+[[package]]
+name = "zhon"
+version = "2.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2a/8d/e6c8ee4df75940ddecb6f5e7b2753a9a3914e6cd357e7238987661723d81/zhon-2.1.1.tar.gz", hash = "sha256:c8da424fad4aa698ddd3e1735515b49ff522c84dd1091e8fafd986ac7c6898f0", size = 84448, upload-time = "2024-11-20T00:29:10.119Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/13/b8d6ca3a41bf5959bc3915678837385bf668162a7295140d81ccae0b96b7/zhon-2.1.1-py3-none-any.whl", hash = "sha256:9ec0d42229ae60708a045270f755ccefb48f2689f2a6ce0bc6597abf6c4a9871", size = 83933, upload-time = "2024-11-20T00:29:08.209Z" },
 ]

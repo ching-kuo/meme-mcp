@@ -16,6 +16,7 @@ dependencies = [
   "concurrent-log-handler>=0.9",
   "fastapi>=0.115",
   "google-cloud-vision>=3.10,<4",
+  "hanzidentifier>=1.3",
   "httpx>=0.28",
   "imagehash>=4.3",
   "itsdangerous>=2.2",

@@ -123,8 +123,12 @@ uv run meme-mcp pat revoke <github-login | google:sub>
 uv run meme-mcp pat list
 
 # Rebuild template vectors from persisted template metadata.
+# Default semantic search uses Ollama's OpenAI-compatible endpoint:
+# EMBEDDING_BASE_URL=http://localhost:11434/v1
+# EMBEDDING_MODEL=qwen3-embedding:0.6b
+# EMBEDDING_DIMENSIONS=1024
 # Required after switching EMBEDDING_MODEL or EMBEDDING_DIMENSIONS.
-uv run meme-mcp reindex-embeddings
+uv run meme-mcp reindex-embeddings --force
 ```
 
 ## Run locally
@@ -236,8 +240,28 @@ the browser's advertised language, not the OS, so the always-visible switch is
 the real guarantee). Translations live in a single dict catalog
 (`src/meme_mcp/web/i18n/catalog.py`) that serves both server-rendered templates
 and client-side JS strings; no build step or new runtime dependency is added.
-Only UI chrome is translated — template names, descriptions, tags, and other
-friend-authored content are left as authored.
+This section covers UI chrome. Friend-authored template content (names,
+descriptions, tags) carries its own Traditional Chinese payload — see
+**Bilingual template metadata** below.
+
+## Bilingual template metadata (en / zh-TW)
+
+Template metadata is canonical English with an optional Traditional Chinese
+overlay, so friends who are not proficient in English can read and search
+templates in `zh-TW`. The VLM produces both languages on upload; a drift gate
+rejects Simplified-Chinese or mainland-vocabulary leakage in the `zh-TW` output
+(falling back to English-only for the affected fields). On approve, the fields a
+friend edits are recorded as human-authored and protected from later machine
+backfill. Chinese queries to the web `/browse` search and the MCP `find` tool
+match both the lexical zh-TW text (CJK bigram scoring) and its meaning (semantic
+embedding); the MCP `find` response always projects to canonical English so
+agents see a single stable contract.
+
+Semantic search defaults to a local Ollama OpenAI-compatible endpoint
+(`EMBEDDING_BASE_URL=http://localhost:11434/v1`, `EMBEDDING_MODEL=qwen3-embedding:0.6b`,
+`EMBEDDING_DIMENSIONS=1024`). After changing the model or dimensions, rebuild the
+index with `uv run meme-mcp reindex-embeddings --force` (the `--force` flag clears
+stale vectors before rebuilding so the boot guard does not stay latched).
 
 ## Development verification
 
@@ -266,6 +290,7 @@ Implemented:
 - embedding model-drift startup guard (refuses to boot if persisted vectors disagree with `EMBEDDING_MODEL`)
 - global `DecompressionBombWarning` escalation
 - public landing page and web browse/search/detail/preview routes
+- bilingual (en / zh-TW) template metadata with a zh-CN drift gate, human-wins provenance merge, CJK bigram + semantic search, and English-only MCP projection
 - self-service web PAT management at `/account` (session-authed, CSRF-protected, per-user rate limited, one-time plaintext reveal)
 - structured JSONL audit log (`audit.jsonl` under the storage dir) carrying `pat_issued`/`pat_revoked` events (never the token or its hash)
 - operator CLI for allowlist, PAT issue, seed, and reindex

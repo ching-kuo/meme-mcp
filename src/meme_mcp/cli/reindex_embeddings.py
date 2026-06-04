@@ -22,7 +22,16 @@ def reindex_embeddings(
     vectors: VectorStore,
     embedder: TemplateEmbedder,
     meta: EmbeddingMetaStore | None = None,
+    *,
+    force: bool = False,
 ) -> int:
+    # --force is the documented remediation for the startup guard (U7): it must
+    # purge stale state (old-model meta rows, orphan vectors from deleted
+    # templates) that a plain upsert pass would leave latched in the guard.
+    if force:
+        vectors.clear()
+        if meta is not None:
+            meta.clear()
     count = 0
     for row in templates.list_rows():
         vector = embedder.embed_template(row.metadata)

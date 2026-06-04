@@ -37,6 +37,30 @@ METADATA_TOOL = {
                 "tags": {"type": "array", "items": {"type": "string"}},
                 "format": {"type": "string", "enum": ["static"]},
                 "slot_definitions": {"type": "array", "items": {"type": "object"}},
+                "locales": {
+                    "type": "object",
+                    "properties": {
+                        "zh-TW": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "description": {"type": "string"},
+                                "emotion": {"type": "string"},
+                                "usage_context": {"type": "string"},
+                                "tags": {"type": "array", "items": {"type": "string"}},
+                            },
+                            "required": [
+                                "name",
+                                "description",
+                                "emotion",
+                                "usage_context",
+                                "tags",
+                            ],
+                            "additionalProperties": False,
+                        }
+                    },
+                    "additionalProperties": False,
+                },
             },
             "required": [
                 "name",
@@ -121,7 +145,11 @@ def _build_prompt(
     grounding_authoritative: bool,
 ) -> str:
     """Build the enrichment prompt; byte-identical to today's when grounding is None."""
-    prompt = "Describe this meme template for private retrieval."
+    prompt = (
+        "Describe this meme template for private retrieval. Return canonical "
+        "English at the top level and, when possible, zh-TW Traditional Chinese "
+        "metadata under locales.zh-TW using Taiwan vocabulary."
+    )
     if title_hint:
         prompt += f" Title hint: {title_hint}"
     if not grounding:

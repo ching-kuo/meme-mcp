@@ -25,10 +25,17 @@ from meme_mcp.auth.depends import Friend, require_write
 from meme_mcp.db.templates import TemplateCreate
 from meme_mcp.db.uploads import PendingUpload, PendingUploadStore
 from meme_mcp.errors import ErrorCode, MemeMCPError
+from meme_mcp.metadata_locales import (
+    LOCALIZED_FIELDS,
+    SUPPORTED_CONTENT_LOCALES,
+    merge_locales,
+    stamp_locale_provenance,
+)
 from meme_mcp.rendering.image_store import ImageStore
 from meme_mcp.upload.dedupe import DuplicateIndex, check_duplicates
 from meme_mcp.upload.strip import strip_and_reencode
 from meme_mcp.upload.validation import compute_hashes, validate_upload
+from meme_mcp.vlm.drift import check_metadata_drift
 from meme_mcp.vlm.sanitize import (
     clean_origin_value,
     flag_anomalies,
@@ -160,6 +167,7 @@ async def analyze_image(
         # Merge the clean origin BEFORE the pending row is created so it persists
         # (KTD5). A copy avoids mutating the VLM client's returned dict.
         metadata = {**metadata, "origin": origin_block}
+    metadata = _prepare_machine_locales(metadata)
     slot_definitions = slot_definitions_for(metadata)
     # Record the pending row BEFORE writing the blob (KTD8). create-then-put makes the
     # row -- and thus the image_path reference -- observable to the gc sweep's live-
@@ -264,12 +272,23 @@ def approve_pending(
     metadata = _validated_metadata(
         metadata_in, pending.suspect_flags, ack_suspect, origin_reviewed
     )
+    if metadata_overrides is not None:
+        # Diff against the SANITIZED baseline, not raw pending.metadata: the
+        # incoming copy has already been through hard_sanitize_metadata, so a
+        # field that differs only because sanitization normalized it (NFKC fold,
+        # markup strip, truncation) must not be misread as a human edit -- that
+        # would let merge_locales overwrite real human text with machine output
+        # on a later re-approval.
+        baseline = hard_sanitize_metadata(pending.metadata)
+        metadata = _stamp_human_locale_edits(metadata, baseline)
     if slot_overrides is not None:
         slot_definitions: list[Any] = slot_overrides
     else:
         slot_definitions = pending.slot_definitions
     name = str(metadata["name"])
     template_id = _template_id(name, pending.exact_hash)
+    stored_metadata = _stored_metadata_for(deps.templates, template_id)
+    metadata = merge_locales(stored_metadata, metadata)
     deps.templates.upsert(
         TemplateCreate(
             template_id=template_id,
@@ -370,6 +389,76 @@ def _validated_metadata(
     cleaned["slot_definitions"] = slot_definitions_for(cleaned)
     _promote_origin_status(cleaned, origin_reviewed)
     return cleaned
+
+
+def _prepare_machine_locales(metadata: dict[str, Any]) -> dict[str, Any]:
+    drift = check_metadata_drift(metadata)
+    if drift.passed:
+        return stamp_locale_provenance(metadata, "zh-TW", LOCALIZED_FIELDS, "machine", drift="pass")
+    # Drift failed: drop the zh-TW content (English-only per R7) but persist the
+    # per-field drift: "failed" provenance inside locales._meta so the failure is
+    # recorded (R3) and a later backfill can target it. A top-level "_"-prefixed
+    # key would be silently stripped by hard_sanitize_metadata.
+    failed_fields = sorted(
+        {reason.split(":", 1)[0] for reason in drift.reasons} & set(LOCALIZED_FIELDS)
+    )
+    copy = dict(metadata)
+    copy.pop("locales", None)
+    if failed_fields:
+        copy["locales"] = {
+            "zh-TW": {
+                "_meta": {
+                    field: {"source": "machine", "drift": "failed"} for field in failed_fields
+                }
+            }
+        }
+    return copy
+
+
+def _stamp_human_locale_edits(
+    metadata: dict[str, Any], baseline: dict[str, Any]
+) -> dict[str, Any]:
+    """Stamp approver-changed locale fields as human-authored (U4).
+
+    Only fields whose value differs from the pending baseline are stamped:
+    machine values the friend left untouched stay machine-sourced so a later
+    backfill may still improve them, while edited values become human and are
+    protected from machine overwrite by ``merge_locales``.
+    """
+    result = metadata
+    incoming_locales = metadata.get("locales")
+    if not isinstance(incoming_locales, dict):
+        return result
+    baseline_locales = baseline.get("locales")
+    for locale in SUPPORTED_CONTENT_LOCALES:
+        incoming_block = incoming_locales.get(locale)
+        if not isinstance(incoming_block, dict):
+            continue
+        baseline_block = (
+            baseline_locales.get(locale) if isinstance(baseline_locales, dict) else None
+        )
+        if not isinstance(baseline_block, dict):
+            baseline_block = {}
+        edited = [
+            field
+            for field in LOCALIZED_FIELDS
+            if field in incoming_block and incoming_block.get(field) != baseline_block.get(field)
+        ]
+        if edited:
+            result = stamp_locale_provenance(result, locale, edited, "human")
+    return result
+
+
+def _stored_metadata_for(templates: TemplateRepository, template_id: str) -> dict[str, Any] | None:
+    get = getattr(templates, "get", None)
+    if get is None:
+        return None
+    try:
+        row = get(template_id)
+    except KeyError:
+        return None
+    metadata = getattr(row, "metadata", None)
+    return metadata if isinstance(metadata, dict) else None
 
 
 def _promote_origin_status(cleaned: dict[str, Any], origin_reviewed: bool) -> None:

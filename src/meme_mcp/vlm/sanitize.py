@@ -6,6 +6,8 @@ from collections.abc import Sequence
 from typing import Any
 from urllib.parse import urlsplit
 
+from meme_mcp.metadata_locales import LOCALIZED_FIELDS, SUPPORTED_CONTENT_LOCALES
+
 MARKUP_RE = re.compile(r"<[^>]+>")
 ZERO_WIDTH = {"\u200b", "\u200c", "\u200d", "\ufeff", "\u202e", "\u202d"}
 IMPERATIVE_MARKERS = (
@@ -18,6 +20,20 @@ IMPERATIVE_MARKERS = (
     "user:",
     "assistant:",
     "</",
+    # CJK equivalents: zh-TW content fields are now part of the threat surface,
+    # so Chinese-language injection phrasing must trip the same flag. Both ASCII
+    # and fullwidth colons are listed because flag_anomalies runs on the raw
+    # value, before _clean_string's NFKC fold.
+    "忽略之前",
+    "忽略以上",
+    "忽略先前",
+    "無視之前",
+    "系統:",
+    "系統：",
+    "使用者:",
+    "使用者：",
+    "助理:",
+    "助理：",
 )
 # source_url is capped by URL_MAX_LEN in sanitize_url, not _clean_string; the
 # entry documents the inner origin keys the recursion sees (KTD6/KTD9).
@@ -57,6 +73,8 @@ def flag_anomalies(metadata: dict[str, Any]) -> list[str]:
 def hard_sanitize_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     cleaned: dict[str, Any] = {}
     for key, value in metadata.items():
+        if key.startswith("_"):
+            continue
         if isinstance(value, str):
             # URL fields are https-validated, not markup-mangled: MARKUP_RE.sub
             # corrupts URLs (KTD6). This canonical branch also covers the friend's
@@ -73,10 +91,53 @@ def hard_sanitize_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
             # output -- stays clean even when the friend edits it on approve (KTD6).
             if key == "origin":
                 cleaned[key] = _sanitize_origin_block(value)
+            elif key == "locales":
+                cleaned[key] = _sanitize_locales_block(value)
             else:
                 cleaned[key] = hard_sanitize_metadata(value)
         else:
             cleaned[key] = value
+    return cleaned
+
+
+def _sanitize_locales_block(locales: dict[str, Any]) -> dict[str, Any]:
+    cleaned: dict[str, Any] = {}
+    for locale, block in locales.items():
+        if locale not in SUPPORTED_CONTENT_LOCALES or not isinstance(block, dict):
+            continue
+        locale_clean: dict[str, Any] = {}
+        for key, value in block.items():
+            if key == "_meta" and isinstance(value, dict):
+                meta = _sanitize_locale_meta(value)
+                if meta:
+                    locale_clean[key] = meta
+            # Shape is validated per field, not per value type: tags must be a
+            # list and prose fields must be strings, so a string "tags" or a
+            # list "description" is dropped instead of stored with the wrong
+            # shape (the web renderers consume these values verbatim).
+            elif key == "tags" and isinstance(value, list):
+                locale_clean[key] = [_clean_string(str(item), 32) for item in value]
+            elif key in LOCALIZED_FIELDS and key != "tags" and isinstance(value, str):
+                locale_clean[key] = _clean_string(value, FIELD_CAPS.get(key, 128))
+        if locale_clean:
+            cleaned[locale] = locale_clean
+    return cleaned
+
+
+def _sanitize_locale_meta(meta: dict[str, Any]) -> dict[str, Any]:
+    cleaned: dict[str, Any] = {}
+    for field, value in meta.items():
+        if field not in LOCALIZED_FIELDS or not isinstance(value, dict):
+            continue
+        entry: dict[str, str] = {}
+        source = value.get("source")
+        drift = value.get("drift")
+        if source in {"human", "machine"}:
+            entry["source"] = source
+        if drift in {"pass", "failed"}:
+            entry["drift"] = drift
+        if entry:
+            cleaned[field] = entry
     return cleaned
 
 
@@ -180,6 +241,10 @@ def _walk_strings(value: Any) -> list[str]:
     if isinstance(value, list):
         return [item for child in value for item in _walk_strings(child)]
     if isinstance(value, dict):
-        return [item for child in value.values() for item in _walk_strings(child)]
+        return [
+            item
+            for key, child in value.items()
+            if not str(key).startswith("_")
+            for item in _walk_strings(child)
+        ]
     return []
-

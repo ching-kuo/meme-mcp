@@ -37,6 +37,13 @@ def authed_client(tmp_path) -> tuple[TestClient, dict[str, str]]:
                 "usage_context": "green CI",
                 "tags": ["deploy", "ci"],
                 "format": "static",
+                "locales": {
+                    "zh-TW": {
+                        "description": "部署鬆一口氣",
+                        "tags": ["部署"],
+                        "_meta": {"description": {"source": "machine"}},
+                    }
+                },
             },
             slot_definitions=[{"name": "top", "position": "top"}],
             image_path=image_path,
@@ -161,6 +168,22 @@ def test_template_detail_renders_all_fields(tmp_path) -> None:
     assert "top" in body  # slot name/position
     # The detail page embeds the full-size preview from the image route.
     assert "/templates/deploy-face/image" in body
+
+
+def test_browse_and_detail_localize_values_with_field_fallback(tmp_path) -> None:
+    client, headers = authed_client(tmp_path)
+    client.cookies.set("lang", "zh-TW")
+
+    browse = client.get("/browse", headers=headers)
+    detail = client.get("/templates/deploy-face", headers=headers)
+
+    assert browse.status_code == 200
+    assert "部署鬆一口氣" in browse.text
+    assert "部署" in browse.text
+    assert "Deploy Face" in browse.text
+    assert detail.status_code == 200
+    assert "部署鬆一口氣" in detail.text
+    assert "relief" in detail.text
 
 
 def test_template_detail_redirects_anonymous_browser_to_login(tmp_path) -> None:

@@ -12,6 +12,7 @@ def test_validate_embedding_model_accepts_matching_history(tmp_path) -> None:
     store.record("template-1", model="text-embedding-3-small", text_hash="abc", dimensions=1536)
 
     validate_embedding_model(store, "text-embedding-3-small")
+    validate_embedding_model(store, "text-embedding-3-small", 1536)
 
 
 def test_validate_embedding_model_rejects_drift(tmp_path) -> None:
@@ -22,6 +23,17 @@ def test_validate_embedding_model_rejects_drift(tmp_path) -> None:
         validate_embedding_model(store, "text-embedding-3-large")
 
     assert info.value.error_code is ErrorCode.INTERNAL_ERROR
+
+
+def test_validate_embedding_model_rejects_dimension_drift(tmp_path) -> None:
+    store = EmbeddingMetaStore(tmp_path / "meta.db")
+    store.record("template-1", model="qwen3-embedding:0.6b", text_hash="abc", dimensions=1536)
+
+    with pytest.raises(MemeMCPError) as info:
+        validate_embedding_model(store, "qwen3-embedding:0.6b", 1024)
+
+    assert info.value.error_code is ErrorCode.INTERNAL_ERROR
+    assert "dimensions" in str(info.value.errors)
 
 
 def test_validate_embedding_model_skips_empty_history(tmp_path) -> None:

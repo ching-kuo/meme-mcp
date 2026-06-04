@@ -257,6 +257,95 @@ def test_upload_approval_promotes_pending_upload_to_template(tmp_path) -> None:
     assert app.state.image_store.get(template.image_path)
 
 
+class BilingualVLMClient(FakeVLMClient):
+    def enrich_template(self, *args: Any, **kwargs: Any) -> EnrichmentResult:
+        result = super().enrich_template(*args, **kwargs)
+        assert result.metadata is not None
+        result.metadata["locales"] = {
+            "zh-TW": {"name": "部署臉", "description": "形容部署成功的表情"}
+        }
+        return result
+
+
+def test_approve_with_zh_tw_edit_stamps_human_provenance(tmp_path) -> None:
+    # U4: a friend-edited zh-TW field must be recorded as human-authored so
+    # merge_locales protects it from later machine backfill; untouched machine
+    # values keep their machine stamp.
+    from meme_mcp.app import create_app
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = BilingualVLMClient()
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = client.post(
+        "/api/uploads/analyze",
+        headers=headers,
+        json={
+            "filename": "deploy.png",
+            "mime": "image/png",
+            "content_base64": base64.b64encode(png_bytes()).decode(),
+            "title_hint": "Deploy Face",
+        },
+    ).json()["data"]
+    assert analyzed["metadata"]["locales"]["zh-TW"]["_meta"]["name"]["source"] == "machine"
+
+    edited = json.loads(json.dumps(analyzed["metadata"]))
+    edited["locales"]["zh-TW"]["description"] = "朋友改寫的描述"
+    response = client.post(
+        f"/api/uploads/{analyzed['pending_upload_id']}/approve",
+        headers=headers,
+        json={"metadata": edited},
+    )
+
+    assert response.status_code == 200
+    template = app.state.templates.get(response.json()["data"]["template_id"])
+    meta = template.metadata["locales"]["zh-TW"]["_meta"]
+    assert meta["description"]["source"] == "human"
+    assert meta["name"]["source"] == "machine"
+
+
+def test_approve_no_edit_keeps_machine_provenance_despite_sanitization(tmp_path) -> None:
+    # Regression: the friend leaves zh-TW untouched but the approve-path sanitizer
+    # NFKC-folds a fullwidth char in it. The normalization must NOT be misread as a
+    # human edit -- the field stays machine so a later backfill can still improve it.
+    from meme_mcp.app import create_app
+
+    class FullwidthVLMClient(FakeVLMClient):
+        def enrich_template(self, *args: Any, **kwargs: Any) -> EnrichmentResult:
+            result = super().enrich_template(*args, **kwargs)
+            assert result.metadata is not None
+            # Fullwidth "Ａ" folds to ASCII "A" under hard_sanitize's NFKC pass.
+            result.metadata["locales"] = {"zh-TW": {"description": "真香（Ａ）"}}
+            return result
+
+    app = create_app(good_settings(tmp_path))
+    app.state.vlm_client = FullwidthVLMClient()
+    client = TestClient(app)
+    headers = auth_headers(client)
+    analyzed = client.post(
+        "/api/uploads/analyze",
+        headers=headers,
+        json={
+            "filename": "deploy.png",
+            "mime": "image/png",
+            "content_base64": base64.b64encode(png_bytes()).decode(),
+            "title_hint": "Deploy Face",
+        },
+    ).json()["data"]
+
+    # Approve echoing the analyze payload verbatim (no human edit).
+    response = client.post(
+        f"/api/uploads/{analyzed['pending_upload_id']}/approve",
+        headers=headers,
+        json={"metadata": analyzed["metadata"]},
+    )
+
+    assert response.status_code == 200
+    template = app.state.templates.get(response.json()["data"]["template_id"])
+    meta = template.metadata["locales"]["zh-TW"]["_meta"]
+    assert meta["description"]["source"] == "machine"
+
+
 def test_upload_vlm_timeout_creates_manual_review_pending_upload(tmp_path) -> None:
     from meme_mcp.app import create_app
 
