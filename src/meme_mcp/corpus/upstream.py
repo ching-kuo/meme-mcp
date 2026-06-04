@@ -11,7 +11,7 @@ from typing import Any
 import yaml
 
 from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate
-from meme_mcp.metadata_locales import provenance
+from meme_mcp.metadata_locales import merge_locales, provenance
 from meme_mcp.rendering.image_store import FilesystemImageStore
 from meme_mcp.upload.validation import compute_hashes
 from meme_mcp.vlm.sanitize import hard_sanitize_metadata, sanitize_url
@@ -301,17 +301,29 @@ def import_upstream_corpus(
         exact_hash, perceptual_hash = compute_hashes(image_bytes)
         extension = upstream.image_path.suffix.lstrip(".") or "png"
         stored_path = image_store.put(image_bytes, extension)
+        template_id = f"memegen-{upstream.slug}"
+        built = _build_metadata(
+            upstream,
+            enrichment.get(upstream.slug, {}),
+            zh_tw_overlay.get(upstream.slug),
+        )
+        # Read-merge-write so a re-seed never clobbers a human-authored zh-TW
+        # field with the freshly rebuilt machine overlay. merge_locales keeps the
+        # rebuilt English top level authoritative while honoring human-wins on the
+        # locale block; the importer is single-threaded so the read-write window
+        # is safe without locking.
+        try:
+            stored_metadata: dict[str, Any] | None = repository.get(template_id).metadata
+        except KeyError:
+            stored_metadata = None
+        metadata = merge_locales(stored_metadata, built)
         repository.upsert(
             TemplateCreate(
-                template_id=f"memegen-{upstream.slug}",
+                template_id=template_id,
                 slug=upstream.slug,
                 name=upstream.name,
                 source="memegen",
-                metadata=_build_metadata(
-                    upstream,
-                    enrichment.get(upstream.slug, {}),
-                    zh_tw_overlay.get(upstream.slug),
-                ),
+                metadata=metadata,
                 slot_definitions=slot_definitions(upstream),
                 image_path=stored_path,
                 perceptual_hash=perceptual_hash,

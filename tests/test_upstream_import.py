@@ -14,7 +14,8 @@ from meme_mcp.corpus.upstream import (
     project_slot_position,
     slot_definitions,
 )
-from meme_mcp.db.templates import SQLiteTemplateRepository
+from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate
+from meme_mcp.metadata_locales import stamp_locale_provenance
 from meme_mcp.rendering.image_store import FilesystemImageStore
 
 
@@ -458,3 +459,54 @@ def test_import_zh_tw_overlay_empty_block_attaches_no_locale(tmp_path: Path) -> 
         zh_tw_enrichment=zh_tw,
     )
     assert "locales" not in row.metadata
+
+
+def test_reimport_preserves_human_authored_zh_tw(tmp_path: Path) -> None:
+    # A re-seed must not clobber a human-authored zh-TW field with the freshly
+    # rebuilt machine overlay: the importer reads the stored row and merges via
+    # merge_locales (human-wins), so a future hand-corrected translation survives.
+    slug = "buzz"
+    templates_dir = tmp_path / "upstream" / "templates" / slug
+    templates_dir.mkdir(parents=True)
+    (templates_dir / "config.yml").write_text(
+        f"name: {slug.title()}\nsource: https://imgflip.com/x\nkeywords: []\n"
+        "text:\n  - anchor_x: 0.0\n    anchor_y: 0.0\n    scale_x: 1.0\n    scale_y: 0.2\n"
+    )
+    Image.new("RGB", (8, 8), "red").save(templates_dir / "default.png")
+    overlay_path = tmp_path / "enrichment.zh-TW.json"
+    overlay_path.write_text(json.dumps({slug: {"description": "機器翻譯"}}))
+
+    repo = SQLiteTemplateRepository(tmp_path / "db.sqlite")
+    store = FilesystemImageStore(tmp_path / "images")
+
+    def _seed() -> None:
+        import_upstream_corpus(
+            tmp_path / "upstream", repo, store, "sha", zh_tw_enrichment_path=overlay_path
+        )
+
+    _seed()
+    row = repo.get(f"memegen-{slug}")
+    assert row.metadata["locales"]["zh-TW"]["description"] == "機器翻譯"
+
+    # A future editor hand-corrects the zh-TW description and marks it human.
+    human = stamp_locale_provenance(row.metadata, "zh-TW", ["description"], "human")
+    human["locales"]["zh-TW"]["description"] = "人工校對的翻譯"
+    repo.upsert(
+        TemplateCreate(
+            template_id=row.template_id,
+            slug=row.slug,
+            name=row.name,
+            source="memegen",
+            metadata=human,
+            slot_definitions=row.slot_definitions,
+            image_path=row.image_path,
+            perceptual_hash=row.perceptual_hash,
+            exact_hash=row.exact_hash,
+        )
+    )
+
+    # Re-seed: the machine overlay must NOT overwrite the human value.
+    _seed()
+    rerow = repo.get(f"memegen-{slug}")
+    assert rerow.metadata["locales"]["zh-TW"]["description"] == "人工校對的翻譯"
+    assert rerow.metadata["locales"]["zh-TW"]["_meta"]["description"]["source"] == "human"

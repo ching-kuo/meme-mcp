@@ -104,6 +104,36 @@
     return metadata[name];
   }
 
+  // True when a locale block carries a real value for a field (not absent/empty),
+  // i.e. the form showed a genuine localized value rather than an English fallback.
+  function hasGenuineLocaleValue(value) {
+    if (value == null) {
+      return false;
+    }
+    return Array.isArray(value) ? value.length > 0 : value !== "";
+  }
+
+  // True when the (possibly edited) form value still equals the English fallback
+  // that viewField displayed for an absent locale field. Used to avoid persisting
+  // an untouched English fallback into the locale slot as a human-authored value.
+  function equalsEnglishFallback(name, editedValue, proposal) {
+    var fallback = proposal[name];
+    if (name === "tags") {
+      var edited = Array.isArray(editedValue) ? editedValue : [];
+      var base = Array.isArray(fallback) ? fallback : [];
+      if (edited.length !== base.length) {
+        return false;
+      }
+      for (var i = 0; i < edited.length; i++) {
+        if (edited[i] !== base[i]) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return (editedValue || "") === (fallback || "");
+  }
+
   // --- DOM helpers ---------------------------------------------------------
 
   function show(el) {
@@ -624,16 +654,26 @@
           }
         }
       }
-      var block = {
-        name: edited.name,
-        description: edited.description,
-        emotion: edited.emotion,
-        usage_context: edited.usage_context,
-        tags: edited.tags
-      };
-      // Preserve the proposal's per-field provenance (_meta) so the server can
-      // diff edited-vs-machine and stamp only changed fields as human.
       var proposed = (proposal.locales && proposal.locales[formLocale]) || {};
+      var block = {};
+      // Only persist a field into the locale slot when it is a genuine localized
+      // value: either the proposal already carried one (round-trip the edit), or
+      // the author changed it away from the English fallback viewField displayed.
+      // An untouched English fallback (e.g. a drift-failed field shown as English)
+      // is omitted, so the server never stamps it human and the field stays open
+      // for a later correct backfill -- and English prose never lands in the
+      // zh-TW slot to pollute its embedding.
+      LOCALIZED_FIELDS.forEach(function (name) {
+        var editedValue = edited[name];
+        if (hasGenuineLocaleValue(proposed[name])) {
+          block[name] = editedValue;
+        } else if (!equalsEnglishFallback(name, editedValue, proposal)) {
+          block[name] = editedValue;
+        }
+      });
+      // Preserve the proposal's per-field provenance (_meta) so the server can
+      // diff edited-vs-machine and stamp only changed fields as human, and so a
+      // drift: failed marker round-trips for future backfill.
       if (proposed._meta) {
         block._meta = proposed._meta;
       }
