@@ -5,6 +5,7 @@ import contextlib
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from meme_mcp.auth.allowlist import FileAllowlist, canonical_email
 from meme_mcp.auth.authorization import normalize_principal
@@ -27,7 +28,9 @@ from meme_mcp.config import Settings, validate_at_startup
 from meme_mcp.db.engine import sqlite_path
 from meme_mcp.db.templates import SQLiteTemplateRepository
 from meme_mcp.db.vectors import EmbeddingMetaStore, SQLiteVecStore
-from meme_mcp.oauth.store import SQLiteOAuthStore
+
+if TYPE_CHECKING:
+    from meme_mcp.oauth.store import SQLiteOAuthStore
 
 
 def main() -> None:
@@ -240,6 +243,9 @@ def _oauth_store(settings: Settings, db_path: object) -> SQLiteOAuthStore | None
     enc = settings.oauth_secret_enc_key.get_secret_value() if settings.oauth_secret_enc_key else ""
     if not pepper or not enc:
         return None
+    # Lazy import so a flag-off CLI never loads the oauth package (cryptography).
+    from meme_mcp.oauth.store import SQLiteOAuthStore
+
     return SQLiteOAuthStore(db_path, token_pepper=pepper, secret_enc_key=enc)  # type: ignore[arg-type]
 
 

@@ -262,6 +262,24 @@ def test_client_round_trips_with_all_fields(tmp_path: Path) -> None:
     assert "super-secret-value" not in str(enc)
 
 
+def test_reregister_preserves_last_used_at(tmp_path: Path) -> None:
+    # A re-registration of the same client_id must update metadata but NOT reset
+    # last_used_at (else the unused-client GC would delete an active client).
+    store = make_store(tmp_path)
+    client = OAuthClientInformationFull(
+        client_id="c", redirect_uris=[AnyUrl("https://x/cb")], token_endpoint_auth_method="none"
+    )
+    store.register_client(client)
+    store.mark_client_used("c")
+    store.register_client(client.model_copy(update={"client_name": "renamed"}))
+    with sqlite3.connect(tmp_path / "oauth.db") as conn:
+        last_used, info = conn.execute(
+            "SELECT last_used_at, client_info FROM oauth_clients WHERE client_id='c'"
+        ).fetchone()
+    assert last_used is not None  # preserved across re-registration
+    assert "renamed" in str(info)  # metadata still updated
+
+
 def test_public_client_stores_no_secret(tmp_path: Path) -> None:
     store = make_store(tmp_path)
     client = OAuthClientInformationFull(

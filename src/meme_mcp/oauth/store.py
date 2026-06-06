@@ -52,6 +52,15 @@ PENDING_REQUEST_TTL_SECONDS = 10 * 60
 # revokes the whole family. (Byte-identical re-issue is impossible under
 # hash-at-rest, so the grace window suppresses revocation rather than returning
 # the original successor's plaintext — same security outcome, no logout.)
+#
+# Deliberate trade-off vs. strict single-use: within the window the prior token
+# may be re-presented more than once, each minting a fresh pair, so an attacker
+# who stole that refresh token gains up to REFRESH_GRACE_SECONDS of access that a
+# strict "any reuse revokes" model would deny. The exposure is bounded and small
+# because (a) the window is measured from the FIRST rotation and never extended,
+# (b) every issued access token is still re-checked against the live allowlist on
+# every request (KTD4), and (c) reuse after the window revokes the family. Keep
+# this window short.
 REFRESH_GRACE_SECONDS = 30
 _REFRESH_GRACE = timedelta(seconds=REFRESH_GRACE_SECONDS)
 
@@ -186,12 +195,20 @@ class SQLiteOAuthStore:
         # only in the encrypted column, never in the JSON payload.
         payload = client_info.model_copy(update={"client_secret": None})
         with self._connect() as conn:
+            # UPSERT (not INSERT OR REPLACE) so a re-registration of the same
+            # client_id preserves last_used_at -- OR REPLACE would null it and the
+            # unused-client GC would then delete an actively-used client.
             conn.execute(
                 """
-                INSERT OR REPLACE INTO oauth_clients
+                INSERT INTO oauth_clients
                     (client_id, client_info, client_secret_encrypted,
                      client_secret_expires_at, registered_at, last_used_at)
                 VALUES (?, ?, ?, ?, ?, NULL)
+                ON CONFLICT(client_id) DO UPDATE SET
+                    client_info = excluded.client_info,
+                    client_secret_encrypted = excluded.client_secret_encrypted,
+                    client_secret_expires_at = excluded.client_secret_expires_at,
+                    registered_at = excluded.registered_at
                 """,
                 (
                     client_info.client_id,

@@ -204,8 +204,8 @@ class McpSlashNormalizeMiddleware:
 
 
 class OAuthRateLimitMiddleware:
-    """Per-IP rate limit on the pre-auth OAuth endpoints (/register, /authorize,
-    /token).
+    """Per-IP rate limit on the unauthenticated OAuth endpoints (/register,
+    /authorize, /token, /revoke).
 
     These are SDK-generated routes mirrored onto the parent app, so the
     decorator-based ``pat_admin_limiter`` does not apply; this path-matching ASGI
@@ -215,7 +215,7 @@ class OAuthRateLimitMiddleware:
     the primary gate; this is defense-in-depth.
     """
 
-    _PATHS = frozenset({"/register", "/authorize", "/token"})
+    _PATHS = frozenset({"/register", "/authorize", "/token", "/revoke"})
 
     def __init__(self, app: ASGIApp, limiter: WindowedRateLimiter) -> None:
         self.app = app
