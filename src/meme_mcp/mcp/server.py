@@ -3,7 +3,11 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from mcp.server.auth.middleware.auth_context import get_access_token
-from mcp.server.auth.provider import AccessToken, TokenVerifier
+from mcp.server.auth.provider import (
+    AccessToken,
+    OAuthAuthorizationServerProvider,
+    TokenVerifier,
+)
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -110,7 +114,8 @@ class PatTokenVerifier(TokenVerifier):
         # No caching: each request re-checks live allowlist + pin state (R12).
         if not is_authorized(principal, allowlist=self.allowlist, pin_store=self.pin_store):
             return None
-        return AccessToken(token=token, client_id=principal, scopes=scopes_for_capability(capability))
+        scopes = scopes_for_capability(capability)
+        return AccessToken(token=token, client_id=principal, scopes=scopes)
 
 
 def create_mcp_server(
@@ -122,6 +127,7 @@ def create_mcp_server(
     allowed_hosts: list[str] | None = None,
     allowed_origins: list[str] | None = None,
     pin_store: SupportsPinLookup | None = None,
+    auth_provider: OAuthAuthorizationServerProvider[Any, Any, Any] | None = None,
 ) -> FastMCP:
     # The Streamable HTTP transport runs a DNS-rebinding guard that rejects any
     # Host/Origin not on its allowlist with 421. FastMCP only auto-populates that
@@ -138,10 +144,30 @@ def create_mcp_server(
         else ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
     )
     public_base_url = public_base_url.rstrip("/")
+    # Two mutually-exclusive auth modes. AS mode (auth_provider supplied) makes
+    # meme-mcp its own OAuth 2.1 authorization server: FastMCP auto-mounts the
+    # five OAuth routes and auto-wraps the provider as the bearer verifier (its
+    # load_access_token also recognizes existing PATs, R13). Without it, the
+    # original resource-server-only PAT verifier is used.
+    auth_config: dict[str, Any] = {
+        "issuer_url": public_base_url,
+        "resource_server_url": f"{public_base_url}/mcp",
+        "required_scopes": ["meme:read"],
+    }
+    auth_kwargs: dict[str, Any] = {}
+    if auth_provider is not None:
+        auth_kwargs["auth_server_provider"] = auth_provider
+        auth_config["client_registration_options"] = {
+            "enabled": True,
+            "valid_scopes": ["meme:read", "meme:write"],
+            "default_scopes": ["meme:read"],
+        }
+        auth_config["revocation_options"] = {"enabled": True}
+    else:
+        auth_kwargs["token_verifier"] = PatTokenVerifier(pat_store, allowlist, pepper, pin_store)
     mcp = FastMCP(
         "meme-mcp",
         instructions="Find and render private meme templates.",
-        token_verifier=PatTokenVerifier(pat_store, allowlist, pepper, pin_store),
         json_response=True,
         stateless_http=True,
         streamable_http_path="/",
@@ -150,13 +176,8 @@ def create_mcp_server(
             allowed_hosts=hosts,
             allowed_origins=origins,
         ),
-        auth=AuthSettings.model_validate(
-            {
-                "issuer_url": public_base_url,
-                "resource_server_url": f"{public_base_url}/mcp",
-                "required_scopes": ["meme:read"],
-            }
-        ),
+        auth=AuthSettings.model_validate(auth_config),
+        **auth_kwargs,
     )
 
     @mcp.tool()
@@ -217,3 +238,47 @@ def _require_write_scope() -> None:
             ErrorCode.UNAUTHORIZED,
             [{"field": "scope", "reason": "meme:write_required"}],
         )
+
+
+def build_auth_server_routes(
+    provider: OAuthAuthorizationServerProvider[Any, Any, Any],
+    auth_settings: AuthSettings,
+) -> list[Any]:
+    """Mirror the SDK OAuth routes onto the parent app at the issuer origin root.
+
+    FastMCP mounts ``create_auth_routes`` inside the ``/mcp`` sub-app, so the five
+    endpoints externally resolve at ``/mcp/authorize`` while ``build_metadata``
+    advertises them at the origin root (KTD6). Re-create them at the origin root
+    so the advertised endpoints actually resolve, and patch the AS metadata to
+    also advertise the public-client auth method ``none`` -- the AS accepts public
+    PKCE clients, but the stock metadata hard-codes only ``client_secret_*``.
+    """
+    from mcp.server.auth.json_response import PydanticJSONResponse
+    from mcp.server.auth.routes import build_metadata, cors_middleware, create_auth_routes
+    from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
+    from starlette.routing import Route
+
+    cro = auth_settings.client_registration_options or ClientRegistrationOptions()
+    ro = auth_settings.revocation_options or RevocationOptions()
+    routes = create_auth_routes(
+        provider, auth_settings.issuer_url, auth_settings.service_documentation_url, cro, ro
+    )
+    metadata = build_metadata(
+        auth_settings.issuer_url, auth_settings.service_documentation_url, cro, ro
+    )
+    methods = list(metadata.token_endpoint_auth_methods_supported or [])
+    if "none" not in methods:
+        metadata.token_endpoint_auth_methods_supported = [*methods, "none"]
+
+    async def metadata_endpoint(_request: Any) -> Any:
+        return PydanticJSONResponse(
+            content=metadata, status_code=200, headers={"Cache-Control": "public, max-age=300"}
+        )
+
+    metadata_path = "/.well-known/oauth-authorization-server"
+    patched = Route(
+        metadata_path,
+        endpoint=cors_middleware(metadata_endpoint, ["GET", "OPTIONS"]),
+        methods=["GET", "OPTIONS"],
+    )
+    return [patched if route.path == metadata_path else route for route in routes]

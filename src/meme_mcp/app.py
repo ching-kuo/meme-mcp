@@ -13,7 +13,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 from urllib.parse import urlencode
 
 import httpx
@@ -58,7 +58,7 @@ from meme_mcp.embeddings.client import EmbeddingClient, validate_embedding_model
 from meme_mcp.envelope import Envelope, make_error, make_success
 from meme_mcp.errors import ErrorCode, MemeMCPError, status_for_error
 from meme_mcp.limits import WindowedRateLimiter
-from meme_mcp.mcp.server import create_mcp_server, tool_schemas
+from meme_mcp.mcp.server import build_auth_server_routes, create_mcp_server, tool_schemas
 from meme_mcp.metadata_locales import localized_metadata
 from meme_mcp.rendering.image_store import make_image_store_from_settings
 from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_meme
@@ -72,6 +72,11 @@ from meme_mcp.web.csrf import ensure_csrf_token, require_csrf, safe_lang_return,
 from meme_mcp.web.i18n import COOKIE_NAME, SUPPORTED, js_catalog, plural, resolve_locale, t
 from meme_mcp.web.pat_routes import register_pat_routes
 from meme_mcp.web.upload_routes import register_upload_routes
+
+if TYPE_CHECKING:
+    from pydantic import SecretStr
+
+    from meme_mcp.oauth.provider import MemeAuthProvider
 
 # Pre-buffer body-size cap for the analyze endpoints. A 10 MB image base64
 # encodes to ~13.3 MB; 14 MB leaves headroom for the surrounding JSON envelope
@@ -434,6 +439,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # missing/malformed SA file fails fast, not at first request (KTD4).
         app.state.reverse_image_client = _make_reverse_image_client(settings)
         app.state.pat_hash_pepper_value = settings.pat_hash_pepper.get_secret_value()
+        oauth_provider = _make_oauth_provider(app, settings, db_path, public_app_base_url)
         app.state.mcp_server = create_mcp_server(
             app.state.pat_store,
             app.state.allowlist,
@@ -443,6 +449,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allowed_hosts=settings.mcp_allowed_hosts,
             allowed_origins=settings.mcp_allowed_origins,
             pin_store=app.state.pin_store,
+            auth_provider=oauth_provider,
         )
         auth_settings = app.state.mcp_server.settings.auth
         if auth_settings is not None and auth_settings.resource_server_url is not None:
@@ -465,6 +472,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # POST). add_middleware prepends, so this runs before SessionMiddleware
         # and routing.
         app.add_middleware(McpSlashNormalizeMiddleware)
+        # AS mode: FastMCP mounts the OAuth routes inside /mcp, but the metadata
+        # advertises them at the origin root. Mirror them onto the parent app at
+        # the origin root (KTD6) and register the parent-app consent route the
+        # provider's authorize() redirects to (U4).
+        if oauth_provider is not None:
+            from meme_mcp.oauth.consent import register_consent_routes
+
+            app.router.routes.extend(
+                build_auth_server_routes(oauth_provider, app.state.mcp_server.settings.auth)
+            )
+            register_consent_routes(app, provider=oauth_provider, templates=templates)
 
     @app.exception_handler(MemeMCPError)
     async def meme_error_handler(_request: Request, exc: MemeMCPError) -> JSONResponse:
@@ -1166,6 +1184,45 @@ def _resolve_google_principal(app: FastAPI, sub: str, email: str) -> str | None:
         # email UNIQUE rejected the pin: already bound to another sub.
         return None
     return principal
+
+
+def _make_oauth_provider(
+    app: FastAPI, settings: Settings, db_path: str | Path, public_base_url: str
+) -> MemeAuthProvider | None:
+    """Build the MCP OAuth authorization-server provider when enabled, else None.
+
+    Returns None (resource-server-only PAT mode) unless OAUTH_AS_ENABLED. Imported
+    lazily so the oauth package is only loaded when the AS is configured. The
+    store shares the same local SQLite file as the PAT/pin stores; the provider's
+    load_access_token also recognizes existing PATs so the mcp-remote path keeps
+    working (R13).
+    """
+    if not settings.oauth_as_enabled:
+        return None
+    from meme_mcp.oauth.provider import MemeAuthProvider
+    from meme_mcp.oauth.store import SQLiteOAuthStore
+
+    store = SQLiteOAuthStore(
+        db_path,
+        token_pepper=_secret(settings.oauth_token_pepper),
+        secret_enc_key=_secret(settings.oauth_secret_enc_key),
+    )
+    app.state.oauth_store = store
+    provider = MemeAuthProvider(
+        store=store,
+        allowlist=app.state.allowlist,
+        pat_store=app.state.pat_store,
+        pat_pepper=app.state.pat_hash_pepper_value,
+        resource_url=f"{public_base_url.rstrip('/')}/mcp",
+        pin_store=app.state.pin_store,
+    )
+    app.state.oauth_provider = provider
+    return provider
+
+
+def _secret(value: SecretStr | None) -> str:
+    """Unwrap a SecretStr (validated present at startup when the AS is enabled)."""
+    return value.get_secret_value() if value is not None else ""
 
 
 def _make_google_oauth(settings: Settings) -> object:
