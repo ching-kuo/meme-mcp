@@ -87,6 +87,18 @@ class Settings(BaseSettings):
     google_client_secret: SecretStr | None = None
     google_redirect_uri: str | None = None
 
+    # Native MCP OAuth 2.1 authorization server (optional, OFF by default). When
+    # enabled, meme-mcp serves its own /authorize, /token, /register, /revoke and
+    # RFC 8414 metadata so Claude's native custom-connector UI can connect with a
+    # URL + sign-in (no mcp-remote bridge). Both secrets are required when on:
+    # OAUTH_TOKEN_PEPPER hashes issued tokens/codes/nonces at rest;
+    # OAUTH_SECRET_ENC_KEY is a reversible AEAD key encrypting a confidential
+    # client's secret (the SDK compares it directly, so it cannot be hashed).
+    # The issuer/resource origin reuses resolve_public_base_url (no new origin).
+    oauth_as_enabled: bool = False
+    oauth_token_pepper: SecretStr | None = None
+    oauth_secret_enc_key: SecretStr | None = None
+
     embedding_base_url: str = "http://localhost:11434/v1"
     embedding_api_key: SecretStr
     embedding_model: str = "qwen3-embedding:0.6b"
@@ -182,8 +194,33 @@ def validate_at_startup(settings: Settings) -> None:
         _validate_public_base_url(settings, problems)
     if settings.google_oauth_enabled:
         _validate_google_oauth(settings, problems)
+    if settings.oauth_as_enabled:
+        _validate_oauth_as(settings, problems)
     if problems:
         raise ConfigError("; ".join(problems))
+
+
+def _validate_oauth_as(settings: Settings, problems: list[str]) -> None:
+    """Fail fast on a missing or weak OAuth authorization-server secret set.
+
+    Both secrets are always required when the AS is enabled -- the store cannot
+    hash tokens or encrypt a client secret without them. The >=32-char /
+    non-"dev" strength rule is relaxed on a loopback bind, mirroring the
+    session/pat-pepper relaxation keyed on ``mcp_host`` above; note
+    ``_validate_google_oauth`` has no loopback relaxation, so it is not the
+    template for the strength check here.
+    """
+    pepper = _secret_value(settings.oauth_token_pepper)
+    enc_key = _secret_value(settings.oauth_secret_enc_key)
+    if not pepper:
+        problems.append("OAUTH_TOKEN_PEPPER is required when OAUTH_AS_ENABLED is true")
+    if not enc_key:
+        problems.append("OAUTH_SECRET_ENC_KEY is required when OAUTH_AS_ENABLED is true")
+    if settings.mcp_host != "127.0.0.1":
+        if pepper and (len(pepper) < 32 or "dev" in pepper):
+            problems.append("OAUTH_TOKEN_PEPPER must be at least 32 chars and non-placeholder")
+        if enc_key and (len(enc_key) < 32 or "dev" in enc_key):
+            problems.append("OAUTH_SECRET_ENC_KEY must be at least 32 chars and non-placeholder")
 
 
 def _validate_google_oauth(settings: Settings, problems: list[str]) -> None:

@@ -60,3 +60,13 @@ data:
   # to their immutable Google `sub` on first verified sign-in (trust-on-first-use).
   GOOGLE_OAUTH_ENABLED: "false"
   # GOOGLE_REDIRECT_URI: "https://meme.example.com/auth/google/callback"
+
+  # --- Native MCP OAuth 2.1 authorization server (optional, OFF by default) ---
+  # When "true", meme-mcp serves its own /authorize, /token, /register, /revoke
+  # and RFC 8414 metadata at the public origin so Claude's native custom-connector
+  # UI can connect with a URL + sign-in (no `npx mcp-remote` bridge). Login still
+  # delegates to GitHub/Google and token issuance is gated by the friend allowlist;
+  # the existing PAT + mcp-remote path keeps working alongside it. When enabled,
+  # OAUTH_TOKEN_PEPPER and OAUTH_SECRET_ENC_KEY are required (see secret.example.yaml).
+  # The issuer/resource origin reuses PUBLIC_BASE_URL (else the GitHub redirect origin).
+  OAUTH_AS_ENABLED: "false"

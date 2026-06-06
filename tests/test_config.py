@@ -267,3 +267,73 @@ def test_session_cookie_secure_follows_canonical_origin() -> None:
     )
     assert session_cookie_secure(secure) is True
 
+
+# --- Native MCP OAuth authorization server gating (U2) ---
+
+_OAUTH_PEPPER = "oauth-token-pepper-32-chars-value-test"
+_OAUTH_ENC_KEY = "oauth-secret-enc-key-32-chars-value-test"
+
+
+def test_oauth_as_disabled_validates_without_secrets() -> None:
+    # Flag off (default): no OAuth secrets needed; existing deploys are untouched.
+    validate_at_startup(good_settings())
+
+
+def test_oauth_as_enabled_requires_both_secrets() -> None:
+    with pytest.raises(ConfigError, match="OAUTH_TOKEN_PEPPER"):
+        validate_at_startup(good_settings(oauth_as_enabled=True))
+    with pytest.raises(ConfigError, match="OAUTH_SECRET_ENC_KEY"):
+        validate_at_startup(
+            good_settings(oauth_as_enabled=True, oauth_token_pepper=SecretStr(_OAUTH_PEPPER))
+        )
+
+
+def test_oauth_as_enabled_loopback_relaxes_strength() -> None:
+    # Loopback bind (default mcp_host=127.0.0.1): presence required, strength
+    # relaxed -- mirroring the session/pat-pepper localhost behavior.
+    validate_at_startup(
+        good_settings(
+            oauth_as_enabled=True,
+            oauth_token_pepper=SecretStr("short"),
+            oauth_secret_enc_key=SecretStr("short2"),
+        )
+    )
+
+
+def test_oauth_as_enabled_non_loopback_rejects_short_pepper() -> None:
+    with pytest.raises(ConfigError, match="OAUTH_TOKEN_PEPPER"):
+        validate_at_startup(
+            good_settings(
+                mcp_host="0.0.0.0",
+                mcp_allowed_hosts=["meme.igene.tw"],
+                oauth_as_enabled=True,
+                oauth_token_pepper=SecretStr("short"),
+                oauth_secret_enc_key=SecretStr(_OAUTH_ENC_KEY),
+            )
+        )
+
+
+def test_oauth_as_enabled_non_loopback_rejects_dev_enc_key() -> None:
+    with pytest.raises(ConfigError, match="OAUTH_SECRET_ENC_KEY"):
+        validate_at_startup(
+            good_settings(
+                mcp_host="0.0.0.0",
+                mcp_allowed_hosts=["meme.igene.tw"],
+                oauth_as_enabled=True,
+                oauth_token_pepper=SecretStr(_OAUTH_PEPPER),
+                oauth_secret_enc_key=SecretStr("dev-placeholder-key-32-chars-value-xx"),
+            )
+        )
+
+
+def test_oauth_as_enabled_non_loopback_valid_secrets_pass() -> None:
+    validate_at_startup(
+        good_settings(
+            mcp_host="0.0.0.0",
+            mcp_allowed_hosts=["meme.igene.tw"],
+            oauth_as_enabled=True,
+            oauth_token_pepper=SecretStr(_OAUTH_PEPPER),
+            oauth_secret_enc_key=SecretStr(_OAUTH_ENC_KEY),
+        )
+    )
+
