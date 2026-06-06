@@ -51,9 +51,11 @@ def register_consent_routes(
         pending = provider.store.load_pending_request(rid)
         if pending is None:
             return _expired(request)
-        if provider.store.has_approval(principal, pending.client_id):
-            # Previously approved: skip the screen but still enforce the live
-            # allowlist (a de-allowlisted friend is denied here).
+        if provider.store.has_approval(principal, pending.client_id, pending.effective_scopes()):
+            # Previously approved for (at least) these scopes: skip the screen but
+            # still enforce the live allowlist (a de-allowlisted friend is denied
+            # here). A request for a not-yet-approved scope falls through to the
+            # consent screen below -- no silent scope escalation.
             return _issue_or_deny(request, provider, principal, pending, rid)
         return _render_consent(request, templates, principal, pending, rid)
 
@@ -76,7 +78,7 @@ def register_consent_routes(
                 ),
                 status_code=303,
             )
-        provider.store.record_approval(principal, pending.client_id)
+        provider.store.record_approval(principal, pending.client_id, pending.effective_scopes())
         return _issue_or_deny(request, provider, principal, pending, rid)
 
 

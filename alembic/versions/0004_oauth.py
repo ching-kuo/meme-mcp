@@ -88,6 +88,7 @@ def upgrade() -> None:
         CREATE TABLE IF NOT EXISTS oauth_client_approvals (
             principal TEXT NOT NULL,
             client_id TEXT NOT NULL,
+            scopes TEXT NOT NULL DEFAULT '',
             approved_at TEXT NOT NULL,
             PRIMARY KEY (principal, client_id)
         )

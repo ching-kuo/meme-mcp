@@ -236,14 +236,19 @@ def _run_allowlist(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def _oauth_store(settings: Settings, db_path: str | Path) -> SQLiteOAuthStore | None:
-    """Open the OAuth store iff the AS is enabled and both secrets are present."""
-    if not settings.oauth_as_enabled:
-        return None
+    """Open the OAuth store whenever both secrets are configured.
+
+    Gated on the secrets being present, NOT on ``oauth_as_enabled``: an admin
+    cleanup (allowlist removal) or GC must still revoke stale grants when the AS
+    is temporarily disabled but was used before (otherwise a disable -> remove ->
+    re-enable sequence would leave stale approvals/refresh families behind). When
+    the secrets were never set, no OAuth grant can exist, so None is correct.
+    """
     pepper = settings.oauth_token_pepper.get_secret_value() if settings.oauth_token_pepper else ""
     enc = settings.oauth_secret_enc_key.get_secret_value() if settings.oauth_secret_enc_key else ""
     if not pepper or not enc:
         return None
-    # Lazy import so a flag-off CLI never loads the oauth package (cryptography).
+    # Lazy import so a CLI without OAuth secrets never loads the oauth package.
     from meme_mcp.oauth.store import SQLiteOAuthStore
 
     return SQLiteOAuthStore(db_path, token_pepper=pepper, secret_enc_key=enc)
@@ -255,7 +260,9 @@ def _revoke_oauth_grants(settings: Settings, db_path: str | Path, principals: li
     Defense-in-depth: the per-request ``is_authorized`` re-check (KTD4) already
     denies the removed friend's next call. Proactively revoking refresh families
     and deleting approvals means they cannot refresh in the interim and a re-added
-    friend re-consents (R8/R11). No-op when the AS is disabled.
+    friend re-consents (R8/R11). Runs whenever the OAuth secrets are configured,
+    even if the AS is currently disabled, so stale grants do not survive a
+    disable -> remove -> re-enable sequence.
     """
     store = _oauth_store(settings, db_path)
     if store is None:
@@ -269,10 +276,7 @@ def _run_oauth_gc(settings: Settings, *, ttl_days: int | None) -> int:
     db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
     store = _oauth_store(settings, db_path)
     if store is None:
-        print(
-            "error: oauth-gc requires OAUTH_AS_ENABLED with OAUTH_TOKEN_PEPPER and "
-            "OAUTH_SECRET_ENC_KEY set"
-        )
+        print("error: oauth-gc requires OAUTH_TOKEN_PEPPER and OAUTH_SECRET_ENC_KEY to be set")
         return 2
     ttl = ttl_days if ttl_days is not None else settings.oauth_client_gc_ttl_days
     tokens = store.gc_expired_tokens()

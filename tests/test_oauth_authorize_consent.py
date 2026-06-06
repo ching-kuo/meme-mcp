@@ -155,7 +155,7 @@ def test_approve_records_approval_and_redirects_with_code(tmp_path: Path) -> Non
     location = resp.headers["location"]
     assert location.startswith(REDIRECT)
     assert "code=" in location and "state=xyz" in location
-    assert provider.store.has_approval("github:alice", "c-pub") is True
+    assert provider.store.has_approval("github:alice", "c-pub", ["meme:read"]) is True
 
 
 def test_non_allowlisted_denied_at_issuance_even_after_approving(tmp_path: Path) -> None:
@@ -172,8 +172,8 @@ def test_non_allowlisted_denied_at_issuance_even_after_approving(tmp_path: Path)
 
 def test_approved_client_skips_screen_but_rechecks_allowlist(tmp_path: Path) -> None:
     app, provider, allow = build(tmp_path)
-    provider.store.record_approval("github:alice", "c-pub")
-    rid = _pending(provider)
+    provider.store.record_approval("github:alice", "c-pub", ["meme:read"])
+    rid = _pending(provider)  # requests ["meme:read"] -> covered by the approval
     # Pre-approved: GET auto-issues (no screen) and redirects with a code.
     resp = _client(app, github_login="alice").get(f"/oauth/consent/{rid}", follow_redirects=False)
     assert resp.status_code == 303 and "code=" in resp.headers["location"]
@@ -198,6 +198,19 @@ def test_consent_post_without_csrf_rejected(tmp_path: Path) -> None:
     assert resp.status_code == 403
     # CSRF failed before any consent logic: the pending request is untouched.
     assert provider.store.load_pending_request(rid) is not None
+
+
+def test_prior_read_approval_does_not_auto_grant_write(tmp_path: Path) -> None:
+    # Scope escalation guard: a client previously approved for meme:read must NOT
+    # be auto-issued a code for a later meme:write request -- the consent screen
+    # is re-shown instead.
+    app, provider, _ = build(tmp_path)
+    provider.store.record_approval("github:alice", "c-pub", ["meme:read"])
+    rid = _pending(provider, scopes=["meme:read", "meme:write"])
+    resp = _client(app, github_login="alice").get(f"/oauth/consent/{rid}", follow_redirects=False)
+    assert resp.status_code == 200  # consent screen, not a 303 auto-issue
+    assert "meme:write" in resp.text
+    assert "code=" not in resp.headers.get("location", "")
 
 
 def test_confused_deputy_unapproved_client_not_auto_issued(tmp_path: Path) -> None:

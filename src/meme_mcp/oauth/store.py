@@ -254,23 +254,44 @@ class SQLiteOAuthStore:
 
     # -- per-(principal, client) consent approvals ------------------------------
 
-    def record_approval(self, principal: str, client_id: str) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO oauth_client_approvals (principal, client_id, approved_at)
-                VALUES (?, ?, ?)
-                """,
-                (principal, client_id, self._clock().isoformat()),
-            )
+    def record_approval(self, principal: str, client_id: str, scopes: list[str]) -> None:
+        """Record (or widen) a per-(principal, client) consent grant.
 
-    def has_approval(self, principal: str, client_id: str) -> bool:
+        Stores the UNION of any previously-approved scopes and the newly-granted
+        set, so a friend who incrementally approves more scopes keeps the broader
+        grant. The scope dimension is what makes ``has_approval`` reject a silent
+        escalation (e.g. a meme:read approval does not auto-grant a later
+        meme:write request)."""
+        now = self._clock().isoformat()
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT 1 FROM oauth_client_approvals WHERE principal = ? AND client_id = ?",
+                "SELECT scopes FROM oauth_client_approvals WHERE principal = ? AND client_id = ?",
                 (principal, client_id),
             ).fetchone()
-        return row is not None
+            merged = set(_split_scopes(row[0])) if row is not None else set()
+            merged.update(scopes)
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO oauth_client_approvals
+                    (principal, client_id, scopes, approved_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (principal, client_id, _join_scopes(sorted(merged)), now),
+            )
+
+    def has_approval(self, principal: str, client_id: str, scopes: list[str]) -> bool:
+        """True only when this (principal, client) was approved for a scope set
+        that COVERS every requested scope. A request for a scope not previously
+        approved returns False so the consent screen is re-shown (no silent
+        scope escalation)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT scopes FROM oauth_client_approvals WHERE principal = ? AND client_id = ?",
+                (principal, client_id),
+            ).fetchone()
+        if row is None:
+            return False
+        return set(scopes).issubset(set(_split_scopes(row[0])))
 
     def delete_approvals_for_principal(self, principal: str) -> int:
         with self._connect() as conn:
@@ -604,7 +625,18 @@ class SQLiteOAuthStore:
         """Rotate a refresh token: mint a new (access, refresh) pair in the same
         family. An active token is marked rotated and linked to its successor; a
         grace-window token mints a fresh pair without revoking (idempotent retry).
-        Returns the plaintext pair, or None when the token is not rotatable."""
+        Returns the plaintext pair, or None when the token is not rotatable.
+
+        Atomicity: this method is synchronous and never awaits, so on the
+        single-process serving deployment the asyncio loop runs it to completion
+        before any other coroutine (including the in-process ``/revoke`` handler),
+        and the family-revocation re-check in ``_fetch_usable_refresh`` runs on the
+        same connection just before minting -- so it cannot mint into a family
+        revoked in-process. The only cross-process writer is the CLI allowlist
+        removal, whose effect is independently enforced by the live
+        ``is_authorized`` re-check on every request (KTD4). A future multi-worker
+        deployment against the same file would need a ``BEGIN IMMEDIATE`` guard
+        here (see System-Wide Impact in the plan)."""
         now = self._clock()
         with self._connect() as conn:
             fetched = self._fetch_usable_refresh(conn, token, now)

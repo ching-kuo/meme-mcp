@@ -301,15 +301,21 @@ def test_public_client_stores_no_secret(tmp_path: Path) -> None:
 # -- consent approvals --------------------------------------------------------
 
 
-def test_approval_upsert_and_absence(tmp_path: Path) -> None:
+def test_approval_is_scope_aware(tmp_path: Path) -> None:
     store = make_store(tmp_path)
-    assert store.has_approval("github:alice", "c1") is False
-    store.record_approval("github:alice", "c1")
-    store.record_approval("github:alice", "c1")  # idempotent
-    assert store.has_approval("github:alice", "c1") is True
-    assert store.has_approval("github:alice", "c2") is False
+    assert store.has_approval("github:alice", "c1", ["meme:read"]) is False
+    store.record_approval("github:alice", "c1", ["meme:read"])
+    store.record_approval("github:alice", "c1", ["meme:read"])  # idempotent
+    assert store.has_approval("github:alice", "c1", ["meme:read"]) is True
+    # A not-yet-approved scope is NOT covered -> consent must be re-shown (no
+    # silent escalation from a prior meme:read approval to meme:write).
+    assert store.has_approval("github:alice", "c1", ["meme:read", "meme:write"]) is False
+    # Approving the broader set unions; both are then covered.
+    store.record_approval("github:alice", "c1", ["meme:write"])
+    assert store.has_approval("github:alice", "c1", ["meme:read", "meme:write"]) is True
+    assert store.has_approval("github:alice", "c2", ["meme:read"]) is False
     assert store.delete_approvals_for_principal("github:alice") == 1
-    assert store.has_approval("github:alice", "c1") is False
+    assert store.has_approval("github:alice", "c1", ["meme:read"]) is False
 
 
 # -- pending requests ---------------------------------------------------------

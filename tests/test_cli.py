@@ -649,9 +649,10 @@ def _oauth_store(tmp_path) -> SQLiteOAuthStore:
     return SQLiteOAuthStore(db_path, token_pepper=_OAUTH_PEPPER, secret_enc_key=_OAUTH_ENC_KEY)
 
 
-def test_oauth_gc_cli_disabled_errors(tmp_path, capsys) -> None:
+def test_oauth_gc_cli_without_secrets_errors(tmp_path, capsys) -> None:
+    # No OAuth secrets configured -> the store cannot open -> clean error, exit 2.
     assert run(["oauth-gc"], settings(tmp_path)) == 2
-    assert "OAUTH_AS_ENABLED" in capsys.readouterr().out
+    assert "OAUTH_TOKEN_PEPPER" in capsys.readouterr().out
 
 
 def test_oauth_gc_cli_runs(tmp_path, capsys) -> None:
@@ -665,9 +666,24 @@ def test_allowlist_remove_revokes_oauth_grants(tmp_path) -> None:
     _access, refresh = store.issue_initial_tokens(
         client_id="c1", principal="github:friend", scopes=["meme:read"], resource=None
     )
-    store.record_approval("github:friend", "c1")
+    store.record_approval("github:friend", "c1", ["meme:read"])
     assert run(["allowlist", "add", "friend"], app_settings) == 0
     assert run(["allowlist", "remove", "friend"], app_settings) == 0
     # Refresh family revoked and consent cleared (a re-added friend re-consents).
     assert store.load_refresh_token(refresh) is None
-    assert store.has_approval("github:friend", "c1") is False
+    assert store.has_approval("github:friend", "c1", ["meme:read"]) is False
+
+
+def test_allowlist_remove_revokes_oauth_grants_even_when_flag_off(tmp_path) -> None:
+    # Finding 3: admin revocation must not depend on the serving flag. With the AS
+    # disabled but the secrets still configured (a disable-for-maintenance window),
+    # `allowlist remove` must still revoke grants + clear consent.
+    app_settings = _oauth_settings(tmp_path).model_copy(update={"oauth_as_enabled": False})
+    store = _oauth_store(tmp_path)
+    _access, refresh = store.issue_initial_tokens(
+        client_id="c1", principal="github:friend", scopes=["meme:read"], resource=None
+    )
+    store.record_approval("github:friend", "c1", ["meme:read"])
+    assert run(["allowlist", "remove", "friend"], app_settings) == 0
+    assert store.load_refresh_token(refresh) is None
+    assert store.has_approval("github:friend", "c1", ["meme:read"]) is False

@@ -199,7 +199,13 @@ Two auth surfaces share one tree:
   to also advertise the public-client `none` auth method. Human login reuses the existing
   GitHub/Google sign-in; the AS issues its **own** opaque tokens (never forwarding an upstream
   token), gated by a per-`(user, client)` consent screen (`oauth/consent.py`) and the friend
-  allowlist *at issuance*. Opaque access/refresh tokens are HMAC-hashed at rest with rotation +
+  allowlist *at issuance*. Remembered consent is **scope-aware**: an approval records the granted
+  scope set and the screen is skipped only when the new request is a subset, so a prior `meme:read`
+  approval cannot silently escalate to `meme:write` (it re-prompts). Removing a friend from the
+  allowlist revokes their refresh families and clears their approvals (`allowlist remove`), and
+  that admin revocation runs whenever the OAuth secrets are configured — even with the AS flag
+  currently off — so a disable→remove→re-enable sequence cannot leave a stale grant behind.
+  Opaque access/refresh tokens are HMAC-hashed at rest with rotation +
   reuse detection; a confidential client's secret is stored encrypted (reversible, since the SDK
   compares it directly). This **reverses** the earlier decision to ship no RFC 8414 metadata; the
   reversal was deliberate — the recurring launch-race pain and native-connector reach (claude.ai +
