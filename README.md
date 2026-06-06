@@ -186,6 +186,23 @@ GHCR packages are private by default, so make the package public (or attach an
 
 ## MCP client snippets
 
+### Native custom connector (OAuth, recommended)
+
+When the server runs with `OAUTH_AS_ENABLED=true`, add it directly in Claude's **Settings →
+Connectors → Add custom connector**: enter `https://your-host.example/mcp` and sign in when
+prompted. Claude registers itself (Dynamic Client Registration), you sign in with the same
+GitHub/Google account the operator allowlisted, approve the one-time per-app consent screen, and
+you are connected — no Node, no `npx`, no config file, and no shared token to copy around. Because
+Anthropic's cloud brokers the connection (not your laptop), the boot/wake connect-timeout race
+that affects the local `mcp-remote` bridge does not occur, and the connector works on claude.ai,
+Desktop, and mobile. The server delegates login to GitHub/Google and issues its own short-lived,
+allowlist-gated tokens (it never sees or forwards your GitHub/Google token).
+
+The PAT + `mcp-remote` path below remains fully supported — it is the only option when the AS is
+disabled, and an existing PAT keeps working against an AS-enabled server too.
+
+### PAT + `mcp-remote`
+
 Mint your token first: sign in at `https://your-host.example/account` and click Generate
 (pick a scope and expiry), then copy the plaintext — it is shown exactly once. Export it as
 `MEME_MCP_PAT` for the Codex snippet, or paste it into the Claude Desktop
@@ -238,6 +255,11 @@ service, `mcp-remote@0.1.38` under Node 26 intermittently failed with
 `Unexpected content type: null` or undici connect timeouts even though the same PAT
 and endpoint returned `200 OK` via plain `curl`. Running the same `mcp-remote`
 command under Node 24/22 succeeded without server changes.
+
+If you stay on the bridge, `scripts/meme-mcp-launch.sh` is an interim wrapper that polls
+`/healthz` before exec'ing `mcp-remote`, turning the boot/wake connect-timeout race into a brief
+wait (set the config `command` to the script instead of `npx`). The native custom connector above
+fixes the race structurally and is the preferred path once `OAUTH_AS_ENABLED` is on.
 
 ## Bilingual UI (en / zh-TW)
 

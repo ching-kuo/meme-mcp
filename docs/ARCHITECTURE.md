@@ -187,17 +187,34 @@ Two auth surfaces share one tree:
   The session-cookie `Secure` flag follows the same canonical origin (`config.session_cookie_secure`). FastMCP only registers that metadata route inside the mounted `/mcp`
   sub-app, so `create_app` mirrors it on the parent app at the origin root
   (`/.well-known/oauth-protected-resource/mcp`) so the advertised URL actually resolves.
-  Known limitation: the document lists the app as its own `authorization_server`, but the app
-  serves no RFC 8414 `/.well-known/oauth-authorization-server` (MCP auth is static-PAT, not an
-  OAuth authorization-code flow). A client that presents a valid PAT gets `200` and never walks
-  the discovery chain; only a token-less strict-OAuth client would hit the gap.
-- MCP (`/mcp` and `/api/mcp/*`) uses a static PAT in `Authorization: Bearer …`. Verification is
-  HMAC-SHA-256 with a server-side pepper. The verifier emits `meme:read` for every valid PAT
-  and adds `meme:write` only when the PAT was issued with `readwrite` capability. The MCP
-  `generate` tool and the `/api/mcp/generate`, `/api/uploads/analyze`, and
-  `/api/uploads/{id}/approve` HTTP routes gate on `meme:write` (or `friend.capability ==
-  "readwrite"` for HTTP) before any backend work; read-scope PATs receive `UNAUTHORIZED` at
-  the wrapper.
+- **MCP OAuth 2.1 authorization server (`OAUTH_AS_ENABLED`, OFF by default; KTD — supersedes the
+  prior "no MCP OAuth" decision).** When enabled, meme-mcp *is* its own authorization server, so
+  Claude's native custom-connector UI can connect with a URL + sign-in — no `npx mcp-remote`
+  bridge and no boot/wake connect-timeout race (Anthropic's cloud brokers the connection).
+  `create_mcp_server` switches FastMCP from `token_verifier=` to
+  `auth_server_provider=MemeAuthProvider` (`oauth/`), which auto-mounts the five OAuth routes plus
+  RFC 8414 metadata. FastMCP mounts those *inside* `/mcp`, but the metadata advertises them at the
+  origin root, so `create_app` mirrors them onto the parent app at the origin root
+  (`build_auth_server_routes`) — the same trick as the RFC 9728 mirror — and patches the metadata
+  to also advertise the public-client `none` auth method. Human login reuses the existing
+  GitHub/Google sign-in; the AS issues its **own** opaque tokens (never forwarding an upstream
+  token), gated by a per-`(user, client)` consent screen (`oauth/consent.py`) and the friend
+  allowlist *at issuance*. Opaque access/refresh tokens are HMAC-hashed at rest with rotation +
+  reuse detection; a confidential client's secret is stored encrypted (reversible, since the SDK
+  compares it directly). This **reverses** the earlier decision to ship no RFC 8414 metadata; the
+  reversal was deliberate — the recurring launch-race pain and native-connector reach (claude.ai +
+  mobile, no shared PAT) now outweigh the avoided authorization-flow complexity. When the flag is
+  OFF, behavior is unchanged and the prior incomplete-discovery gap remains for a strict-OAuth
+  client (a valid PAT still gets `200`).
+- MCP (`/mcp` and `/api/mcp/*`) accepts a PAT in `Authorization: Bearer …` in **both** modes. PAT
+  verification is HMAC-SHA-256 with a server-side pepper; in AS mode the provider's
+  `load_access_token` recognizes both newly-issued OAuth access tokens **and** existing PATs, so
+  the `mcp-remote` + PAT path keeps working with no client change. A token grants `meme:read`
+  always and `meme:write` only for a `readwrite` capability (shared `scopes_for_capability`, so
+  the PAT and OAuth paths cannot diverge). The MCP `generate` tool and the `/api/mcp/generate`,
+  `/api/uploads/analyze`, and `/api/uploads/{id}/approve` HTTP routes gate on `meme:write` (or
+  `friend.capability == "readwrite"` for HTTP) before any backend work; read-scope tokens receive
+  `UNAUTHORIZED` at the wrapper.
 
 The MCP tool wrappers derive the rate-limit actor from the validated `AccessToken` via
 `mcp.server.auth.middleware.auth_context.get_access_token()` — never from
@@ -213,15 +230,18 @@ entries, PATs, history, and audit trails, never linked or merged. Google sign-in
 (`GOOGLE_OAUTH_ENABLED`, OFF by default, mirroring reverse-image); when off, only GitHub login is
 offered and the GitHub path is untouched.
 
-- **One authorization predicate, three front doors (KTD).** `auth/authorization.py` is a
+- **One authorization predicate, four front doors (KTD).** `auth/authorization.py` is a
   dependency-free leaf exposing `normalize_principal` and `is_authorized(principal, *, allowlist,
   pin_store)`. It imports nothing from `depends`/`session`/`app`, because `session.py` already
   imports `require_pat` from `depends.py`; a leaf both import *down* into is the only placement
   that keeps the import graph acyclic while guaranteeing the browser session
-  (`session_login`), the web PAT (`require_pat`), and the MCP transport PAT
-  (`PatTokenVerifier.verify_token`) cannot diverge. Authorization is re-evaluated **per request**
-  against live allowlist + pin state (no caching), so de-allowlisting or evicting a pin denies the
-  *next* request, not only fresh logins.
+  (`session_login`), the web PAT (`require_pat`), the MCP transport PAT
+  (`PatTokenVerifier.verify_token`), and — when the AS is enabled — the MCP OAuth token path
+  (`MemeAuthProvider.load_access_token`) cannot diverge. Authorization is re-evaluated **per
+  request** against live allowlist + pin state (no caching), so de-allowlisting or evicting a pin
+  denies the *next* request, not only fresh logins. `tests/test_oauth_front_door_contract.py`
+  asserts the OAuth path delegates to `is_authorized` so a future refactor cannot inline a bare
+  membership check.
 
 - **Idempotent, prefix-preserving normalization (KTD).** `normalize_principal` is the single place
   the default `github:` prefix is applied. A value already carrying a known `provider:` prefix is
