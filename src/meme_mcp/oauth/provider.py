@@ -44,10 +44,12 @@ from meme_mcp.auth.authorization import (
     is_authorized,
 )
 from meme_mcp.auth.pat import SQLitePatStore, scopes_for_capability, verify_pat
-from meme_mcp.oauth.store import ACCESS_TTL_SECONDS, SQLiteOAuthStore
+from meme_mcp.oauth.store import ACCESS_TTL_SECONDS, PendingRequest, SQLiteOAuthStore
 
 # The parent-app consent route (U4) the provider redirects to from authorize().
-# A relative path resolves against the issuer origin where /authorize is served.
+# The single-use nonce is the final path segment (not a query) so the login
+# return target survives safe_next. A relative path resolves against the issuer
+# origin where /authorize is served.
 CONSENT_PATH = "/oauth/consent"
 
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
@@ -145,7 +147,24 @@ class MemeAuthProvider(
             resource=params.resource,
             state=params.state,
         )
-        return f"{CONSENT_PATH}?rid={nonce}"
+        return f"{CONSENT_PATH}/{nonce}"
+
+    def create_authorization_code(self, *, principal: str, pending: PendingRequest) -> str:
+        """Issue a single-use authorization code for a consented request.
+
+        Called by the consent route (U4) after the friend approves and passes the
+        live allowlist check; the code is bound to the client + redirect + PKCE
+        challenge carried by the pending request. Empty requested scopes default
+        to ``meme:read`` (least privilege)."""
+        return self.store.create_auth_code(
+            client_id=pending.client_id,
+            redirect_uri=pending.redirect_uri,
+            redirect_uri_provided_explicitly=pending.redirect_uri_provided_explicitly,
+            code_challenge=pending.code_challenge,
+            scopes=list(pending.scopes) or ["meme:read"],
+            principal=principal,
+            resource=pending.resource,
+        )
 
     # -- authorization-code exchange (PKCE already verified by the SDK) ---------
 

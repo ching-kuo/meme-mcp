@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block body %}
+  <main class="landing">
+    <h1>Authorize connection</h1>
+    <p>
+      Signed in as <code>{{ friend_login }}</code>. An application is asking to
+      connect to meme-mcp on your behalf.
+    </p>
+    <dl class="oauth-consent">
+      <dt>Application</dt>
+      <dd><code>{{ client_label }}</code></dd>
+      <dt>Permissions</dt>
+      <dd>
+        <ul>
+          {% for scope in scopes %}
+            <li><code>{{ scope }}</code></li>
+          {% endfor %}
+        </ul>
+      </dd>
+      <dt>Redirects to</dt>
+      <dd><code>{{ redirect_uri }}</code></dd>
+    </dl>
+    <form method="post" action="{{ consent_action }}" class="oauth-consent__form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="decision" value="approve">
+      <p class="cta-row">
+        <button class="cta cta-primary" type="submit">Approve</button>
+        <a class="cta" href="/browse">Cancel</a>
+      </p>
+    </form>
+  </main>
+{% endblock %}

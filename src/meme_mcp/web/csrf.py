@@ -32,6 +32,7 @@ CSRF_HEADER_NAME = "X-CSRF-Token"
 DEFAULT_NEXT = "/browse"
 ALLOWED_NEXT_PATHS = frozenset({"/upload", "/browse", "/account"})
 TEMPLATE_DETAIL_PREFIX = "/templates/"
+OAUTH_CONSENT_PREFIX = "/oauth/consent/"
 
 # The language switch (KTD7) must work on every rendered page, including the
 # anonymous landing page "/" that the login-oriented ALLOWED_NEXT_PATHS omits.
@@ -56,6 +57,24 @@ def _is_template_detail(path: str) -> bool:
     if not path.startswith(TEMPLATE_DETAIL_PREFIX):
         return False
     rest = path[len(TEMPLATE_DETAIL_PREFIX) :]
+    return bool(rest) and "/" not in rest and rest not in {".", ".."}
+
+
+def _is_oauth_consent(path: str) -> bool:
+    """True for a single-segment OAuth consent path (``/oauth/consent/<nonce>``).
+
+    The native-connector authorize flow may bounce an unauthenticated friend
+    through GitHub/Google login and back; the login return target carries the
+    single-use pending-request nonce as the final path segment (never a query),
+    so it survives :func:`safe_next` without query preservation. Same in-origin
+    allowlist discipline as :func:`_is_template_detail`: one trailing segment, no
+    embedded slash, no ``.``/``..``. Open-redirect safety is unaffected -- the
+    scheme/netloc checks in :func:`safe_next` still run first.
+    """
+
+    if not path.startswith(OAUTH_CONSENT_PREFIX):
+        return False
+    rest = path[len(OAUTH_CONSENT_PREFIX) :]
     return bool(rest) and "/" not in rest and rest not in {".", ".."}
 
 
@@ -89,6 +108,29 @@ def require_csrf(request: Request) -> None:
     if not isinstance(session_token, str) or not session_token or not header_token:
         raise MemeMCPError(ErrorCode.FORBIDDEN, [{"field": "csrf", "reason": "missing"}])
     if not secrets.compare_digest(session_token, header_token):
+        raise MemeMCPError(ErrorCode.FORBIDDEN, [{"field": "csrf", "reason": "mismatch"}])
+
+
+async def require_csrf_form(request: Request) -> None:
+    """Validate a ``csrf_token`` form field against the session token.
+
+    The OAuth consent screen is a server-rendered HTML form submitted as a
+    top-level navigation (not a fetch), so the header-only :func:`require_csrf`
+    cannot guard it. This is the OWASP synchronizer-token pattern: the token is
+    unpredictable, bound to the signed session cookie, and validated under a
+    constant-time compare. It is safe because the same-origin policy prevents a
+    cross-origin attacker from reading the victim's token to forge the field --
+    the property the header transport gives for free but a server-rendered form
+    cannot rely on. Scoped to this one route; the header path remains the default
+    everywhere else.
+    """
+
+    session_token = request.session.get(CSRF_SESSION_KEY)
+    form = await request.form()
+    form_token = form.get(CSRF_HEADER_NAME) or form.get("csrf_token")
+    if not isinstance(session_token, str) or not session_token or not isinstance(form_token, str):
+        raise MemeMCPError(ErrorCode.FORBIDDEN, [{"field": "csrf", "reason": "missing"}])
+    if not secrets.compare_digest(session_token, form_token):
         raise MemeMCPError(ErrorCode.FORBIDDEN, [{"field": "csrf", "reason": "mismatch"}])
 
 
@@ -133,7 +175,11 @@ def safe_next(
     parts = urlsplit(raw)
     if parts.scheme or parts.netloc:
         return default
-    if parts.path not in allowlist and not _is_template_detail(parts.path):
+    if (
+        parts.path not in allowlist
+        and not _is_template_detail(parts.path)
+        and not _is_oauth_consent(parts.path)
+    ):
         return default
     if keep_query and parts.query:
         return f"{parts.path}?{parts.query}"

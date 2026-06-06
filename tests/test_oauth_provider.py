@@ -171,8 +171,8 @@ async def test_authorize_returns_consent_redirect_with_nonce(tmp_path: Path) -> 
         resource=RESOURCE,
     )
     url = await provider.authorize(client, params)
-    assert url.startswith("/oauth/consent?rid=")
-    nonce = url.split("rid=", 1)[1]
+    assert url.startswith("/oauth/consent/")
+    nonce = url.rsplit("/", 1)[1]
     pending = provider.store.load_pending_request(nonce)
     assert pending is not None and pending.client_id == "c-pub"
 
