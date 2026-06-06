@@ -11,10 +11,12 @@ from meme_mcp.auth.pat import SQLitePatStore, verify_pat
 from meme_mcp.cli.gc_uploads import DEFAULT_GRACE_WINDOW
 from meme_mcp.cli.reindex_embeddings import reindex_embeddings
 from meme_mcp.config import Settings
+from meme_mcp.db.engine import sqlite_path
 from meme_mcp.db.templates import SQLiteTemplateRepository, TemplateCreate
 from meme_mcp.db.uploads import PendingUploadStore
 from meme_mcp.db.vectors import EmbeddingMetaStore, SQLiteVecStore
 from meme_mcp.embeddings.client import validate_embedding_model
+from meme_mcp.oauth.store import SQLiteOAuthStore
 from meme_mcp.rendering.image_store import ImageStore, make_image_store
 
 
@@ -624,3 +626,48 @@ def test_pat_revoke_google_sub_after_pin_gone(tmp_path, capsys) -> None:
     pins.delete_by_sub("sub-A")  # pin gone; email->sub no longer resolves
     assert run(["pat", "revoke", "google:sub-A"], s) == 0
     assert "revoked" in capsys.readouterr().out
+
+
+# --- OAuth authorization-server CLI (U6) ---
+
+_OAUTH_PEPPER = "oauth-token-pepper-32-chars-value-test"
+_OAUTH_ENC_KEY = "oauth-secret-enc-key-32-chars-value-test"
+
+
+def _oauth_settings(tmp_path) -> Settings:
+    return settings(tmp_path).model_copy(
+        update={
+            "oauth_as_enabled": True,
+            "oauth_token_pepper": SecretStr(_OAUTH_PEPPER),
+            "oauth_secret_enc_key": SecretStr(_OAUTH_ENC_KEY),
+        }
+    )
+
+
+def _oauth_store(tmp_path) -> SQLiteOAuthStore:
+    db_path = sqlite_path(_oauth_settings(tmp_path).database_url, tmp_path / "meme.db")
+    return SQLiteOAuthStore(db_path, token_pepper=_OAUTH_PEPPER, secret_enc_key=_OAUTH_ENC_KEY)
+
+
+def test_oauth_gc_cli_disabled_errors(tmp_path, capsys) -> None:
+    assert run(["oauth-gc"], settings(tmp_path)) == 2
+    assert "OAUTH_AS_ENABLED" in capsys.readouterr().out
+
+
+def test_oauth_gc_cli_runs(tmp_path, capsys) -> None:
+    assert run(["oauth-gc"], _oauth_settings(tmp_path)) == 0
+    assert "oauth-gc: removed" in capsys.readouterr().out
+
+
+def test_allowlist_remove_revokes_oauth_grants(tmp_path) -> None:
+    app_settings = _oauth_settings(tmp_path)
+    store = _oauth_store(tmp_path)
+    _access, refresh = store.issue_initial_tokens(
+        client_id="c1", principal="github:friend", scopes=["meme:read"], resource=None
+    )
+    store.record_approval("github:friend", "c1")
+    assert run(["allowlist", "add", "friend"], app_settings) == 0
+    assert run(["allowlist", "remove", "friend"], app_settings) == 0
+    # Refresh family revoked and consent cleared (a re-added friend re-consents).
+    assert store.load_refresh_token(refresh) is None
+    assert store.has_approval("github:friend", "c1") is False

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 from meme_mcp.auth.allowlist import FileAllowlist, canonical_email
+from meme_mcp.auth.authorization import normalize_principal
 from meme_mcp.auth.google_pins import SQLiteGooglePinStore
 from meme_mcp.auth.pat import (
     DEFAULT_CAPABILITY,
@@ -25,6 +27,7 @@ from meme_mcp.config import Settings, validate_at_startup
 from meme_mcp.db.engine import sqlite_path
 from meme_mcp.db.templates import SQLiteTemplateRepository
 from meme_mcp.db.vectors import EmbeddingMetaStore, SQLiteVecStore
+from meme_mcp.oauth.store import SQLiteOAuthStore
 
 
 def main() -> None:
@@ -82,6 +85,8 @@ def run(argv: Sequence[str] | None = None, settings: Settings | None = None) -> 
         )
     if args.command == "gc-uploads":
         return run_gc_uploads(app_settings, dry_run=args.dry_run)
+    if args.command == "oauth-gc":
+        return _run_oauth_gc(app_settings, ttl_days=args.ttl_days)
     if args.command == "migrate":
         return run_migrate(
             app_settings,
@@ -160,6 +165,8 @@ def _parser() -> argparse.ArgumentParser:
     gc.add_argument("--dry-run", action="store_true")
     gc_uploads = subcommands.add_parser("gc-uploads")
     gc_uploads.add_argument("--dry-run", action="store_true")
+    oauth_gc = subcommands.add_parser("oauth-gc")
+    oauth_gc.add_argument("--ttl-days", type=int, default=None)
     migrate = subcommands.add_parser("migrate")
     migrate.add_argument("--target-db", required=True)
     migrate.add_argument("--target-s3-endpoint", required=True)
@@ -200,6 +207,7 @@ def _run_allowlist(args: argparse.Namespace, settings: Settings) -> int:
         return 0
     if args.allowlist_command == "remove":
         allowlist.remove(entry)
+        db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
         # Terminal revocation (R13): removing a Google invite also deletes the pin
         # so re-inviting the same email cannot reactivate the prior sub. Handle
         # both the namespaced form and a bare email (which a hand-edited file could
@@ -207,11 +215,64 @@ def _run_allowlist(args: argparse.Namespace, settings: Settings) -> int:
         google_email = (
             subject if sep and provider.lower() == "google" else entry if "@" in entry else None
         )
+        # OAuth principal(s) to revoke. Resolve the Google sub BEFORE deleting the
+        # pin (the principal is google:<sub>, not the email).
+        principals: list[str] = []
         if google_email:
-            db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
-            SQLiteGooglePinStore(db_path).delete_by_email(canonical_email(google_email))
+            pin_store = SQLiteGooglePinStore(db_path)
+            sub = pin_store.sub_for_email(canonical_email(google_email))
+            if sub is not None:
+                principals.append(f"google:{sub}")
+            pin_store.delete_by_email(canonical_email(google_email))
+        else:
+            with contextlib.suppress(ValueError):
+                principals.append(normalize_principal(entry))
+        _revoke_oauth_grants(settings, db_path, principals)
         return 0
     raise SystemExit(f"unknown allowlist command: {args.allowlist_command}")
+
+
+def _oauth_store(settings: Settings, db_path: object) -> SQLiteOAuthStore | None:
+    """Open the OAuth store iff the AS is enabled and both secrets are present."""
+    if not settings.oauth_as_enabled:
+        return None
+    pepper = settings.oauth_token_pepper.get_secret_value() if settings.oauth_token_pepper else ""
+    enc = settings.oauth_secret_enc_key.get_secret_value() if settings.oauth_secret_enc_key else ""
+    if not pepper or not enc:
+        return None
+    return SQLiteOAuthStore(db_path, token_pepper=pepper, secret_enc_key=enc)  # type: ignore[arg-type]
+
+
+def _revoke_oauth_grants(settings: Settings, db_path: object, principals: list[str]) -> None:
+    """Revoke active OAuth grants + clear consent for de-allowlisted principals.
+
+    Defense-in-depth: the per-request ``is_authorized`` re-check (KTD4) already
+    denies the removed friend's next call. Proactively revoking refresh families
+    and deleting approvals means they cannot refresh in the interim and a re-added
+    friend re-consents (R8/R11). No-op when the AS is disabled.
+    """
+    store = _oauth_store(settings, db_path)
+    if store is None:
+        return
+    for principal in principals:
+        store.revoke_families_for_principal(principal)
+        store.delete_approvals_for_principal(principal)
+
+
+def _run_oauth_gc(settings: Settings, *, ttl_days: int | None) -> int:
+    db_path = sqlite_path(settings.database_url, Path(settings.storage_dir) / "meme.db")
+    store = _oauth_store(settings, db_path)
+    if store is None:
+        print(
+            "error: oauth-gc requires OAUTH_AS_ENABLED with OAUTH_TOKEN_PEPPER and "
+            "OAUTH_SECRET_ENC_KEY set"
+        )
+        return 2
+    ttl = ttl_days if ttl_days is not None else settings.oauth_client_gc_ttl_days
+    tokens = store.gc_expired_tokens()
+    clients = store.gc_unused_clients(ttl)
+    print(f"oauth-gc: removed {tokens} expired/revoked token rows and {clients} unused clients")
+    return 0
 
 
 def _resolve_pat_subject(principal: str, pin_store: SQLiteGooglePinStore) -> str | None:

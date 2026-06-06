@@ -119,3 +119,29 @@ def test_unauthenticated_mcp_returns_401_with_resource_metadata(tmp_path) -> Non
     )
     assert resp.status_code == 401
     assert "resource_metadata" in resp.headers.get("www-authenticate", "")
+
+
+# -- per-IP rate limiting on the pre-auth endpoints (U6) ----------------------
+
+
+def _rate_limited_client(tmp_path) -> TestClient:
+    settings = _settings(tmp_path, enabled=True).model_copy(update={"rate_oauth_per_min": 2})
+    return TestClient(create_app(settings), base_url=BASE_URL)
+
+
+def test_register_rate_limited(tmp_path) -> None:
+    client = _rate_limited_client(tmp_path)
+    body = {"redirect_uris": [REDIRECT], "token_endpoint_auth_method": "none"}
+    assert client.post("/register", json=body).status_code == 201
+    assert client.post("/register", json=body).status_code == 201
+    assert client.post("/register", json=body).status_code == 429  # third trips the limit
+
+
+def test_token_rate_limited_per_ip(tmp_path) -> None:
+    client = _rate_limited_client(tmp_path)
+    bad = {"grant_type": "authorization_code", "code": "x", "client_id": "y", "code_verifier": "z"}
+    # The first two reach the handler (rejected on their own merits, not 429);
+    # the third is blocked by the per-IP limiter before the handler runs.
+    for _ in range(2):
+        assert client.post("/token", data=bad).status_code != 429
+    assert client.post("/token", data=bad).status_code == 429

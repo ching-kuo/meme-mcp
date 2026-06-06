@@ -98,6 +98,12 @@ class Settings(BaseSettings):
     oauth_as_enabled: bool = False
     oauth_token_pepper: SecretStr | None = None
     oauth_secret_enc_key: SecretStr | None = None
+    # Per-IP rate limit (requests/min) on the pre-auth OAuth endpoints
+    # (/register, /authorize, /token); open-DCR abuse mitigation (R7, U6).
+    rate_oauth_per_min: int = 60
+    # Delete registered clients with no successful authorization within this many
+    # days (open-DCR storage hygiene), consistent with render_gc_ttl_days.
+    oauth_client_gc_ttl_days: int = 30
 
     embedding_base_url: str = "http://localhost:11434/v1"
     embedding_api_key: SecretStr

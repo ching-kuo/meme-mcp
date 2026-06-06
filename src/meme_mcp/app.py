@@ -203,6 +203,47 @@ class McpSlashNormalizeMiddleware:
         await self.app(scope, receive, send)
 
 
+class OAuthRateLimitMiddleware:
+    """Per-IP rate limit on the pre-auth OAuth endpoints (/register, /authorize,
+    /token).
+
+    These are SDK-generated routes mirrored onto the parent app, so the
+    decorator-based ``pat_admin_limiter`` does not apply; this path-matching ASGI
+    middleware fills the gap (R7/U6 open-DCR abuse mitigation). It reads only the
+    ASGI scope (never the request body), so the ``/token`` form stays intact for
+    the SDK ``TokenHandler`` downstream. The allowlist-at-issuance check remains
+    the primary gate; this is defense-in-depth.
+    """
+
+    _PATHS = frozenset({"/register", "/authorize", "/token"})
+
+    def __init__(self, app: ASGIApp, limiter: WindowedRateLimiter) -> None:
+        self.app = app
+        self.limiter = limiter
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope.get("path") in self._PATHS:
+            client = scope.get("client")
+            ip = client[0] if client else "unknown"
+            try:
+                self.limiter.hit(f"{scope['path']}:{ip}")
+            except MemeMCPError as exc:
+                payload = json.dumps(make_error(exc.error_code, exc.errors)).encode()
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": status_for_error(exc.error_code),
+                        "headers": [
+                            (b"content-type", b"application/json"),
+                            (b"cache-control", b"no-store"),
+                        ],
+                    }
+                )
+                await send({"type": "http.response.body", "body": payload})
+                return
+        await self.app(scope, receive, send)
+
+
 class LocaleVaryMiddleware:
     """Add ``Vary: Cookie, Accept-Language`` to HTML responses.
 
@@ -483,6 +524,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 build_auth_server_routes(oauth_provider, app.state.mcp_server.settings.auth)
             )
             register_consent_routes(app, provider=oauth_provider, templates=templates)
+            app.state.oauth_limiter = WindowedRateLimiter(settings.rate_oauth_per_min, 60)
+            app.add_middleware(OAuthRateLimitMiddleware, limiter=app.state.oauth_limiter)
 
     @app.exception_handler(MemeMCPError)
     async def meme_error_handler(_request: Request, exc: MemeMCPError) -> JSONResponse:
