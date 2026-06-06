@@ -98,10 +98,6 @@ def _session_principal(request: Request) -> str | None:
         return None
 
 
-def _scopes_for(pending: PendingRequest) -> list[str]:
-    return list(pending.scopes) or ["meme:read"]
-
-
 def _issue_or_deny(
     request: Request,
     provider: MemeAuthProvider,
@@ -137,7 +133,7 @@ def _render_consent(
         {
             "friend_login": display_label(principal, pin_store),
             "client_label": pending.client_id,
-            "scopes": _scopes_for(pending),
+            "scopes": pending.effective_scopes(),
             "redirect_uri": pending.redirect_uri,
             "consent_action": f"{CONSENT_PATH}/{rid}",
             "csrf_token": _csrf_token(request),

@@ -37,6 +37,8 @@ from typing import Literal
 from cryptography.fernet import Fernet, InvalidToken
 from mcp.shared.auth import OAuthClientInformationFull
 
+from meme_mcp.oauth.schema import TABLE_DDL
+
 # Token lifetimes. Access tokens are deliberately short (rotation + reuse
 # detection govern the long-lived grant); the authorization code is single-use
 # and short; the pending-request record must outlive an interactive login.
@@ -111,6 +113,13 @@ class PendingRequest:
     resource: str | None
     state: str | None
 
+    def effective_scopes(self) -> list[str]:
+        """The scopes that will actually be granted: the requested set, or
+        ``meme:read`` (least privilege) when none were requested. The consent
+        screen renders exactly this list and the provider mints the code with it,
+        so the displayed grant and the issued grant cannot diverge."""
+        return list(self.scopes) or ["meme:read"]
+
 
 def generate_token() -> str:
     """A fresh opaque token / code / nonce (>=160 bits, per RFC 6749 §10.10)."""
@@ -162,7 +171,7 @@ class SQLiteOAuthStore:
         self._clock = clock or (lambda: datetime.now(UTC))
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
-            for ddl in _TABLE_DDL:
+            for ddl in TABLE_DDL:
                 conn.execute(ddl)
 
     def _connect(self) -> sqlite3.Connection:
@@ -538,37 +547,48 @@ class SQLiteOAuthStore:
             family_id=str(row[5]),
         )
 
-    def load_refresh_token(self, token: str) -> StoredRefreshToken | None:
-        """Load a refresh token for use, applying reuse detection.
+    def _fetch_usable_refresh(
+        self, conn: sqlite3.Connection, token: str, now: datetime
+    ) -> tuple[tuple[object, ...], RefreshState] | None:
+        """Fetch a refresh-token row and classify it for use, applying reuse detection.
 
-        Returns the token with ``state="active"`` (never rotated) or
+        Returns the raw row paired with ``state="active"`` (never rotated) or
         ``state="grace"`` (rotated within the grace window — a legitimate retry).
-        Returns None for unknown / revoked / expired tokens AND for a token
-        rotated away beyond the grace window — the latter is reuse, so the whole
-        family is revoked as a side effect (R9)."""
+        Returns None for unknown / revoked / expired tokens, malformed
+        ``rotated_at``, AND for a token rotated away beyond the grace window — the
+        last is reuse, so the whole family is revoked on ``conn`` as a side effect
+        (R9). Shared by ``load_refresh_token`` and ``rotate_refresh_token`` so the
+        two paths cannot drift in their reuse semantics.
+        """
+        row = conn.execute(
+            """
+            SELECT client_id, principal, scopes, resource, family_id,
+                   expires_at, rotated_at, revoked_at
+            FROM oauth_refresh_tokens WHERE token_hash = ?
+            """,
+            (self._hash(token),),
+        ).fetchone()
+        if row is None or row[7] is not None or _expired(row[5], now):
+            return None
+        rotated_at = _parse_dt(row[6])
+        if row[6] is not None and rotated_at is None:
+            return None  # malformed rotated_at: fail closed
+        if rotated_at is None:
+            return row, "active"
+        if (now - rotated_at) <= _REFRESH_GRACE:
+            return row, "grace"
+        self._revoke_family(conn, str(row[4]))  # rotated away beyond grace == reuse
+        return None
+
+    def load_refresh_token(self, token: str) -> StoredRefreshToken | None:
+        """Load a refresh token for use, applying reuse detection (see
+        ``_fetch_usable_refresh``)."""
         now = self._clock()
         with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT client_id, principal, scopes, resource, family_id,
-                       expires_at, rotated_at, revoked_at
-                FROM oauth_refresh_tokens WHERE token_hash = ?
-                """,
-                (self._hash(token),),
-            ).fetchone()
-            if row is None or row[7] is not None or _expired(row[5], now):
-                return None
-            rotated_at = _parse_dt(row[6])
-            if row[6] is not None and rotated_at is None:
-                return None  # malformed rotated_at: fail closed
-            state: RefreshState
-            if rotated_at is None:
-                state = "active"
-            elif (now - rotated_at) <= _REFRESH_GRACE:
-                state = "grace"
-            else:
-                self._revoke_family(conn, str(row[4]))
-                return None
+            fetched = self._fetch_usable_refresh(conn, token, now)
+        if fetched is None:
+            return None
+        row, state = fetched
         return StoredRefreshToken(
             token=token,
             client_id=str(row[0]),
@@ -587,22 +607,10 @@ class SQLiteOAuthStore:
         Returns the plaintext pair, or None when the token is not rotatable."""
         now = self._clock()
         with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT client_id, principal, scopes, resource, family_id,
-                       expires_at, rotated_at, revoked_at
-                FROM oauth_refresh_tokens WHERE token_hash = ?
-                """,
-                (self._hash(token),),
-            ).fetchone()
-            if row is None or row[7] is not None or _expired(row[5], now):
+            fetched = self._fetch_usable_refresh(conn, token, now)
+            if fetched is None:
                 return None
-            rotated_at = _parse_dt(row[6])
-            if row[6] is not None and rotated_at is None:
-                return None
-            if rotated_at is not None and (now - rotated_at) > _REFRESH_GRACE:
-                self._revoke_family(conn, str(row[4]))
-                return None
+            row, state = fetched
             client_id, principal, family_id = str(row[0]), str(row[1]), str(row[4])
             resource = None if row[3] is None else str(row[3])
             # Narrow to the intersection of granted and requested scopes (the SDK
@@ -614,7 +622,9 @@ class SQLiteOAuthStore:
             refresh = self._mint_refresh(
                 conn, family_id, digest, client_id, principal, new_scopes, resource
             )
-            if rotated_at is None:
+            # Only the first rotation marks the token rotated + links its successor;
+            # a grace-window retry mints a fresh pair without touching rotated_at.
+            if state == "active":
                 conn.execute(
                     "UPDATE oauth_refresh_tokens SET rotated_at = ?, superseded_by_hash = ? "
                     "WHERE token_hash = ?",
@@ -699,84 +709,3 @@ class SQLiteOAuthStore:
                 (cutoff, cutoff),
             )
         return cursor.rowcount
-
-
-_TABLE_DDL: tuple[str, ...] = (
-    """
-    CREATE TABLE IF NOT EXISTS oauth_clients (
-        client_id TEXT PRIMARY KEY,
-        client_info TEXT NOT NULL,
-        client_secret_encrypted TEXT,
-        client_secret_expires_at INTEGER,
-        registered_at TEXT NOT NULL,
-        last_used_at TEXT
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS oauth_auth_codes (
-        code_hash TEXT PRIMARY KEY,
-        client_id TEXT NOT NULL,
-        redirect_uri TEXT NOT NULL,
-        redirect_uri_provided_explicitly INTEGER NOT NULL,
-        code_challenge TEXT NOT NULL,
-        scopes TEXT NOT NULL,
-        principal TEXT NOT NULL,
-        resource TEXT,
-        expires_at TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        consumed_at TEXT
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
-        token_hash TEXT PRIMARY KEY,
-        family_id TEXT NOT NULL,
-        prev_token_hash TEXT,
-        client_id TEXT NOT NULL,
-        principal TEXT NOT NULL,
-        scopes TEXT NOT NULL,
-        resource TEXT,
-        expires_at TEXT,
-        created_at TEXT NOT NULL,
-        rotated_at TEXT,
-        revoked_at TEXT,
-        superseded_by_hash TEXT
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS oauth_access_tokens (
-        token_hash TEXT PRIMARY KEY,
-        family_id TEXT NOT NULL,
-        client_id TEXT NOT NULL,
-        principal TEXT NOT NULL,
-        scopes TEXT NOT NULL,
-        resource TEXT,
-        expires_at TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        revoked_at TEXT
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS oauth_client_approvals (
-        principal TEXT NOT NULL,
-        client_id TEXT NOT NULL,
-        approved_at TEXT NOT NULL,
-        PRIMARY KEY (principal, client_id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS oauth_pending_requests (
-        nonce_hash TEXT PRIMARY KEY,
-        client_id TEXT NOT NULL,
-        redirect_uri TEXT NOT NULL,
-        redirect_uri_provided_explicitly INTEGER NOT NULL,
-        code_challenge TEXT NOT NULL,
-        scopes TEXT NOT NULL,
-        resource TEXT,
-        state TEXT,
-        created_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL,
-        consumed_at TEXT
-    )
-    """,
-)

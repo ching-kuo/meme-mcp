@@ -235,7 +235,7 @@ def _run_allowlist(args: argparse.Namespace, settings: Settings) -> int:
     raise SystemExit(f"unknown allowlist command: {args.allowlist_command}")
 
 
-def _oauth_store(settings: Settings, db_path: object) -> SQLiteOAuthStore | None:
+def _oauth_store(settings: Settings, db_path: str | Path) -> SQLiteOAuthStore | None:
     """Open the OAuth store iff the AS is enabled and both secrets are present."""
     if not settings.oauth_as_enabled:
         return None
@@ -246,10 +246,10 @@ def _oauth_store(settings: Settings, db_path: object) -> SQLiteOAuthStore | None
     # Lazy import so a flag-off CLI never loads the oauth package (cryptography).
     from meme_mcp.oauth.store import SQLiteOAuthStore
 
-    return SQLiteOAuthStore(db_path, token_pepper=pepper, secret_enc_key=enc)  # type: ignore[arg-type]
+    return SQLiteOAuthStore(db_path, token_pepper=pepper, secret_enc_key=enc)
 
 
-def _revoke_oauth_grants(settings: Settings, db_path: object, principals: list[str]) -> None:
+def _revoke_oauth_grants(settings: Settings, db_path: str | Path, principals: list[str]) -> None:
     """Revoke active OAuth grants + clear consent for de-allowlisted principals.
 
     Defense-in-depth: the per-request ``is_authorized`` re-check (KTD4) already

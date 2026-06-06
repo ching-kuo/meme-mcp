@@ -154,14 +154,14 @@ class MemeAuthProvider(
 
         Called by the consent route (U4) after the friend approves and passes the
         live allowlist check; the code is bound to the client + redirect + PKCE
-        challenge carried by the pending request. Empty requested scopes default
-        to ``meme:read`` (least privilege)."""
+        challenge carried by the pending request. The granted scopes are exactly
+        the ones the consent screen displayed (see ``PendingRequest``)."""
         return self.store.create_auth_code(
             client_id=pending.client_id,
             redirect_uri=pending.redirect_uri,
             redirect_uri_provided_explicitly=pending.redirect_uri_provided_explicitly,
             code_challenge=pending.code_challenge,
-            scopes=list(pending.scopes) or ["meme:read"],
+            scopes=pending.effective_scopes(),
             principal=principal,
             resource=pending.resource,
         )
