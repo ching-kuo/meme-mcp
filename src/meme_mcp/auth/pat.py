@@ -226,6 +226,14 @@ class SQLitePatStore:
         )
 
 
+def scopes_for_capability(capability: Capability) -> list[str]:
+    """The MCP scope set a capability grants: ``meme:read`` always, ``meme:write``
+    only for a readwrite principal (R6). Shared by the PAT bearer verifier and the
+    OAuth provider so the two front doors cannot map capabilities differently (KTD5).
+    """
+    return ["meme:read", "meme:write"] if capability == "readwrite" else ["meme:read"]
+
+
 def hash_pat(plaintext: str, pepper: str) -> str:
     return hmac.new(pepper.encode(), plaintext.encode(), "sha256").hexdigest()
 

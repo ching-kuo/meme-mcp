@@ -13,7 +13,7 @@ from meme_mcp.auth.authorization import (
     SupportsPinLookup,
     is_authorized,
 )
-from meme_mcp.auth.pat import SQLitePatStore, verify_pat
+from meme_mcp.auth.pat import SQLitePatStore, scopes_for_capability, verify_pat
 from meme_mcp.envelope import Envelope
 from meme_mcp.errors import ErrorCode, MemeMCPError
 
@@ -110,8 +110,7 @@ class PatTokenVerifier(TokenVerifier):
         # No caching: each request re-checks live allowlist + pin state (R12).
         if not is_authorized(principal, allowlist=self.allowlist, pin_store=self.pin_store):
             return None
-        scopes = ["meme:read"] + (["meme:write"] if capability == "readwrite" else [])
-        return AccessToken(token=token, client_id=principal, scopes=scopes)
+        return AccessToken(token=token, client_id=principal, scopes=scopes_for_capability(capability))
 
 
 def create_mcp_server(
@@ -199,9 +198,16 @@ def create_mcp_server(
 
 def _authenticated_actor() -> str:
     access = get_access_token()
-    if access is None or not access.client_id:
+    if access is None:
         raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "auth", "reason": "missing"}])
-    return access.client_id
+    # An OAuth token (MemeAccessToken) carries the friend `principal` separately
+    # from the OAuth `client_id`, so actions attribute to the friend, not the
+    # registered client (F-003). A PAT token sets client_id == principal, so the
+    # client_id fallback preserves the existing behavior when the AS flag is off.
+    actor = getattr(access, "principal", None) or access.client_id
+    if not actor:
+        raise MemeMCPError(ErrorCode.UNAUTHORIZED, [{"field": "auth", "reason": "missing"}])
+    return actor
 
 
 def _require_write_scope() -> None:
