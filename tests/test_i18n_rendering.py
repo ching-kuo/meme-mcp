@@ -317,11 +317,19 @@ def test_orphan_key_check() -> None:
         # t() calls appear with either quote style in the templates.
         return f'"{token}"' in text or f"'{token}'" in text
 
+    def _quoted_dynamic_prefix(key: str) -> bool:
+        # Keys reached via t("prefix." ~ value) appear in the template only as the
+        # quoted prefix (e.g. t("oauth_consent.scope." ~ scope)); the full key is
+        # built at render time. Treat the key as referenced if any dotted prefix of
+        # it is quoted with a trailing dot.
+        parts = key.split(".")
+        return any(_quoted(".".join(parts[:i]) + ".") for i in range(1, len(parts)))
+
     referenced: set[str] = set()
     for key in MESSAGES:
         if key.startswith("js."):
             continue
-        if _quoted(key):
+        if _quoted(key) or _quoted_dynamic_prefix(key):
             referenced.add(key)
         # Plural keys are reached via plural(n, "base"); the base is the literal.
         if key.endswith((".one", ".other")) and _quoted(key.rsplit(".", 1)[0]):

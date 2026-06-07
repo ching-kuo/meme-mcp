@@ -188,10 +188,13 @@ def test_mcp_public_oauth_metadata_uses_public_host_and_root_well_known(tmp_path
         metadata = client.get("/.well-known/oauth-protected-resource/mcp", follow_redirects=False)
         assert metadata.status_code == 200
         assert metadata.headers["content-type"] == "application/json"
+        # The protected-resource metadata advertises the full supported set
+        # (read + write) so a connector requests write and `generate` works;
+        # required_scopes (the access floor) stays meme:read-only.
         assert metadata.json() == {
             "resource": "https://meme.igene.tw/mcp",
             "authorization_servers": ["https://meme.igene.tw/"],
-            "scopes_supported": ["meme:read"],
+            "scopes_supported": ["meme:read", "meme:write"],
             "bearer_methods_supported": ["header"],
         }
 

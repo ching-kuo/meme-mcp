@@ -79,6 +79,47 @@ def test_protected_resource_points_at_live_issuer(tmp_path) -> None:
     assert [s.rstrip("/") for s in doc["authorization_servers"]] == [BASE_URL]
 
 
+def test_metadata_advertises_write_scope_so_connectors_can_generate(tmp_path) -> None:
+    # Regression: the protected-resource metadata once advertised only meme:read,
+    # so a connector requested a read-only token and got 401 on generate/
+    # record_outcome (write-gated). The root PRM (the one the 401 challenge points
+    # clients to) and the AS metadata must both surface meme:write.
+    client = _client(tmp_path, enabled=True)
+    prm = client.get("/.well-known/oauth-protected-resource/mcp").json()
+    assert prm["scopes_supported"] == ["meme:read", "meme:write"]
+    as_meta = client.get("/.well-known/oauth-authorization-server").json()
+    assert "meme:write" in as_meta["scopes_supported"]
+
+
+def test_dcr_client_without_scope_may_request_write(tmp_path) -> None:
+    # A DCR client (like Claude) registers without a `scope` field; default_scopes
+    # must then make meme:write requestable, or authorize rejects it as
+    # invalid_scope and the read-only 401-on-generate bug returns.
+    client = _client(tmp_path, enabled=True)
+    reg = client.post(
+        "/register",
+        json={"redirect_uris": [REDIRECT], "token_endpoint_auth_method": "none"},
+    )
+    assert reg.status_code == 201
+    resp = client.get(
+        "/authorize",
+        params={
+            "response_type": "code",
+            "client_id": reg.json()["client_id"],
+            "redirect_uri": REDIRECT,
+            "code_challenge": _challenge(),
+            "code_challenge_method": "S256",
+            "resource": f"{BASE_URL}/mcp",
+            "scope": "meme:read meme:write",
+        },
+        follow_redirects=False,
+    )
+    # Parked for consent (302 -> /oauth/consent/...), NOT redirected back to the
+    # client with error=invalid_scope.
+    assert resp.status_code == 302
+    assert resp.headers["location"].startswith("/oauth/consent/")
+
+
 def test_register_and_authorize_resolve_at_origin_root(tmp_path) -> None:
     client = _client(tmp_path, enabled=True)
     reg = client.post(

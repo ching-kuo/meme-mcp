@@ -500,11 +500,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # which makes the external path `/mcp/.well-known/...` instead of
             # the spec path at the origin root. Mirror the route on the parent
             # app so the advertised resource_metadata URL actually resolves.
+            # Advertise the full supported set (read + write), not just the
+            # required floor: a connector reads this metadata to decide which
+            # scopes to request, so omitting meme:write yields a read-only token
+            # that 401s on generate/record_outcome. required_scopes stays the
+            # access floor; write is gated per-tool, not at the resource.
+            #
+            # This root mirror is the PRM clients actually use: the SDK's 401
+            # WWW-Authenticate challenge advertises resource_metadata at the
+            # origin root (build_resource_metadata_url drops the /mcp mount), so
+            # an RFC 9728 client fetches THIS route. FastMCP also mounts its own
+            # PRM at the nested /mcp/.well-known/oauth-protected-resource/mcp
+            # hardwired to required_scopes (AuthSettings has no scopes_supported
+            # field to override it), but nothing advertises that nested path, so
+            # its read-only advertisement is dead and this mirror supersedes it.
+            from meme_mcp.auth.pat import SUPPORTED_SCOPES
+
             app.router.routes.extend(
                 create_protected_resource_routes(
                     resource_url=auth_settings.resource_server_url,
                     authorization_servers=[auth_settings.issuer_url],
-                    scopes_supported=auth_settings.required_scopes,
+                    scopes_supported=list(SUPPORTED_SCOPES),
                 )
             )
         app.mount("/mcp", app.state.mcp_server.streamable_http_app())

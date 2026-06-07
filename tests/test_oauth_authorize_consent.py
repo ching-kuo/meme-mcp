@@ -132,12 +132,32 @@ def test_anonymous_consent_redirects_to_login_preserving_nonce(tmp_path: Path) -
 def test_first_time_client_shows_consent_screen(tmp_path: Path) -> None:
     app, provider, _ = build(tmp_path)
     rid = _pending(provider, scopes=["meme:read", "meme:write"])
-    resp = _client(app, github_login="alice").get(f"/oauth/consent/{rid}", follow_redirects=False)
+    resp = _client(app, github_login="alice").get(
+        f"/oauth/consent/{rid}",
+        headers={"Accept-Language": "en"},
+        follow_redirects=False,
+    )
     assert resp.status_code == 200
     assert "c-pub" in resp.text
     assert "meme:read" in resp.text and "meme:write" in resp.text
+    # The human-readable (English) scope copy explains what write grants.
+    assert "Generate memes and record which templates you used" in resp.text
     assert REDIRECT in resp.text
     assert resp.headers.get("x-frame-options") == "DENY"
+
+
+def test_consent_screen_localizes_scope_copy_zh_tw(tmp_path: Path) -> None:
+    app, provider, _ = build(tmp_path)
+    rid = _pending(provider, scopes=["meme:read", "meme:write"])
+    resp = _client(app, github_login="alice").get(
+        f"/oauth/consent/{rid}",
+        headers={"Accept-Language": "zh-TW"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 200
+    assert '<html lang="zh-TW">' in resp.text
+    assert "授權連線" in resp.text  # title
+    assert "產生迷因並記錄你使用過的範本" in resp.text  # meme:write description
 
 
 # -- approval issues a code ---------------------------------------------------

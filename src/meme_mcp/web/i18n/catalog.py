@@ -86,6 +86,25 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh-TW": "若要申請存取權，請聯絡管理者將你加入允許清單。",
     },
     "restricted.back": {"en": "Back to browse", "zh-TW": "返回瀏覽"},
+    # --- oauth_consent.html --------------------------------------------------
+    "oauth_consent.title": {"en": "Authorize connection", "zh-TW": "授權連線"},
+    "oauth_consent.intro": {
+        "en": "An application is asking to connect to meme-mcp on your behalf.",
+        "zh-TW": "有一個應用程式要求代表你連線到 meme-mcp。",
+    },
+    "oauth_consent.application": {"en": "Application", "zh-TW": "應用程式"},
+    "oauth_consent.permissions": {"en": "Permissions", "zh-TW": "權限"},
+    "oauth_consent.redirects_to": {"en": "Redirects to", "zh-TW": "重新導向至"},
+    "oauth_consent.approve": {"en": "Approve", "zh-TW": "核准"},
+    "oauth_consent.cancel": {"en": "Cancel", "zh-TW": "取消"},
+    "oauth_consent.scope.meme:read": {
+        "en": "Search and view your meme templates",
+        "zh-TW": "搜尋並檢視你的迷因範本",
+    },
+    "oauth_consent.scope.meme:write": {
+        "en": "Generate memes and record which templates you used",
+        "zh-TW": "產生迷因並記錄你使用過的範本",
+    },
     # --- browse.html ---------------------------------------------------------
     "browse.eyebrow": {"en": "Template library", "zh-TW": "範本庫"},
     "browse.match.one": {

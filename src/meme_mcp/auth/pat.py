@@ -226,12 +226,29 @@ class SQLitePatStore:
         )
 
 
+READ_SCOPE = "meme:read"
+WRITE_SCOPE = "meme:write"
+
+# REQUIRED_SCOPES is the access floor advertised as the resource's required scope
+# and enforced on every MCP request (find + the handshake). SUPPORTED_SCOPES is the
+# full set the resource understands -- advertised in the protected-resource metadata
+# so a connector requests write too (generate/record_outcome need it) instead of a
+# read-only token. They differ on purpose: write is gated per-tool (_require_write_scope),
+# not at the resource floor, so read-only clients keep working.
+REQUIRED_SCOPES = [READ_SCOPE]
+SUPPORTED_SCOPES = [READ_SCOPE, WRITE_SCOPE]
+
+# Human-readable consent-screen copy for each scope lives in the bilingual i18n
+# catalog under ``oauth_consent.scope.<scope>`` (rendered by oauth_consent.html),
+# not here, so the descriptions stay localized (en + zh-TW).
+
+
 def scopes_for_capability(capability: Capability) -> list[str]:
     """The MCP scope set a capability grants: ``meme:read`` always, ``meme:write``
     only for a readwrite principal (R6). Shared by the PAT bearer verifier and the
     OAuth provider so the two front doors cannot map capabilities differently (KTD5).
     """
-    return ["meme:read", "meme:write"] if capability == "readwrite" else ["meme:read"]
+    return list(SUPPORTED_SCOPES) if capability == "readwrite" else [READ_SCOPE]
 
 
 def hash_pat(plaintext: str, pepper: str) -> str:

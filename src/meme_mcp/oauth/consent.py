@@ -135,6 +135,8 @@ def _render_consent(
         {
             "friend_login": display_label(principal, pin_store),
             "client_label": pending.client_id,
+            # Names only; the template renders each scope's human description via
+            # t("oauth_consent.scope." ~ scope) so the copy stays bilingual.
             "scopes": pending.effective_scopes(),
             "redirect_uri": pending.redirect_uri,
             "consent_action": f"{CONSENT_PATH}/{rid}",

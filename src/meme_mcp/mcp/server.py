@@ -17,7 +17,14 @@ from meme_mcp.auth.authorization import (
     SupportsPinLookup,
     is_authorized,
 )
-from meme_mcp.auth.pat import SQLitePatStore, scopes_for_capability, verify_pat
+from meme_mcp.auth.pat import (
+    REQUIRED_SCOPES,
+    SUPPORTED_SCOPES,
+    WRITE_SCOPE,
+    SQLitePatStore,
+    scopes_for_capability,
+    verify_pat,
+)
 from meme_mcp.envelope import Envelope
 from meme_mcp.errors import ErrorCode, MemeMCPError
 
@@ -152,15 +159,25 @@ def create_mcp_server(
     auth_config: dict[str, Any] = {
         "issuer_url": public_base_url,
         "resource_server_url": f"{public_base_url}/mcp",
-        "required_scopes": ["meme:read"],
+        "required_scopes": list(REQUIRED_SCOPES),
     }
     auth_kwargs: dict[str, Any] = {}
     if auth_provider is not None:
         auth_kwargs["auth_server_provider"] = auth_provider
+        # default_scopes intentionally includes meme:write, not just the read
+        # floor. A DCR client that registers without a `scope` field (the SDK
+        # copies default_scopes into client.scope) must still be able to request
+        # write at /authorize, or generate/record_outcome 401 -- the bug this
+        # fixes. Codex flagged this as a least-privilege softening: every
+        # scope-less registration becomes write-ELIGIBLE. Accepted for this
+        # friends-only deployment because eligibility is not a grant -- the
+        # consent screen requires explicit per-scope approval and every write
+        # tool re-checks meme:write via _require_write_scope(). valid_scopes is
+        # the hard ceiling either way.
         auth_config["client_registration_options"] = {
             "enabled": True,
-            "valid_scopes": ["meme:read", "meme:write"],
-            "default_scopes": ["meme:read"],
+            "valid_scopes": list(SUPPORTED_SCOPES),
+            "default_scopes": list(SUPPORTED_SCOPES),
         }
         auth_config["revocation_options"] = {"enabled": True}
     else:
@@ -233,7 +250,7 @@ def _authenticated_actor() -> str:
 
 def _require_write_scope() -> None:
     access = get_access_token()
-    if access is None or "meme:write" not in access.scopes:
+    if access is None or WRITE_SCOPE not in access.scopes:
         raise MemeMCPError(
             ErrorCode.UNAUTHORIZED,
             [{"field": "scope", "reason": "meme:write_required"}],

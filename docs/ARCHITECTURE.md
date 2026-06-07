@@ -187,6 +187,13 @@ Two auth surfaces share one tree:
   The session-cookie `Secure` flag follows the same canonical origin (`config.session_cookie_secure`). FastMCP only registers that metadata route inside the mounted `/mcp`
   sub-app, so `create_app` mirrors it on the parent app at the origin root
   (`/.well-known/oauth-protected-resource/mcp`) so the advertised URL actually resolves.
+  The mirror advertises `scopes_supported = ["meme:read", "meme:write"]` (the full
+  `SUPPORTED_SCOPES`), **not** just the `required_scopes` read floor: a connector reads this
+  metadata to decide which scopes to request, so advertising read-only yielded a read-only token
+  that 401'd on `generate`/`record_outcome`. FastMCP's own nested copy at
+  `/mcp/.well-known/oauth-protected-resource/mcp` is hardwired to `required_scopes`
+  (`AuthSettings` has no `scopes_supported` field), but the 401 `WWW-Authenticate` challenge points
+  clients to the origin-root mirror, so the nested read-only copy is never the one a client uses.
 - **MCP OAuth 2.1 authorization server (`OAUTH_AS_ENABLED`, OFF by default; KTD — supersedes the
   prior "no MCP OAuth" decision).** When enabled, meme-mcp *is* its own authorization server, so
   Claude's native custom-connector UI can connect with a URL + sign-in — no `npx mcp-remote`
@@ -199,9 +206,14 @@ Two auth surfaces share one tree:
   to also advertise the public-client `none` auth method. Human login reuses the existing
   GitHub/Google sign-in; the AS issues its **own** opaque tokens (never forwarding an upstream
   token), gated by a per-`(user, client)` consent screen (`oauth/consent.py`) and the friend
-  allowlist *at issuance*. Remembered consent is **scope-aware**: an approval records the granted
+  allowlist *at issuance*. The consent screen is fully localized (en + `zh-TW`) through the i18n
+  catalog like the rest of the web UI; each requested scope renders its own human description via
+  `t("oauth_consent.scope." ~ scope)`. Remembered consent is **scope-aware**: an approval records the granted
   scope set and the screen is skipped only when the new request is a subset, so a prior `meme:read`
-  approval cannot silently escalate to `meme:write` (it re-prompts). Removing a friend from the
+  approval cannot silently escalate to `meme:write` (it re-prompts). DCR clients (Claude's connector)
+  register with `default_scopes = ["meme:read", "meme:write"]`, so a scope-less registration is
+  write-*eligible* — but eligibility is not a grant: the user must still approve `meme:write` on the
+  consent screen, and every write tool re-checks it via `_require_write_scope()`. Removing a friend from the
   allowlist revokes their refresh families and clears their approvals (`allowlist remove`), and
   that admin revocation runs whenever the OAuth secrets are configured — even with the AS flag
   currently off — so a disable→remove→re-enable sequence cannot leave a stale grant behind.
