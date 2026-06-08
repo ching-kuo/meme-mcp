@@ -1,11 +1,12 @@
 from io import BytesIO
 
+import numpy as np
 import pytest
 from PIL import Image
 
 from meme_mcp.rendering import pipeline
 from meme_mcp.rendering.image_store import FilesystemImageStore, S3ImageStore
-from meme_mcp.rendering.pipeline import TemplateSpec, render_meme
+from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_meme
 from meme_mcp.rendering.text_layout import fit_font, select_wrap
 
 
@@ -135,3 +136,37 @@ def test_select_wrap_uses_multiple_lines_for_long_text() -> None:
         "if logs are so smart why cant they find bugs", (160, 80), pipeline._font_path(), 66
     )
     assert len(lines) >= 2
+
+
+def _navy_template(width: int, height: int) -> bytes:
+    out = BytesIO()
+    Image.new("RGB", (width, height), "navy").save(out, format="PNG")
+    return out.getvalue()
+
+
+@pytest.mark.parametrize(
+    "anchor_y",
+    [0.0, 0.8],  # boxes flush to the top and bottom image edges
+)
+def test_long_caption_in_edge_anchored_box_is_not_clipped(anchor_y: float) -> None:
+    # Regression: layout under-measured rendered height (summed tight glyph bounds
+    # instead of PIL's real line metrics), so a long caption in a short edge-anchored
+    # box (scale_y 0.2) overflowed past the image edge and the renderer clipped it.
+    box = {
+        "anchor_x": 0.0,
+        "anchor_y": anchor_y,
+        "scale_x": 1.0,
+        "scale_y": 0.2,
+        "align": "center",
+    }
+    spec = TemplateSpec(
+        template_id="clip-test",
+        image_bytes=_navy_template(500, 500),
+        slots=[{"name": "slot", "position": "top", "box": box}],
+    )
+    image = Image.open(BytesIO(preview_transient(spec, ["X" * 80]))).convert("RGB")
+    arr = np.asarray(image)
+    caption_ink = arr.min(axis=2) > 200  # white fill of the caption
+    # No caption pixels may bleed into the extreme edge rows -> nothing was clipped.
+    assert caption_ink[0].sum() == 0
+    assert caption_ink[-1].sum() == 0

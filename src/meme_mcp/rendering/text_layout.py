@@ -1,10 +1,23 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import cast
 
-from PIL import ImageFont
+from PIL import Image, ImageDraw, ImageFont
+
+from meme_mcp.rendering.emoji import (
+    contains_emoji,
+    emoji_advance,
+    emoji_token_len,
+    is_emoji_cluster,
+    segment_runs,
+)
 
 MeasuredFont = ImageFont.ImageFont | ImageFont.FreeTypeFont
+
+# A 1x1 scratch surface used only to ask PIL for the true rendered extent of a
+# multi-line block (multiline_textbbox needs an ImageDraw); never drawn upon.
+_SCRATCH = ImageDraw.Draw(Image.new("L", (1, 1)))
 
 # Closing punctuation must never begin a line; opening punctuation must never end one
 # (minimal kinsoku shori). Kept as frozensets so the rules are immutable.
@@ -37,11 +50,23 @@ def segment_tokens(text: str) -> list[str]:
 
     Whitespace separates Latin words as usual; CJK characters always start a new
     token (and never merge with a neighbouring Latin run), so a line break may fall
-    on any character boundary between Han glyphs.
+    on any character boundary between Han glyphs. A renderable emoji cluster is its
+    own token too, so a line may break either side of it.
     """
     tokens: list[str] = []
     latin_run = ""
-    for char in text:
+    index = 0
+    length = len(text)
+    while index < length:
+        span = emoji_token_len(text, index)
+        if span:
+            if latin_run:
+                tokens.append(latin_run)
+                latin_run = ""
+            tokens.append(text[index : index + span])
+            index += span
+            continue
+        char = text[index]
         if _is_cjk_char(char):
             if latin_run:
                 tokens.append(latin_run)
@@ -53,17 +78,26 @@ def segment_tokens(text: str) -> list[str]:
                 latin_run = ""
         else:
             latin_run += char
+        index += 1
     if latin_run:
         tokens.append(latin_run)
     return tokens
 
 
 def _join_tokens(tokens: Sequence[str]) -> str:
-    """Reassemble a line: no space between adjacent CJK tokens, single space otherwise."""
+    """Reassemble a line: single space between Latin words, none around CJK or emoji.
+
+    Emoji clusters carry their own horizontal tracking when drawn, so inserting a
+    space beside one would both alter the caption text (e.g. CJK ``真😀香``) and
+    double the gap; adjacent CJK chars are never spaced either.
+    """
     parts: list[str] = []
     for token in tokens:
-        if parts and not (_is_cjk_char(token[0]) and _is_cjk_char(parts[-1][-1])):
-            parts.append(" ")
+        if parts:
+            both_cjk = _is_cjk_char(token[0]) and _is_cjk_char(parts[-1][-1])
+            touches_emoji = is_emoji_cluster(token) or is_emoji_cluster(parts[-1])
+            if not (both_cjk or touches_emoji):
+                parts.append(" ")
         parts.append(token)
     return "".join(parts)
 
@@ -75,27 +109,63 @@ def _apply_kinsoku(lines: list[list[str]]) -> list[list[str]]:
         while lines[i] and lines[i][0] in _KINSOKU_NO_LINE_START and lines[i - 1]:
             lines[i - 1].append(lines[i].pop(0))
         # No line may end with opening punctuation: push it to the next line.
-        while (
-            lines[i - 1]
-            and lines[i - 1][-1] in _KINSOKU_NO_LINE_END
-            and len(lines[i - 1]) > 1
-        ):
+        while lines[i - 1] and lines[i - 1][-1] in _KINSOKU_NO_LINE_END and len(lines[i - 1]) > 1:
             lines[i].insert(0, lines[i - 1].pop())
     return [line for line in lines if line]
 
 
-def _text_bbox_size(font: MeasuredFont, text: str) -> tuple[int, int]:
-    left, top, right, bottom = font.getbbox(text)
-    return int(right - left), int(bottom - top)
+def _line_spacing(font: MeasuredFont) -> int:
+    return int(font.size) // 6 if hasattr(font, "size") else 0
+
+
+def run_advance(font: MeasuredFont, kind: str, run: str) -> float:
+    """Advance width of one segment run from :func:`emoji.segment_runs`.
+
+    The single source of truth for the emoji-vs-text width rule, shared by layout
+    measurement and the manual mixed-font draw path so fit and draw never disagree.
+    The text font reports a ``.notdef`` box for emoji codepoints, so emoji runs are
+    measured at the size they are actually composited at (see emoji.emoji_advance).
+    """
+    if kind == "emoji":
+        return emoji_advance(run, int(font.size) if hasattr(font, "size") else 0)
+    return font.getlength(run)
+
+
+def _line_width(font: MeasuredFont, line: str) -> float:
+    return sum(run_advance(font, kind, run) for kind, run in segment_runs(line))
+
+
+def emoji_block_metrics(font: ImageFont.FreeTypeFont, line_count: int) -> tuple[int, int, int]:
+    """(line_height, spacing, block_height) for the manual mixed-font draw path.
+
+    PIL cannot lay out mixed fonts via ``multiline_text``, so emoji captions stack
+    lines by ascent+descent. The emoji branch of :func:`_measure_lines` reserves the
+    same block_height this returns, keeping the measure/draw contract in one place.
+    """
+    spacing = _line_spacing(font)
+    ascent, descent = font.getmetrics()
+    line_height = ascent + descent
+    return line_height, spacing, line_count * line_height + spacing * max(0, line_count - 1)
 
 
 def _measure_lines(font: MeasuredFont, lines: Sequence[str]) -> tuple[int, int]:
-    """Measure width and stacked height of one or more lines (matches multiline render)."""
-    spacing = int(font.size) // 6 if hasattr(font, "size") else 0
-    sizes = [_text_bbox_size(font, line) for line in lines]
-    width = max((w for w, _ in sizes), default=0)
-    height = sum(h for _, h in sizes) + spacing * max(0, len(sizes) - 1)
-    return width, height
+    """Measure width and stacked height as the renderer will actually draw them.
+
+    Width is emoji-aware. Height matches PIL's real layout: emoji-free blocks use
+    ``multiline_textbbox`` (the renderer's own metric, ~25-30% taller than a naive
+    sum of per-line ink bounds), while emoji blocks use the ascent+descent line model
+    that the manual mixed-font draw path stacks lines by, so fit and draw agree.
+    """
+    width = max((_line_width(font, line) for line in lines), default=0.0)
+    height: float
+    if any(contains_emoji(line) for line in lines) and hasattr(font, "getmetrics"):
+        _, _, height = emoji_block_metrics(cast(ImageFont.FreeTypeFont, font), len(lines))
+    else:
+        box = _SCRATCH.multiline_textbbox(
+            (0, 0), "\n".join(lines), font=font, align="center", spacing=_line_spacing(font)
+        )
+        height = box[3] - box[1]
+    return int(width), int(height)
 
 
 def _greedy_wrap_cjk(text: str, max_chars: int, target_lines: int | None) -> list[str]:

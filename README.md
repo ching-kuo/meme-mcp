@@ -309,8 +309,16 @@ backfill sequence.
 zh-TW captions render with bundled `assets/fonts/NotoSansTC-Black.otf` (Noto Sans
 TC, SIL Open Font License 1.1 — see `assets/fonts/NotoSansTC-OFL.txt` and
 `LICENSES/SIL-OFL-1.1.txt`), selected per caption by CJK detection; pure-Latin
-captions keep the existing Anton font unchanged. CJK lines wrap on character
-boundaries with minimal kinsoku, Latin words stay atomic.
+captions keep the existing Anton font. CJK lines wrap on character boundaries
+with minimal kinsoku, Latin words stay atomic.
+
+Emoji render in full color via bundled `assets/fonts/NotoColorEmoji.ttf` (Noto
+Color Emoji, SIL Open Font License 1.1 — see `assets/fonts/NotoColorEmoji-OFL.txt`).
+Because PIL draws one font per call, a caption containing emoji is laid out run by
+run — text in the caption font, each emoji cluster (including ZWJ sequences, flags,
+skin tones, and keycaps) composited from the color font — so emoji no longer render
+as empty `.notdef` boxes. Long captions are measured at the height PIL truly renders
+them, so text in short edge-anchored boxes is no longer clipped at the image edge.
 
 ## Development verification
 
@@ -340,6 +348,7 @@ Implemented:
 - global `DecompressionBombWarning` escalation
 - public landing page and web browse/search/detail/preview routes
 - bilingual (en / zh-TW) template metadata with a zh-CN drift gate, human-wins provenance merge, CJK bigram + semantic search, English-only MCP projection, a one-time reviewable corpus translation overlay, and CJK caption rendering (bundled Noto Sans TC)
+- full-color emoji in captions (bundled Noto Color Emoji, mixed-font run layout) and edge-clip-free text fitting (height measured as PIL renders it)
 - self-service web PAT management at `/account` (session-authed, CSRF-protected, per-user rate limited, one-time plaintext reveal)
 - structured JSONL audit log (`audit.jsonl` under the storage dir) carrying `pat_issued`/`pat_revoked` events (never the token or its hash)
 - operator CLI for allowlist, PAT issue, seed, and reindex

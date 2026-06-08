@@ -1,20 +1,23 @@
 from __future__ import annotations
 
-import atexit
 import hashlib
-from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import cache
-from importlib import resources
 from io import BytesIO
-from pathlib import Path
 from typing import Any, cast
 
 from PIL import Image, ImageDraw, ImageFont
 
 from meme_mcp.errors import ErrorCode, MemeMCPError
+from meme_mcp.rendering.emoji import contains_emoji, emoji_tracking, render_emoji, segment_runs
+from meme_mcp.rendering.fonts import bundled_font_path
 from meme_mcp.rendering.image_store import ImageStore
-from meme_mcp.rendering.text_layout import contains_cjk, select_wrap
+from meme_mcp.rendering.text_layout import (
+    contains_cjk,
+    emoji_block_metrics,
+    run_advance,
+    select_wrap,
+)
 
 
 @dataclass(frozen=True)
@@ -40,29 +43,16 @@ def _font(size: int) -> ImageFont.ImageFont:
         return cast(ImageFont.ImageFont, ImageFont.load_default())
 
 
-def _bundled_font_path(filename: str) -> str:
-    source_path = Path(__file__).resolve().parents[3] / "assets" / "fonts" / filename
-    if source_path.is_file():
-        return str(source_path)
-    # importlib.resources.as_file materializes a real filesystem path even when the
-    # package is loaded from a zip; the ExitStack keeps any temp file alive for the
-    # process lifetime so PIL can reopen it on every render.
-    ref = resources.files("meme_mcp").joinpath(f"assets/fonts/{filename}")
-    stack = ExitStack()
-    atexit.register(stack.close)
-    return str(stack.enter_context(resources.as_file(ref)))
-
-
 @cache
 def _font_path() -> str:
-    return _bundled_font_path("Anton-Regular.ttf")
+    return bundled_font_path("Anton-Regular.ttf")
 
 
 @cache
 def _cjk_font_path() -> str:
     # Noto Sans TC Black covers Latin too, so a mixed caption renders in one consistent
     # face. Selected per caption when any CJK codepoint is present (see _draw_slot_text).
-    return _bundled_font_path("NotoSansTC-Black.otf")
+    return bundled_font_path("NotoSansTC-Black.otf")
 
 
 _LEGACY_BOX_VERTICAL: dict[str, tuple[float, float]] = {
@@ -129,8 +119,70 @@ def _slot_angle(slot: dict[str, Any]) -> float:
 _STROKE_DIVISOR = 18
 
 
+def _draw_mixed_text(
+    target: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    lines: list[str],
+    font: ImageFont.FreeTypeFont,
+    x: int,
+    y: int,
+    anchor: str,
+    stroke_width: int,
+) -> None:
+    """Draw a caption that mixes text and emoji, one run at a time.
+
+    PIL cannot mix fonts in a single call, so each line is laid out manually:
+    text runs render with the caption font (and stroke), emoji clusters are
+    composited from the color-emoji font. Lines stack by the ascent+descent
+    model that ``text_layout`` measures against, and each line is centered within
+    the block's widest line before the block is placed per ``anchor`` -- matching
+    the emoji-free path's ``align="center"`` + ``anchor`` semantics so layout and
+    draw stay consistent. A line's trailing emoji tracking is excluded from its
+    visible width so a glyph at the end of a line lands on the intended anchor.
+    """
+    px = int(font.size)
+    line_height, spacing, block_height = emoji_block_metrics(font, len(lines))
+    top = y - block_height / 2
+
+    laid_out = []
+    for line in lines:
+        runs = segment_runs(line)
+        advances = [run_advance(font, kind, run) for kind, run in runs]
+        visible_width = sum(advances)
+        if runs and runs[-1][0] == "emoji":
+            visible_width -= emoji_tracking(px)
+        laid_out.append((runs, advances, visible_width))
+
+    block_width = max((visible for _, _, visible in laid_out), default=0.0)
+    if anchor == "lm":
+        block_left = float(x)
+    elif anchor == "rm":
+        block_left = x - block_width
+    else:  # "mm" -> centered
+        block_left = x - block_width / 2
+
+    for index, (runs, advances, visible_width) in enumerate(laid_out):
+        center_y = top + index * (line_height + spacing) + line_height / 2
+        cursor = block_left + (block_width - visible_width) / 2
+        for (kind, run), advance in zip(runs, advances, strict=True):
+            if kind == "emoji":
+                glyph = render_emoji(run, px)
+                target.paste(glyph, (round(cursor), round(center_y - glyph.height / 2)), glyph)
+            else:
+                draw.text(
+                    (cursor, center_y),
+                    run,
+                    font=font,
+                    fill="white",
+                    anchor="lm",
+                    stroke_width=stroke_width,
+                    stroke_fill="black",
+                )
+            cursor += advance
+
+
 def _draw_slot_text(
-    target: ImageDraw.ImageDraw,
+    target: Image.Image,
     fill: str,
     x: int,
     y: int,
@@ -138,19 +190,20 @@ def _draw_slot_text(
     box_size: tuple[int, int],
 ) -> None:
     # .upper() is a no-op on CJK, so it stays in the shared path. A caption with any
-    # CJK codepoint uses the Noto face (it covers Latin too) and reserves stroke room
-    # in layout so the bold outline never clips; pure-Latin keeps Anton untouched.
-    is_cjk = contains_cjk(fill)
-    font_path = _cjk_font_path() if is_cjk else _font_path()
-    stroke_ratio = _STROKE_DIVISOR if is_cjk else 0
+    # CJK codepoint uses the Noto face (it covers Latin too); both faces draw a stroke,
+    # so layout always reserves stroke room and the bold outline never clips.
+    font_path = _cjk_font_path() if contains_cjk(fill) else _font_path()
     max_size = max(12, int(box_size[1] / 1.4))
     lines, font = select_wrap(
-        fill.upper(), box_size, font_path, max_size, stroke_ratio=stroke_ratio
+        fill.upper(), box_size, font_path, max_size, stroke_ratio=_STROKE_DIVISOR
     )
     font_size = int(getattr(font, "size", max_size))
     stroke_width = max(1, font_size // _STROKE_DIVISOR)
-    if len(lines) > 1:
-        target.multiline_text(
+    draw = ImageDraw.Draw(target)
+    if contains_emoji(fill):
+        _draw_mixed_text(target, draw, lines, font, x, y, anchor, stroke_width)
+    elif len(lines) > 1:
+        draw.multiline_text(
             (x, y),
             "\n".join(lines),
             font=font,
@@ -162,7 +215,7 @@ def _draw_slot_text(
             stroke_fill="black",
         )
     else:
-        target.text(
+        draw.text(
             (x, y),
             lines[0],
             font=font,
@@ -175,18 +228,16 @@ def _draw_slot_text(
 
 def _draw_slots(image: Image.Image, slots: list[dict[str, Any]], slot_fills: list[str]) -> None:
     width, height = image.size
-    base_draw = ImageDraw.Draw(image)
     for fill, slot in zip(slot_fills, slots, strict=True):
         x, y, anchor, box_size = _slot_anchor(slot, (width, height))
         angle = _slot_angle(slot)
         if angle == 0.0:
-            _draw_slot_text(base_draw, fill, x, y, anchor, box_size)
+            _draw_slot_text(image, fill, x, y, anchor, box_size)
             continue
         # Each rotated slot draws into its own transparent layer so neighbours and the
         # base image don't smear together when we rotate around the slot anchor.
         layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        layer_draw = ImageDraw.Draw(layer)
-        _draw_slot_text(layer_draw, fill, x, y, anchor, box_size)
+        _draw_slot_text(layer, fill, x, y, anchor, box_size)
         rotated = layer.rotate(angle, resample=Image.Resampling.BICUBIC, center=(x, y))
         image.alpha_composite(rotated)
 

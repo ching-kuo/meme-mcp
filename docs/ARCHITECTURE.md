@@ -99,14 +99,31 @@ The service keeps pure primitives separate from HTTP and MCP handlers:
   (see `_slot_anchor` in `rendering/pipeline.py`). `text_layout.select_wrap` picks the 1/2/3-line
   layout that fills ≥60% of box width while maximizing font size, and `fit_font` runs a
   shrink-loop to find the largest font size that fits the box with memegen-matching margins.
+  `_measure_lines` measures a block's height the way PIL actually renders it — via
+  `multiline_textbbox` for emoji-free captions (the renderer's own metric; a naive sum of
+  per-line ink bounds under-counts by ~25-30% and let long captions clip past edge-anchored
+  boxes), or the ascent+descent line model in `emoji_block_metrics` for emoji captions. The
+  drawn stroke outline is reserved for every caption (not just CJK), so the outline never
+  pushes ink off the image edge.
 - Font is chosen per caption: a caption containing any CJK codepoint renders in
   `NotoSansTC-Black.otf` (Noto Sans TC Black, OFL 1.1, ~6 MB, covers Latin too so mixed
-  captions stay one face); pure-Latin captions keep `Anton-Regular.ttf` and are byte-identical
-  to before (the golden visual-parity suite is the hard gate). For CJK, `text_layout.segment_tokens`
-  breaks text into wrap tokens — Latin runs stay word-atomic, each CJK char is its own token — and
-  `greedy_wrap` applies minimal kinsoku (closing punctuation 」』。，！？、） never starts a line;
-  opening 「『（ never ends one). `fit_font`/`select_wrap` reserve stroke-outline room
-  (`stroke_ratio`) so the bold CJK outline never clips. Both fonts ship via the same wheel
+  captions stay one face); pure-Latin captions keep `Anton-Regular.ttf`. The golden
+  visual-parity suite is the hard gate (the measurement fix keeps all cases well within the
+  dhash threshold). For CJK, `text_layout.segment_tokens` breaks text into wrap tokens — Latin
+  runs stay word-atomic, each CJK char is its own token — and `greedy_wrap` applies minimal
+  kinsoku (closing punctuation 」』。，！？、） never starts a line; opening 「『（ never ends one).
+  `fit_font`/`select_wrap` reserve stroke-outline room (`stroke_ratio`) so the bold CJK outline
+  never clips.
+- Emoji render in color via bundled `NotoColorEmoji.ttf` (Noto Color Emoji, OFL 1.1, ~10 MB,
+  CBDT bitmap with a single 109px strike — see `assets/fonts/NotoColorEmoji-OFL.txt`). PIL does
+  no font fallback, so `rendering/emoji.py` detects emoji grapheme clusters (`_cluster_len`:
+  ZWJ sequences, VS16 emoji / VS15 text selectors, regional-indicator flag pairs, skin-tone
+  modifiers, keycaps, subdivision tags) and `pipeline._draw_mixed_text` lays a caption out run
+  by run — text runs through the caption font with stroke, each emoji cluster rasterized once at
+  the native strike (`_native_glyph`, cached) and composited at the line's font size. Emoji-free
+  captions keep the original single-call `multiline_text` path to preserve golden parity.
+  `text_layout.segment_tokens`/`_join_tokens` treat an emoji cluster as its own wrap token and
+  never space-pad it (so `真😀香` stays intact). All three fonts ship via the same wheel
   `force-include` of `assets/fonts` and the Docker `COPY . .`.
   Slots persisted without a `box` (legacy 3-band callers) fall back to synthetic top/center/bottom
   geometry via `_legacy_box_from_position`. Slot rotation (`box.angle`) is applied by drawing
