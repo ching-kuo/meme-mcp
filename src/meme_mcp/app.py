@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import math
+import re
 import secrets
 import time
 import warnings
@@ -60,6 +61,7 @@ from meme_mcp.errors import ErrorCode, MemeMCPError, status_for_error
 from meme_mcp.limits import WindowedRateLimiter
 from meme_mcp.mcp.server import build_auth_server_routes, create_mcp_server, tool_schemas
 from meme_mcp.metadata_locales import localized_metadata
+from meme_mcp.rendering.downscale import downscale_png
 from meme_mcp.rendering.image_store import make_image_store_from_settings
 from meme_mcp.rendering.pipeline import TemplateSpec, preview_transient, render_meme
 from meme_mcp.rendering.signing import sign_render_url, verify_render_signature
@@ -93,6 +95,16 @@ LANG_COOKIE_MAX_AGE = 31536000
 # total-count source and the search reorder input), then sliced in Python; the
 # library is small enough that DB-side LIMIT/OFFSET buys nothing.
 BROWSE_PAGE_SIZE = 24
+_RENDER_HASH_RE = re.compile(r"^[0-9a-f]{16}$")
+
+
+def _render_not_found() -> MemeMCPError:
+    # Every display_render miss (malformed hash, not owned, blob gone) collapses
+    # to the same ownership-blind NOT_FOUND so no branch leaks an existence oracle.
+    return MemeMCPError(
+        ErrorCode.NOT_FOUND,
+        [{"field": "hash", "reason": "render_missing_or_expired"}],
+    )
 
 
 class BodySizeGuardMiddleware:
@@ -1141,6 +1153,19 @@ class AppMCPBackend:
         return make_success(
             _receipt(template_id, slot_fills, signed_url, result.hash, result.alt_text)
         )
+
+    def display_render(self, render_hash: str, actor: str) -> bytes:
+        self.app.state.find_limiter.hit(actor)
+        if not _RENDER_HASH_RE.fullmatch(render_hash):
+            raise _render_not_found()
+        if not self.app.state.receipts.exists_for_friend(render_hash, actor):
+            raise _render_not_found()
+        path = f"{render_hash[:2]}/{render_hash[2:]}.png"
+        try:
+            data = self.app.state.image_store.get(path)
+        except FileNotFoundError as exc:
+            raise _render_not_found() from exc
+        return downscale_png(data, self.app.state.settings.inline_image_max_px)
 
     def record_outcome(self, template_id: str, outcome: str, actor: str) -> Envelope:
         if outcome not in VALID_OUTCOMES:

@@ -9,7 +9,7 @@ from mcp.server.auth.provider import (
     TokenVerifier,
 )
 from mcp.server.auth.settings import AuthSettings
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Image
 from mcp.server.transport_security import TransportSecuritySettings
 
 from meme_mcp.auth.authorization import (
@@ -25,10 +25,16 @@ from meme_mcp.auth.pat import (
     scopes_for_capability,
     verify_pat,
 )
-from meme_mcp.envelope import Envelope
+from meme_mcp.envelope import Envelope, make_error
 from meme_mcp.errors import ErrorCode, MemeMCPError
 
-EXPECTED_TOOLS = {"find", "generate", "record_outcome"}
+EXPECTED_TOOLS = {"find", "generate", "record_outcome", "show_meme"}
+_STUB_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+    b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
+    b"\x00\x00\x0cIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02"
+    b"\xfeA\x90E\x9d\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 
 
 class MCPBackend(Protocol):
@@ -54,6 +60,8 @@ class MCPBackend(Protocol):
         actor: str,
     ) -> Envelope: ...
 
+    def display_render(self, render_hash: str, actor: str) -> bytes: ...
+
 
 def tool_schemas() -> dict[str, dict[str, Any]]:
     return {
@@ -70,7 +78,10 @@ def tool_schemas() -> dict[str, dict[str, Any]]:
             },
         },
         "generate": {
-            "description": "Render a selected meme template and return a receipt.",
+            "description": (
+                "Render a selected meme template and return a receipt. "
+                "To display it inline, call show_meme with the receipt hash."
+            ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -91,6 +102,15 @@ def tool_schemas() -> dict[str, dict[str, Any]]:
                     "outcome": {"type": "string", "enum": ["used", "sent", "dropped"]},
                 },
                 "required": ["template_id", "outcome"],
+                "additionalProperties": False,
+            },
+        },
+        "show_meme": {
+            "description": "Display a generated meme inline from the hash returned by generate.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"render_hash": {"type": "string", "pattern": "^[0-9a-f]{16}$"}},
+                "required": ["render_hash"],
                 "additionalProperties": False,
             },
         },
@@ -208,7 +228,10 @@ def create_mcp_server(
     def generate(
         template_id: str, slot_fills: list[str], dry_run: bool = False
     ) -> dict[str, Any] | Envelope:
-        """Render a selected meme template and return a receipt."""
+        """Render a selected meme template and return a receipt.
+
+        To display the rendered meme inline, call show_meme with the receipt hash.
+        """
         actor = _authenticated_actor()
         _require_write_scope()
         if backend is None:
@@ -221,6 +244,27 @@ def create_mcp_server(
                 },
             }
         return backend.generate(template_id, slot_fills, dry_run, actor)
+
+    @mcp.tool()
+    def show_meme(render_hash: str) -> Any:
+        """Display a rendered meme inline using the hash from a generate receipt."""
+        # Authenticate first (like generate/record_outcome) so the read-scope
+        # contract holds even on the no-backend stub path.
+        actor = _authenticated_actor()
+        if backend is None:
+            return Image(data=_STUB_PNG, format="png")
+        try:
+            data = backend.display_render(render_hash, actor)
+        except MemeMCPError as exc:
+            # show_meme returns only an Image, so its one structured error surface
+            # is NOT_FOUND (R4): a missing/unowned/malformed render comes back as a
+            # readable envelope instead of an opaque tool failure. Operational
+            # errors (auth, rate limit) propagate like find/generate/record_outcome
+            # rather than masquerading as ok:false content.
+            if exc.error_code is not ErrorCode.NOT_FOUND:
+                raise
+            return make_error(exc.error_code, exc.errors)
+        return Image(data=data, format="png")
 
     @mcp.tool()
     def record_outcome(template_id: str, outcome: str) -> dict[str, Any] | Envelope:

@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # validate_at_startup rejects a value above render_gc_ttl_days so a live URL
     # never points at an already-GC'd blob. Default 7 days.
     render_url_ttl_seconds: int = 7 * 24 * 60 * 60
+    # Long-edge cap for inline MCP image display. The stored render remains full
+    # size; only the image-content response is downscaled.
+    inline_image_max_px: int = 1280
 
     s3_endpoint: str | None = None
     s3_bucket: str | None = None
@@ -165,6 +168,8 @@ def validate_at_startup(settings: Settings) -> None:
             "RENDER_URL_TTL_SECONDS must be <= RENDER_GC_TTL_DAYS in seconds "
             "(a signed render URL must not outlive its GC'd blob)"
         )
+    if settings.inline_image_max_px <= 0:
+        problems.append("INLINE_IMAGE_MAX_PX must be > 0")
     if settings.mcp_host != "127.0.0.1":
         if len(_secret_value(settings.session_secret)) < 32 or "dev" in _secret_value(
             settings.session_secret

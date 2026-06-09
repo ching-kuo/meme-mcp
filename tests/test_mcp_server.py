@@ -1,10 +1,14 @@
 import json
+from base64 import b64decode
+from io import BytesIO
 
 import pytest
 from mcp.server.auth.middleware.auth_context import auth_context_var
 from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
 from mcp.server.auth.provider import AccessToken
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
+from PIL import Image
 
 from meme_mcp.auth.pat import SQLitePatStore, issue_pat
 from meme_mcp.errors import ErrorCode, MemeMCPError
@@ -33,9 +37,167 @@ class _StubAllowlist:
 
 def test_mcp_exposes_three_tools_under_schema_budget() -> None:
     schemas = tool_schemas()
-    assert set(schemas) == EXPECTED_TOOLS == {"find", "generate", "record_outcome"}
+    assert set(schemas) == EXPECTED_TOOLS == {"find", "generate", "record_outcome", "show_meme"}
     budget = sum(len(json.dumps(schema)) for schema in schemas.values())
     assert budget < 4096
+
+
+class _Backend:
+    def __init__(self) -> None:
+        self.display_calls: list[tuple[str, str]] = []
+        self.generated_hash = "0123456789abcdef"
+
+    def find(self, query, filters, actor):  # type: ignore[no-untyped-def]
+        return {"ok": True, "data": {"query": query, "actor": actor}}
+
+    def generate(self, template_id, slot_fills, dry_run, actor):  # type: ignore[no-untyped-def]
+        return {
+            "ok": True,
+            "data": {
+                "template_id": template_id,
+                "slot_fills": slot_fills,
+                "rendered_url": "https://example.test/renders/01/23456789abcdef.png",
+                "hash": self.generated_hash,
+            },
+        }
+
+    def record_outcome(self, template_id, outcome, actor):  # type: ignore[no-untyped-def]
+        return {"ok": True, "data": {"template_id": template_id, "outcome": outcome}}
+
+    def display_render(self, render_hash, actor):  # type: ignore[no-untyped-def]
+        self.display_calls.append((render_hash, actor))
+        if render_hash == "ffffffffffffffff":
+            raise MemeMCPError(
+                ErrorCode.NOT_FOUND,
+                [{"field": "hash", "reason": "render_missing_or_expired"}],
+            )
+        if render_hash == "eeeeeeeeeeeeeeee":
+            raise MemeMCPError(ErrorCode.RATE_LIMITED, [{"field": "rate", "reason": "limited"}])
+        image = Image.new("RGB", (1, 1), "white")
+        out = BytesIO()
+        image.save(out, format="PNG")
+        return out.getvalue()
+
+
+async def test_show_meme_accepts_read_scope_and_returns_image_content(tmp_path) -> None:
+    backend = _Backend()
+    server = create_mcp_server(
+        SQLitePatStore(tmp_path / "auth.db"),
+        {"alice"},
+        "pepper",
+        "http://localhost:8000",
+        backend=backend,
+    )
+    access = AccessToken(token="t", client_id="alice", scopes=["meme:read"])
+    token_handle = auth_context_var.set(AuthenticatedUser(access))
+    try:
+        result = await server.call_tool("show_meme", {"render_hash": "0123456789abcdef"})
+    finally:
+        auth_context_var.reset(token_handle)
+
+    assert backend.display_calls == [("0123456789abcdef", "alice")]
+    assert len(result) == 1
+    assert result[0].type == "image"
+    assert result[0].mimeType == "image/png"
+    with Image.open(BytesIO(b64decode(result[0].data))) as image:
+        assert image.size == (1, 1)
+
+
+async def test_generate_to_show_meme_chain_returns_inline_image(tmp_path) -> None:
+    backend = _Backend()
+    server = create_mcp_server(
+        SQLitePatStore(tmp_path / "auth.db"),
+        {"alice"},
+        "pepper",
+        "http://localhost:8000",
+        backend=backend,
+    )
+    access = AccessToken(token="t", client_id="alice", scopes=["meme:read", "meme:write"])
+    token_handle = auth_context_var.set(AuthenticatedUser(access))
+    try:
+        receipt = await server.call_tool("generate", {"template_id": "t1", "slot_fills": ["hi"]})
+        render_hash = receipt[1]["result"]["data"]["hash"]
+        image = await server.call_tool("show_meme", {"render_hash": render_hash})
+    finally:
+        auth_context_var.reset(token_handle)
+
+    assert backend.display_calls == [("0123456789abcdef", "alice")]
+    assert image[0].type == "image"
+    assert image[0].mimeType == "image/png"
+
+
+async def test_show_meme_missing_render_surfaces_not_found(tmp_path) -> None:
+    server = create_mcp_server(
+        SQLitePatStore(tmp_path / "auth.db"),
+        {"alice"},
+        "pepper",
+        "http://localhost:8000",
+        backend=_Backend(),
+    )
+    access = AccessToken(token="t", client_id="alice", scopes=["meme:read"])
+    token_handle = auth_context_var.set(AuthenticatedUser(access))
+    try:
+        result = await server.call_tool("show_meme", {"render_hash": "ffffffffffffffff"})
+    finally:
+        auth_context_var.reset(token_handle)
+
+    assert json.loads(result[0].text) == {
+        "ok": False,
+        "data": None,
+        "error_code": "NOT_FOUND",
+        "errors": [{"field": "hash", "reason": "render_missing_or_expired"}],
+    }
+
+
+async def test_show_meme_rate_limit_propagates_not_swallowed(tmp_path) -> None:
+    # Only NOT_FOUND is show_meme's structured-envelope surface; operational
+    # errors (rate limit, auth) must propagate like the other tools rather than
+    # come back as ok:false content a client could mistake for success.
+    server = create_mcp_server(
+        SQLitePatStore(tmp_path / "auth.db"),
+        {"alice"},
+        "pepper",
+        "http://localhost:8000",
+        backend=_Backend(),
+    )
+    access = AccessToken(token="t", client_id="alice", scopes=["meme:read"])
+    token_handle = auth_context_var.set(AuthenticatedUser(access))
+    try:
+        with pytest.raises(ToolError):
+            await server.call_tool("show_meme", {"render_hash": "eeeeeeeeeeeeeeee"})
+    finally:
+        auth_context_var.reset(token_handle)
+
+
+async def test_tool_metadata_names_generate_show_meme_chain(tmp_path) -> None:
+    server = create_mcp_server(
+        SQLitePatStore(tmp_path / "auth.db"),
+        {"alice"},
+        "pepper",
+        "http://localhost:8000",
+    )
+    tools = {tool.name: tool for tool in await server.list_tools()}
+
+    assert "show_meme" in tools["generate"].description
+    assert "generate" in tools["show_meme"].description
+
+
+async def test_no_backend_show_meme_stub_returns_valid_png(tmp_path) -> None:
+    server = create_mcp_server(
+        SQLitePatStore(tmp_path / "auth.db"),
+        {"alice"},
+        "pepper",
+        "http://localhost:8000",
+    )
+    access = AccessToken(token="t", client_id="alice", scopes=["meme:read"])
+    token_handle = auth_context_var.set(AuthenticatedUser(access))
+    try:
+        result = await server.call_tool("show_meme", {"render_hash": "0123456789abcdef"})
+    finally:
+        auth_context_var.reset(token_handle)
+
+    with Image.open(BytesIO(b64decode(result[0].data))) as image:
+        assert image.size == (1, 1)
 
 
 async def test_pat_token_verifier_validates_sqlite_pat(tmp_path) -> None:

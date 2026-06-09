@@ -89,6 +89,11 @@ def test_render_gc_ttl_days_must_be_positive() -> None:
         validate_at_startup(good_settings(render_gc_ttl_days=0))
 
 
+def test_inline_image_max_px_must_be_positive() -> None:
+    with pytest.raises(ConfigError, match="INLINE_IMAGE_MAX_PX"):
+        validate_at_startup(good_settings(inline_image_max_px=0))
+
+
 def test_secret_repr_is_redacted() -> None:
     assert repr(good_settings().github_client_secret) == "SecretStr('**********')"
 
@@ -336,4 +341,3 @@ def test_oauth_as_enabled_non_loopback_valid_secrets_pass() -> None:
             oauth_secret_enc_key=SecretStr(_OAUTH_ENC_KEY),
         )
     )
-
